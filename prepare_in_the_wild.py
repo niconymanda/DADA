@@ -47,7 +47,6 @@ def run_asr_pipeline():
         max_new_tokens=128,
         chunk_length_s=30,
         batch_size=16,
-        # return_timestamps=True,
         torch_dtype=torch_dtype,
         device=device,
         generate_kwargs={"language": "english"}
@@ -58,7 +57,7 @@ def run_asr_pipeline():
     batches = [i for i in range(len(wild_audios)) if i%15 == 0]
     shortened_wild_audios = [os.path.basename(audio) for audio in wild_audios]
 
-    for batch in batches[1:5]:
+    for batch in batches:
         audios = [read(file_name) for file_name in wild_audios[batch:min(batch+15, len(wild_audios))]]
         all_generated_texts = [pipe(audio_array[1]) for audio_array in audios]
         dict_output = {shortened_wild_audios[batch+i]: list(all_generated_texts[i].values())[0] for i in range(len(all_generated_texts))}
