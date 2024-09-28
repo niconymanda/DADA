@@ -96,4 +96,4 @@ def main():
 
 if __name__ == '__main__':
     data = main()
-    print(len(data))
+    print(data.head())
