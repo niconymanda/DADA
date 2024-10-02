@@ -67,7 +67,6 @@ def add_quotes_from_brainy(data, folder_path, author_id_map, unique_authors):
     data_csv['Label'] = 'bona-fide'
     
     data = pd.concat([data, data_csv], ignore_index=True)
-    
     return data
 
 
@@ -89,11 +88,16 @@ def main():
     unique_authors, data, author_id_map = find_unique_authors_create_dataFrame(json_file_path)
     folder_path = 'Data/BrainyQuotes'
     data = add_quotes_from_brainy(data, folder_path, author_id_map, unique_authors)
-    data_save = data.to_csv('Data/finalData.csv', index=False)
+    data.to_csv('Data/finalData.csv', index=False)
     quotes_count = plot_author_quotes_count(data)
-    
+   
+    # Print table with authors and their quotes count
+    print(f"{'Author ID':<10} {'Author Name':<30} {'Quotes Count':<15}")
+    print("-" * 55)
+    for author in author_id_map:
+        author_id = author_id_map[author]
+        print(f"{author_id:<10} {author:<30} {quotes_count[author]:<15}")
     return data
 
 if __name__ == '__main__':
     data = main()
-    print(data.head())
