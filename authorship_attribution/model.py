@@ -1,5 +1,5 @@
 import torch.nn as nn
-from transformers import AutoModel, TrainingArguments, Trainer
+from transformers import AutoModel
 
 class AuthorshipAttributionLLM(nn.Module):
     def __init__(self, model_name, num_labels):

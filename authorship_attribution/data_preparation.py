@@ -89,7 +89,6 @@ def main():
     data.to_csv('Data/finalData.csv', index=False)
     quotes_count = plot_author_quotes_count(data)
    
-    # Print table with authors and their quotes count
     print(f"{'Author ID':<10} {'Author Name':<30} {'Quotes Count':<15}")
     print("-" * 55)
     for author in author_id_map:

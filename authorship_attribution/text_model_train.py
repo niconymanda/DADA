@@ -19,13 +19,11 @@ from model import AuthorshipAttributionLLM
 
 
 def init_env():
-    # Set the seed value all over the place to make this reproducible.
     seed_val = 42
     os.environ['PYTHONHASHSEED'] = str(seed_val)
     np.random.seed(seed_val)
     torch.manual_seed(seed_val)
     torch.cuda.manual_seed_all(seed_val)
-    os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID" 
     os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 def parse_arguments():
