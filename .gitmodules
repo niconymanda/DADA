@@ -1,3 +1,6 @@
 [submodule "src/asvspoof5"]
 	path = src/baselines/asvspoof5
 	url = https://github.com/abhaydmathur/asvspoof5.git
+[submodule "src/baselines/asvspoof2021"]
+	path = src/baselines/asvspoof2021
+	url = https://github.com/abhaydmathur/asvspoof2021.git
