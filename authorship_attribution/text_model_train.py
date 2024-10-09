@@ -32,7 +32,7 @@ def parse_arguments():
     parser.add_argument('--epochs', type=int, default=35, help='Number of epochs to train for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
-    parser.add_argument('--model', type=str, default='FacebookAI/roberta-large', help='Model to use')
+    parser.add_argument('--model', type=str, default='FacebookAI/roberta-base', help='Model to use')
     return parser.parse_args()
 
 def load_data(data_path):
@@ -175,45 +175,6 @@ def write_results_to_file(results, file_path, parser):
 def load_trainer_from_path(model_path):
     model = AutoModelForSequenceClassification.from_pretrained(model_path)
     return model
-
-import matplotlib.pyplot as plt
-
-def plot_training_curves(trainer, output_dir):
-    print("Plotting training curves")
-    
-    metrics = trainer.state.log_history
-    
-    train_losses = [m['loss'] for m in metrics if 'loss' in m]
-    eval_losses = [m['eval_loss'] for m in metrics if 'eval_loss' in m]
-    steps = [m['step'] for m in metrics if 'loss' in m]
- 
-    eval_accuracy = [m['eval_accuracy'] for m in metrics if 'eval_accuracy' in m] if 'eval_accuracy' in metrics[0] else None
-
-    fig, ax1 = plt.subplots()
-
-    # Plotting training loss and evaluation loss
-    ax1.plot(steps, train_losses, label='Training Loss', color='b')
-    ax1.plot(steps, eval_losses, label='Validation Loss', color='r')
-    ax1.set_xlabel('Steps')
-    ax1.set_ylabel('Loss')
-    ax1.legend(loc='upper left')
-
-    # If accuracy data is available, plot it on a second y-axis
-    if eval_accuracy:
-        ax2 = ax1.twinx()
-        ax2.plot(steps, eval_accuracy, label='Validation Accuracy', color='g')
-        ax2.set_ylabel('Accuracy')
-        ax2.legend(loc='upper right')
-
-    plt.title('Training and Validation Loss & Accuracy')
-    
-    # Save plot as PNG file
-    plot_file_path = os.path.join(output_dir, "training_curve.png")
-    plt.savefig(plot_file_path)
-    plt.close()
-    
-    print(f"Training curves saved at {plot_file_path}")
-
 
 def main():
     init_env()
