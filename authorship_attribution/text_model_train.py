@@ -4,7 +4,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     TrainingArguments,
     Trainer,
-    AutoConfig,
+    EarlyStoppingCallback,
 )
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -24,7 +24,7 @@ def init_env():
     np.random.seed(seed_val)
     torch.manual_seed(seed_val)
     torch.cuda.manual_seed_all(seed_val)
-    os.environ["CUDA_VISIBLE_DEVICES"]="0"
+    os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train a text classification model')
@@ -32,7 +32,7 @@ def parse_arguments():
     parser.add_argument('--epochs', type=int, default=35, help='Number of epochs to train for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
-    parser.add_argument('--model', type=str, default='FacebookAI/roberta-base', help='Model to use')
+    parser.add_argument('--model', type=str, default='FacebookAI/roberta-large', help='Model to use')
     return parser.parse_args()
 
 def load_data(data_path):
@@ -64,7 +64,7 @@ def prepare_datasets(data, spoofed_data,parser):
     spoofed_data = Dataset.from_pandas(spoofed_data[['text', 'label']])
     
 
-    tokenizer = AutoTokenizer.from_pretrained(parser.model, pad_token='<|pad|>')
+    tokenizer = AutoTokenizer.from_pretrained(parser.model)
     # if tokenizer.pad_token is None:
         # tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     # tokenizer.pad_token = tokenizer.add_special_tokens({'pad_token': '[PAD]'})
@@ -82,17 +82,30 @@ def prepare_datasets(data, spoofed_data,parser):
     test_dataset.set_format("torch", columns=["input_ids", "attention_mask", "label"])
     spoofed_data.set_format("torch", columns=["input_ids", "attention_mask", "label"])
     
-    class_names = data['author_name'].unique()
-    global id2label
-    id2label = {i: label for i, label in enumerate(class_names)}
+    # class_names = data['author_name'].unique()
+    # global id2label
+    # id2label = {i: label for i, label in enumerate(class_names)}
     
     return train_dataset, val_dataset, test_dataset, spoofed_data
+
+
+def compute_metrics(pred):
+    labels = pred.label_ids
+    preds = pred.predictions.argmax(-1)
+    accuracy = accuracy_score(labels, preds)
+    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='weighted')
+    return {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1
+    }
 
 def train_model(train_dataset, val_dataset, parser, num_classes):
     print("Training model")
     print(f"Number of classes: {num_classes}")
-    config = AutoConfig.from_pretrained(parser.model)
-    config.update({"id2label": id2label})
+    # config = AutoConfig.from_pretrained(parser.model)
+    # config.update({"id2label": id2label})
     model = AuthorshipAttributionLLM(parser.model, num_classes)   
     repository_id = f"./output/{parser.model}_{parser.epochs}"
     
@@ -105,7 +118,7 @@ def train_model(train_dataset, val_dataset, parser, num_classes):
         eval_strategy="epoch",
         logging_dir=f"{repository_id}/logs",
         logging_strategy="steps",
-        logging_steps=10,
+        logging_steps=50,
         learning_rate=parser.learning_rate,
         weight_decay=0.01,
         warmup_steps=500,
@@ -116,24 +129,15 @@ def train_model(train_dataset, val_dataset, parser, num_classes):
         metric_for_best_model="eval_loss", 
         greater_is_better=False 
     )
-    def compute_metrics(pred):
-        labels = pred.label_ids
-        preds = pred.predictions.argmax(-1)
-        accuracy = accuracy_score(labels, preds)
-        precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='weighted')
-        return {
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'f1': f1
-        }
-    # Trainer
+
+        
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
-        compute_metrics=compute_metrics
+        compute_metrics=compute_metrics,
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
     )
 
     trainer.train()
@@ -145,8 +149,7 @@ def evaluate_model(model, test_dataset):
     print("Evaluating model")
     predictions = model.predict(test_dataset)
     y_true = predictions.label_ids
-    y_pred = predictions.predictions
-    y_pred = y_pred[0].argmax(axis=-1)
+    y_pred = predictions.predictions.argmax(-1)
     accuracy = accuracy_score(y_true, y_pred)
     precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='weighted')
     classes = np.unique(y_true)
@@ -172,6 +175,45 @@ def write_results_to_file(results, file_path, parser):
 def load_trainer_from_path(model_path):
     model = AutoModelForSequenceClassification.from_pretrained(model_path)
     return model
+
+import matplotlib.pyplot as plt
+
+def plot_training_curves(trainer, output_dir):
+    print("Plotting training curves")
+    
+    metrics = trainer.state.log_history
+    
+    train_losses = [m['loss'] for m in metrics if 'loss' in m]
+    eval_losses = [m['eval_loss'] for m in metrics if 'eval_loss' in m]
+    steps = [m['step'] for m in metrics if 'loss' in m]
+ 
+    eval_accuracy = [m['eval_accuracy'] for m in metrics if 'eval_accuracy' in m] if 'eval_accuracy' in metrics[0] else None
+
+    fig, ax1 = plt.subplots()
+
+    # Plotting training loss and evaluation loss
+    ax1.plot(steps, train_losses, label='Training Loss', color='b')
+    ax1.plot(steps, eval_losses, label='Validation Loss', color='r')
+    ax1.set_xlabel('Steps')
+    ax1.set_ylabel('Loss')
+    ax1.legend(loc='upper left')
+
+    # If accuracy data is available, plot it on a second y-axis
+    if eval_accuracy:
+        ax2 = ax1.twinx()
+        ax2.plot(steps, eval_accuracy, label='Validation Accuracy', color='g')
+        ax2.set_ylabel('Accuracy')
+        ax2.legend(loc='upper right')
+
+    plt.title('Training and Validation Loss & Accuracy')
+    
+    # Save plot as PNG file
+    plot_file_path = os.path.join(output_dir, "training_curve.png")
+    plt.savefig(plot_file_path)
+    plt.close()
+    
+    print(f"Training curves saved at {plot_file_path}")
+
 
 def main():
     init_env()
