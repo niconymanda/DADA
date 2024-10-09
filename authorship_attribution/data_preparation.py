@@ -16,7 +16,6 @@ def find_unique_authors_create_dataFrame(json_file_path):
     author_id_map = {}
     current_id = 0
     for item in data:
-        
         author = item.get('speaker')
         if author:
             if author not in author_id_map:
@@ -36,7 +35,6 @@ def find_unique_authors_create_dataFrame(json_file_path):
     return unique_authors, data, author_id_map
 
 def add_quotes_from_brainy(data, folder_path, author_id_map, unique_authors):
-
     authors_list = []
     ids_list = []
     quotes_list = []

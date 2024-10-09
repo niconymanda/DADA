@@ -1,7 +1,7 @@
 import torch
 from transformers import (
-    RobertaTokenizerFast,
-    RobertaForSequenceClassification,
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
     TrainingArguments,
     Trainer,
     AutoConfig,
@@ -10,9 +10,13 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from datasets import Dataset
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score
+from sklearn.preprocessing import label_binarize
 import os
 import argparse
+
+from model import AuthorshipAttributionLLM
+
 
 def init_env():
     # Set the seed value all over the place to make this reproducible.
@@ -26,17 +30,16 @@ def init_env():
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train a text classification model')
-    parser.add_argument('--data', type=str, default='~/DADA/Data/finalData.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train for')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=2e-5, help='Learning rate')
-    parser.add_argument('--model', type=str, default='roberta-base', help='Model to use')
+    parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes_final.csv', help='Path to the input data file')
+    parser.add_argument('--epochs', type=int, default=35, help='Number of epochs to train for')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
+    parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
+    parser.add_argument('--model', type=str, default='FacebookAI/roberta-base', help='Model to use')
     return parser.parse_args()
 
 def load_data(data_path):
     data = pd.read_csv(data_path)
     data = data.dropna()
-    data = data.rename(columns={'AuthorID': 'label', 'Quote': 'text', 'Label': 'type'})
     
     data['label'] = data['label'].astype(int)
     label_counts = data['label'].value_counts()
@@ -44,9 +47,9 @@ def load_data(data_path):
     data = data[data['label'].isin(labels_to_keep)]
     print(f"Number of authors that have more then 100 quotes: {len(data['label'].unique())}")
     
-    authors = data['Author'].unique()
+    authors = data['author_name'].unique()
     for i, author in enumerate(authors):
-        data.loc[data['Author'] == author, 'label'] = i
+        data.loc[data['author_name'] == author, 'label'] = i
         
     spoofed_data = data[data['type'] == 'spoof']
     data = data[data['type'] != 'spoof']
@@ -63,34 +66,38 @@ def prepare_datasets(data, spoofed_data,parser):
     spoofed_data = Dataset.from_pandas(spoofed_data[['text', 'label']])
     
 
-    tokenizer = RobertaTokenizerFast.from_pretrained(parser.model)
-    
+    tokenizer = AutoTokenizer.from_pretrained(parser.model, pad_token='<|pad|>')
+    # if tokenizer.pad_token is None:
+        # tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+    # tokenizer.pad_token = tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     def tokenize(batch):
-        return tokenizer(batch["text"], padding=True, truncation=True, max_length=128)
+        return tokenizer(batch["text"], truncation=True, max_length=128, padding="max_length")
     
     train_dataset = train_dataset.map(tokenize, batched=True, batch_size=len(train_dataset))
     val_dataset = val_dataset.map(tokenize, batched=True, batch_size=len(val_dataset))
     test_dataset = test_dataset.map(tokenize, batched=True, batch_size=len(test_dataset))
     spoofed_data = spoofed_data.map(tokenize, batched=True, batch_size=len(spoofed_data))
     
+    
     train_dataset.set_format("torch", columns=["input_ids", "attention_mask", "label"])
     val_dataset.set_format("torch", columns=["input_ids", "attention_mask", "label"])
     test_dataset.set_format("torch", columns=["input_ids", "attention_mask", "label"])
     spoofed_data.set_format("torch", columns=["input_ids", "attention_mask", "label"])
     
-    class_names = data['Author'].unique()
+    class_names = data['author_name'].unique()
     global id2label
     id2label = {i: label for i, label in enumerate(class_names)}
     
     return train_dataset, val_dataset, test_dataset, spoofed_data
 
-def train_model(train_dataset, val_dataset, parser):
+def train_model(train_dataset, val_dataset, parser, num_classes):
     print("Training model")
-    print(f"Number of classes: {len(id2label)}")
+    print(f"Number of classes: {num_classes}")
     config = AutoConfig.from_pretrained(parser.model)
     config.update({"id2label": id2label})
-    model = RobertaForSequenceClassification.from_pretrained(parser.model, config=config)
+    model = AuthorshipAttributionLLM(parser.model, num_classes)   
     repository_id = f"./output/{parser.model}_{parser.epochs}"
+    
     # TrainingArguments
     training_args = TrainingArguments(
         output_dir=repository_id,
@@ -107,15 +114,28 @@ def train_model(train_dataset, val_dataset, parser):
         save_strategy="epoch",
         load_best_model_at_end=True,
         save_total_limit=2,
-        report_to="tensorboard"
+        report_to="tensorboard",
+        metric_for_best_model="eval_loss", 
+        greater_is_better=False 
     )
-
+    def compute_metrics(pred):
+        labels = pred.label_ids
+        preds = pred.predictions.argmax(-1)
+        accuracy = accuracy_score(labels, preds)
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='weighted')
+        return {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1
+        }
     # Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
+        compute_metrics=compute_metrics
     )
 
     trainer.train()
@@ -127,18 +147,32 @@ def evaluate_model(model, test_dataset):
     print("Evaluating model")
     predictions = model.predict(test_dataset)
     y_true = predictions.label_ids
-    y_pred = predictions.predictions.argmax(-1)
+    y_pred = predictions.predictions
+    y_pred = y_pred[0].argmax(axis=-1)
     accuracy = accuracy_score(y_true, y_pred)
     precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='weighted')
+    classes = np.unique(y_true)
+    y_true_binarized = label_binarize(y_true, classes=classes)
+    y_pred_binarized = label_binarize(y_pred, classes=classes)
+    auc = roc_auc_score(y_true_binarized, y_pred_binarized, average="macro", multi_class="ovr")
     print(f"Accuracy: {accuracy}")
     print(f"Precision: {precision}")
     print(f"Recall: {recall}")
     print(f"F1: {f1}")
-    
-    return accuracy, precision, recall, f1 
-
-def load_model(model_path):
-    model = RobertaForSequenceClassification.from_pretrained(model_path)
+    print(f"ROC AUC score: {auc}")
+    results = {'accuracy': accuracy, 'precision': precision, 'recall': recall, 'f1': f1, 'roc_auc_score': auc}
+    return results
+       
+def write_results_to_file(results, file_path, parser):
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    print(f"Writing results to file {file_path}")
+    with open(file_path, 'a') as f: 
+        f.write(f"Model: {parser.model}, epochs {parser.epochs}, batch_size {parser. batch_size}, learning rate {parser.learning_rate}\n")
+        f.write("Accuracy, Precision, Recall, F1, AUC\n")
+        f.write(f"{results['accuracy']}, {results['precision']}, {results['recall']}, {results['f1']}, {results['roc_auc_score']}\n")
+        
+def load_trainer_from_path(model_path):
+    model = AutoModelForSequenceClassification.from_pretrained(model_path)
     return model
 
 def main():
@@ -146,13 +180,16 @@ def main():
     parser = parse_arguments()
     data, spoofed_data = load_data(parser.data)
     train_dataset, val_dataset, test_dataset, spoofed_test_dataset = prepare_datasets(data, spoofed_data, parser)
-    model = train_model(train_dataset, val_dataset, parser)
-    # print("Loading model")
-    # model = load_model("./output/roberta-base_10/model")
+    num_classes = len(data['label'].unique())
+    model = train_model(train_dataset, val_dataset, parser, num_classes)
     print("Evaluating model on test data")
-    evaluate_model(model, test_dataset)
+    results = evaluate_model(model, test_dataset)
+    file = f"./output/results.txt"
+    write_results_to_file(results, file, parser)
+    
     print("Evaluating model on spoofed data")
-    evaluate_model(model, spoofed_test_dataset)
+    results_sp = evaluate_model(model, spoofed_test_dataset)
+    write_results_to_file(results_sp, f"./output/spoofed_results.txt", parser)
     
 if __name__ == "__main__":  
     main()
