@@ -7,7 +7,7 @@ import pandas as pd
 def load_data(data_path):
     data = pd.read_csv(data_path)
     data = data.dropna()
-    number_quotes = 450
+    number_quotes = 250
     data['label'] = data['label'].astype('int')
     label_counts = data['label'].value_counts()
     labels_to_keep = label_counts[label_counts >= number_quotes].index
@@ -30,7 +30,7 @@ def write_results_to_file(results, file_path, args):
 def get_args():
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=3, help='Number of epochs to train for')
+    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train for')
     parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--model_name', type=str, default='FacebookAI/roberta-large', help='Model to use')
@@ -48,7 +48,26 @@ def init_env(args):
         np.random.seed(seed_val)
         torch.manual_seed(seed_val)
         torch.cuda.manual_seed_all(seed_val)
-    os.environ["CUDA_VISIBLE_DEVICES"]="2"
+    os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+def save_checkpoint(model, optimizer, epoch, path):
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+    }
+    
+    torch.save(checkpoint, path)
+    print(f"Model saved to {path}")
+    
+def load_checkpoint(model, optimizer, path):
+    checkpoint = torch.load(path)
+    
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    print(f"Model loaded from {path}")
+    return model, optimizer, checkpoint['epoch']
