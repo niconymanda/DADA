@@ -4,10 +4,10 @@ import torch
 import os
 import pandas as pd
 
-def load_data(data_path):
-    data = pd.read_csv(data_path)
+def load_data(args):
+    data = pd.read_csv(args.data)
     data = data.dropna()
-    number_quotes = 250
+    number_quotes = args.min_quotes_per_author
     data['label'] = data['label'].astype('int')
     label_counts = data['label'].value_counts()
     labels_to_keep = label_counts[label_counts >= number_quotes].index
@@ -30,15 +30,15 @@ def write_results_to_file(results, file_path, args):
 def get_args():
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train for')
-    parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
+    parser.add_argument('--epochs', type=int, default=2, help='Number of epochs to train for')
+    parser.add_argument('--batch_size', type=int, default=10, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--model_name', type=str, default='FacebookAI/roberta-large', help='Model to use')
     parser.add_argument('--seed', type=int, default=None, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
     parser.add_argument('--early_stopping_patience', type=int, default=3, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=50, help='Loggings step')
-    
+    parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
     return parser.parse_args()
 
 def init_env(args):

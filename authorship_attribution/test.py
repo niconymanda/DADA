@@ -71,7 +71,8 @@ def plot_tsne_for_authors(model, dataloader, device, repository):
 
     all_embeddings = np.concatenate(all_embeddings, axis=0)
     num_classes = len(set(all_labels))
-    tsne = TSNE(n_components=num_labels, random_state=42, perplexity=30, n_iter=3000)
+    print(f"Number of classes: {num_classes}")
+    tsne = TSNE(n_components=num_classes, perplexity=30, max_iter=3000, method='exact')
     tsne_results = tsne.fit_transform(all_embeddings)
 
     all_labels = np.array(all_labels)
