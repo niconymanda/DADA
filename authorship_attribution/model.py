@@ -28,7 +28,6 @@ class AuthorshipLLM(nn.Module):
         super(AuthorshipLLM, self).__init__()
 
         self.model = AutoModel.from_pretrained(model_name)
-        self.embeddings = self.model.config.hidden_size
         
     def forward(self, input_ids, attention_mask=None):
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)

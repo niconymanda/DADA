@@ -37,7 +37,7 @@ def test_model(model, test_dataloader, device):
                     negative_attention_mask = negative_attention_masks_list[i, neg_idx].to(device)
                     negative_embeddings = model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
                     dist_bx = F.pairwise_distance(anchor_embeddings[i].unsqueeze(0), negative_embeddings)
-                    print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
+                    # print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
                     if dist_bx < min_dist:
                         min_dist = dist_bx
                         correct_label = negative_labels[i][neg_idx]
@@ -52,7 +52,7 @@ def test_model(model, test_dataloader, device):
     print(f"Test Accuracy: {accuracy:.4f}")
     return accuracy
 
-def plot_tsne_for_authors(model, dataloader, device, repository):
+def plot_tsne_for_authors(model, dataloader, device, repository, author_id_map):
     model.eval()
     
     all_embeddings = []
@@ -78,16 +78,20 @@ def plot_tsne_for_authors(model, dataloader, device, repository):
     all_labels = np.array(all_labels)
 
     plt.figure(figsize=(10, 8))
-    sns.scatterplot(
+    scatter = sns.scatterplot(
         x=tsne_results[:, 0], y=tsne_results[:, 1],
         hue=all_labels, palette=sns.color_palette("hsv", len(set(all_labels))),
         legend="full", alpha=0.8
     )
     
+    # Modify legend to show author names
+    handles, labels = scatter.get_legend_handles_labels()
+    author_names = [author_id_map[int(label)] for label in labels]
+    plt.legend(handles, author_names, title="Author Name")
+    
     plt.title("t-SNE of Author Embeddings")
     plt.xlabel("t-SNE Dimension 1")
     plt.ylabel("t-SNE Dimension 2")
-    plt.legend(title="Author ID")
     plt.show()
     plt.savefig(f"{repository}/t-SNE_plot.png")
 

@@ -13,7 +13,7 @@ from early_stopping import EarlyStopping
 
 def main(args):
     config.init_env(args)
-    data, spoofed_data = config.load_data(args)
+    data, spoofed_data, author_id_map = config.load_data(args)
     
     train_data, temp_data = train_test_split(data, test_size=0.3, stratify=data['label'])
     val_data, test_data = train_test_split(temp_data, test_size=0.6, stratify=temp_data['label'])
@@ -36,7 +36,7 @@ def main(args):
     loss_fn.to(device)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
-    repository_id = f"./output/{args.model_name}_{args.batch_size}_{args.epochs}"
+    repository_id = f"./output/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}"
     os.makedirs(repository_id, exist_ok=True)
     writer = SummaryWriter(f"{repository_id}/logs")
     early_stopping = EarlyStopping(patience=args.early_stopping_patience)
@@ -53,11 +53,12 @@ def main(args):
             break 
         torch.save(model.state_dict(), f'{repository_id}/{epoch_n+1}.pth')
     config.save_checkpoint(model, optimizer, epoch_n, f'{repository_id}/final.pth')
-    config.load_checkpoint(model, optimizer, f'{repository_id}/final.pth')
     writer.close()
+    # config.load_checkpoint(model, optimizer, f'{repository_id}/final.pth')
+    
     acc = test_model(model, test_dataloader, device)
     print(f"Test Accuracy : {acc:.4f}")
-    plot_tsne_for_authors(model, test_dataloader, device, repository_id)
+    plot_tsne_for_authors(model, test_dataloader, device, repository_id, author_id_map)
     acc_sp = test_model(model, spoofed_data_loader, device)
     print(f"Spoofed Test Accuracy : {acc_sp:.4f}")
     
