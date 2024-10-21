@@ -1,5 +1,11 @@
 import torch
 from tqdm import tqdm  
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+import ray
+from ray import tune
+from loss_functions import TripletLoss
 
 def train(model, loss_fn, train_dataloader, optimizer, device, writer, epoch_n, args):
     model.train()
@@ -53,5 +59,80 @@ def validate(model, loss_fn, val_dataloader, device, writer, epoch_n, args):
                 writer.add_scalar('Loss/Val', curret_loss / args.logging_step, epoch_n * len(val_dataloader) + i)
                 curret_loss = 0.0       
     return total_loss / len(val_dataloader)
+
+
+
+def train_tune(config, train_dataset, val_dataset, model, device):
+    batch_size = config["batch_size"]
+    learning_rate = config["lr"]
+    # margin = config["margin"]
+    
+    loss_fn = TripletLoss(margin=0.5)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+    
+    model = model.to(device)
+    loss_fn = loss_fn.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    best_val_loss = float("inf")
+    patience = 3
+    patience_counter = 0
+    
+    for epoch in range(config["epochs"]):
+        # Training step
+        model.train()
+        total_loss = 0.0
+        for batch in train_dataloader:
+            anchor_input_ids = batch['anchor_input_ids'].to(device)
+            anchor_attention_mask = batch['anchor_attention_mask'].to(device)
+            positive_input_ids = batch['positive_input_ids'].to(device)
+            positive_attention_mask = batch['positive_attention_mask'].to(device)
+            negative_input_ids = batch['negative_input_ids'].to(device)
+            negative_attention_mask = batch['negative_attention_mask'].to(device)
+
+            optimizer.zero_grad()
+
+            anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
+            positive_embeddings = model(positive_input_ids, positive_attention_mask)
+            negative_embeddings = model(negative_input_ids, negative_attention_mask)
+
+            loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+            loss_value.backward()
+
+            optimizer.step()
+            total_loss += loss_value.item()
+
+        val_loss = 0.0
+        model.eval()
+        with torch.no_grad():
+            for batch in val_dataloader:
+                anchor_input_ids = batch['anchor_input_ids'].to(device)
+                anchor_attention_mask = batch['anchor_attention_mask'].to(device)
+                positive_input_ids = batch['positive_input_ids'].to(device)
+                positive_attention_mask = batch['positive_attention_mask'].to(device)
+                negative_input_ids = batch['negative_input_ids'].to(device)
+                negative_attention_mask = batch['negative_attention_mask'].to(device)
+
+                anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
+                positive_embeddings = model(positive_input_ids, positive_attention_mask)
+                negative_embeddings = model(negative_input_ids, negative_attention_mask)
+
+                loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+                val_loss += loss_value.item()
+
+        avg_val_loss = val_loss / len(val_dataloader)
+        tune.report(val_loss=avg_val_loss)
+
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            patience_counter = 0 
+        else:
+            patience_counter += 1
+
+        if patience_counter >= patience:
+            print(f"Early stopping at epoch {epoch} with best validation loss: {best_val_loss}")
+            break
+
 
             

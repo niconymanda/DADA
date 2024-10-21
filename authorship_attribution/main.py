@@ -21,9 +21,11 @@ def main(args):
     val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True)
     test_dataset = AuthorTripletLossDataset(test_data, args.model_name, train=False)
     spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=False)
+    
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
     print(f"Test dataset size: {len(test_dataset)}")
+    
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
@@ -35,7 +37,7 @@ def main(args):
     model.to(device)
     loss_fn.to(device)
     
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     repository_id = f"./output/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}"
     os.makedirs(repository_id, exist_ok=True)
     writer = SummaryWriter(f"{repository_id}/logs")
@@ -43,15 +45,15 @@ def main(args):
     
     for epoch_n in range(args.epochs):
         train_loss = train(model, loss_fn, train_dataloader, optimizer, device, writer, epoch_n, args)
-        writer.add_scalar('Loss/Train_ep', train_loss, epoch_n)
+        writer.add_scalar('Loss/Train-epochs', train_loss, epoch_n)
         print(f"Epoch {epoch_n + 1}: Train Loss: {train_loss}")
         val_loss = validate(model, loss_fn, val_dataloader, device, writer, epoch_n, args)
-        writer.add_scalar('Loss/Val_ep', val_loss, epoch_n)
+        writer.add_scalar('Loss/Val-epochs', val_loss, epoch_n)
         print(f"Epoch {epoch_n + 1}: Val Loss: {val_loss}")
         if early_stopping.step(val_loss):
             print("Early stopping triggered")
             break 
-        torch.save(model.state_dict(), f'{repository_id}/{epoch_n+1}.pth')
+        # torch.save(model.state_dict(), f'{repository_id}/{epoch_n+1}.pth')
     config.save_checkpoint(model, optimizer, epoch_n, f'{repository_id}/final.pth')
     writer.close()
     # config.load_checkpoint(model, optimizer, f'{repository_id}/final.pth')
