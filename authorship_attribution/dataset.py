@@ -35,7 +35,7 @@ class AuthorClassificationDataset(Dataset):
         
         
 class AuthorTripletLossDataset(Dataset):
-    def __init__(self, data, tokenizer_name, max_length=128, train=True):
+    def __init__(self, data, tokenizer_name, max_length=256, train=True):
         self.data = data
         self.tokenizer =  AutoTokenizer.from_pretrained(tokenizer_name)
 
@@ -68,6 +68,8 @@ class AuthorTripletLossDataset(Dataset):
             truncation=True,
             return_tensors="pt"
         )
+        avg_token_length = sum(len(self.tokenizer.tokenize(text)) for text in self.texts_by_author[anchor_label]) / len(self.texts_by_author[anchor_label])
+        print(f"Average token length for author {anchor_label}: {avg_token_length}")
         
         positive_inputs = self.tokenizer(
             positive_example,
