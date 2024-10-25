@@ -7,8 +7,8 @@ import torch
 import os
 import config
 from dataset import AuthorTripletLossDataset
-from train import train, validate
-from test import test_model, plot_tsne_for_authors
+from train import train_model, validate
+from test_model import test_model, plot_tsne_for_authors
 from early_stopping import EarlyStopping
 
 def main(args):
@@ -31,7 +31,7 @@ def main(args):
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
     spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=args.batch_size, shuffle=False)
     
-    loss_fn = TripletLoss(margin=0.5)
+    loss_fn = TripletLoss(margin=0.1)
     model = AuthorshipLLM(args.model_name)
     device = config.get_device()
     model.to(device)
@@ -44,7 +44,7 @@ def main(args):
     early_stopping = EarlyStopping(patience=args.early_stopping_patience)
     
     for epoch_n in range(args.epochs):
-        train_loss = train(model, loss_fn, train_dataloader, optimizer, device, writer, epoch_n, args)
+        train_loss = train_model(model, loss_fn, train_dataloader, optimizer, device, writer, epoch_n, args)
         writer.add_scalar('Loss/Train-epochs', train_loss, epoch_n)
         print(f"Epoch {epoch_n + 1}: Train Loss: {train_loss}")
         val_loss = validate(model, loss_fn, val_dataloader, device, writer, epoch_n, args)
@@ -53,7 +53,7 @@ def main(args):
         if early_stopping.step(val_loss):
             print("Early stopping triggered")
             break 
-        # torch.save(model.state_dict(), f'{repository_id}/{epoch_n+1}.pth')
+        torch.save(model.state_dict(), f'{repository_id}/{epoch_n+1}.pth')
     config.save_checkpoint(model, optimizer, epoch_n, f'{repository_id}/final.pth')
     writer.close()
     # config.load_checkpoint(model, optimizer, f'{repository_id}/final.pth')

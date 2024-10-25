@@ -4,7 +4,7 @@ from transformers import AutoTokenizer
 import random 
 
 class AuthorClassificationDataset(Dataset):
-    def __init__(self, data, tokenizer, max_length=512):
+    def __init__(self, data, tokenizer, max_length=128):
         self.texts = data['text'].tolist()
         self.labels = data['label'].tolist()
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
@@ -35,7 +35,7 @@ class AuthorClassificationDataset(Dataset):
         
         
 class AuthorTripletLossDataset(Dataset):
-    def __init__(self, data, tokenizer_name, max_length=512, train=True):
+    def __init__(self, data, tokenizer_name, max_length=128, train=True):
         self.data = data
         self.tokenizer =  AutoTokenizer.from_pretrained(tokenizer_name)
 
@@ -68,6 +68,7 @@ class AuthorTripletLossDataset(Dataset):
             truncation=True,
             return_tensors="pt"
         )
+        
         positive_inputs = self.tokenizer(
             positive_example,
             max_length=self.max_length,

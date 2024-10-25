@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
+import bs
 
 def test_model(model, test_dataloader, device):
     model.eval() 
@@ -37,13 +38,12 @@ def test_model(model, test_dataloader, device):
                     negative_attention_mask = negative_attention_masks_list[i, neg_idx].to(device)
                     negative_embeddings = model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
                     dist_bx = F.pairwise_distance(anchor_embeddings[i].unsqueeze(0), negative_embeddings)
-                    # print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
                     if dist_bx < min_dist:
                         min_dist = dist_bx
                         correct_label = negative_labels[i][neg_idx]
-                        print(f"Min dist: {min_dist}, possible label: {correct_label}")
+                        print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
+                        # print(f"Min dist: {min_dist}, possible label: {correct_label}")
                         
-
                 if correct_label == anchor_labels[i]:
                     correct += 1
                 total += 1
@@ -54,7 +54,6 @@ def test_model(model, test_dataloader, device):
 
 def plot_tsne_for_authors(model, dataloader, device, repository, author_id_map):
     model.eval()
-    
     all_embeddings = []
     all_labels = []
 
@@ -93,7 +92,7 @@ def plot_tsne_for_authors(model, dataloader, device, repository, author_id_map):
     plt.xlabel("t-SNE Dimension 1")
     plt.ylabel("t-SNE Dimension 2")
     plt.show()
-    plt.savefig(f"{repository}/t-SNE_plot.png")
+    plt.savefig(f"{repository}/t-SNE_plot_best_model.png")
 
 
 

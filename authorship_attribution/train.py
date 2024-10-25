@@ -3,11 +3,14 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import ray
-from ray import tune
+import tempfile
+from ray import train
 from loss_functions import TripletLoss
+from ray.train import Checkpoint, get_checkpoint
+from pathlib import Path
+import ray.cloudpickle as pickle
 
-def train(model, loss_fn, train_dataloader, optimizer, device, writer, epoch_n, args):
+def train_model(model, loss_fn, train_dataloader, optimizer, device, writer, epoch_n, args):
     model.train()
     total_loss = 0
     current_loss = 0.0
@@ -39,6 +42,7 @@ def validate(model, loss_fn, val_dataloader, device, writer, epoch_n, args):
     model.eval()
     total_loss = 0
     curret_loss = 0.0
+
     with torch.no_grad():
         for i,batch in enumerate(tqdm(val_dataloader)):
             anchor_input_ids = batch['anchor_input_ids'].to(device)
@@ -60,27 +64,42 @@ def validate(model, loss_fn, val_dataloader, device, writer, epoch_n, args):
                 curret_loss = 0.0       
     return total_loss / len(val_dataloader)
 
-
-
 def train_tune(config, train_dataset, val_dataset, model, device):
     batch_size = config["batch_size"]
     learning_rate = config["lr"]
     # margin = config["margin"]
     
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            model = nn.DataParallel(model)
+    model.to(device)
     loss_fn = TripletLoss(margin=0.5)
+    loss_fn = loss_fn.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    
+    checkpoint = get_checkpoint()
+    if checkpoint:
+        with checkpoint.as_directory() as checkpoint_dir:
+            data_path = Path(checkpoint_dir) / "data.pkl"
+            with open(data_path, "rb") as fp:
+                checkpoint_state = pickle.load(fp)
+            start_epoch = checkpoint_state["epoch"]
+            model.load_state_dict(checkpoint_state["net_state_dict"])
+            optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
+    else:
+        start_epoch = 0
+        
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
     
-    model = model.to(device)
-    loss_fn = loss_fn.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     best_val_loss = float("inf")
     patience = 3
     patience_counter = 0
     
-    for epoch in range(config["epochs"]):
-        # Training step
+    for epoch in range(start_epoch, config["epochs"]):
         model.train()
         total_loss = 0.0
         for batch in train_dataloader:
@@ -120,9 +139,25 @@ def train_tune(config, train_dataset, val_dataset, model, device):
 
                 loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 val_loss += loss_value.item()
-
         avg_val_loss = val_loss / len(val_dataloader)
-        tune.report(val_loss=avg_val_loss)
+
+        checkpoint_data = {
+            "epoch": epoch,
+            "net_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        }
+        with tempfile.TemporaryDirectory() as checkpoint_dir:
+            data_path = Path(checkpoint_dir) / "data.pkl"
+            with open(data_path, "wb") as fp:
+                pickle.dump(checkpoint_data, fp)
+
+            checkpoint = Checkpoint.from_directory(checkpoint_dir)
+            train.report(
+                {"loss": avg_val_loss},
+                checkpoint=checkpoint,
+            )
+        avg_val_loss = val_loss / len(val_dataloader)
+        train.report(val_loss=avg_val_loss)
 
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
