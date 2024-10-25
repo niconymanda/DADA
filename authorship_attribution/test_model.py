@@ -5,7 +5,6 @@ import numpy as np
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
-import bs
 
 def test_model(model, test_dataloader, device):
     model.eval() 
@@ -41,7 +40,7 @@ def test_model(model, test_dataloader, device):
                     if dist_bx < min_dist:
                         min_dist = dist_bx
                         correct_label = negative_labels[i][neg_idx]
-                        print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
+                        # print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
                         # print(f"Min dist: {min_dist}, possible label: {correct_label}")
                         
                 if correct_label == anchor_labels[i]:

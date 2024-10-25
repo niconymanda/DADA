@@ -1,7 +1,7 @@
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from torch.utils.tensorboard import SummaryWriter
-from model import AuthorshipLLM
+from model import AuthorshipLLM, AuthorshipClassificationLLM
 from loss_functions import TripletLoss
 import torch
 import os
@@ -53,11 +53,16 @@ def main(args):
         if early_stopping.step(val_loss):
             print("Early stopping triggered")
             break 
-        torch.save(model.state_dict(), f'{repository_id}/{epoch_n+1}.pth')
+        # torch.save(model.state_dict(), f'{repository_id}/{epoch_n+1}.pth')
     config.save_checkpoint(model, optimizer, epoch_n, f'{repository_id}/final.pth')
     writer.close()
     # config.load_checkpoint(model, optimizer, f'{repository_id}/final.pth')
-    
+    for model.parameters in model.parameters():
+        model.parameters.requires_grad = False
+    classification_model = AuthorshipClassificationLLM(model, num_labels=len(author_id_map.keys()))
+    classification_model.to(device)
+    classification_model.classifier.requires_grad = True
+    #train classification model
     acc = test_model(model, test_dataloader, device)
     print(f"Test Accuracy : {acc:.4f}")
     plot_tsne_for_authors(model, test_dataloader, device, repository_id, author_id_map)
