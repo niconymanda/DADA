@@ -2,7 +2,7 @@ import config
 from sklearn.model_selection import train_test_split
 from dataset import AuthorTripletLossDataset
 from model import AuthorshipLLM
-from train import train_tune
+from train import TrainerAuthorshipAttribution
 from ray.tune.schedulers import ASHAScheduler
 import ray
 from ray import tune

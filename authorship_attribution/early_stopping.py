@@ -1,4 +1,23 @@
 class EarlyStopping:
+    """
+    EarlyStopping class to stop training when a monitored metric has stopped improving.
+    Attributes:
+        patience (int): Number of epochs to wait after the last time the monitored metric improved.
+        min_delta (float): Minimum change in the monitored metric to qualify as an improvement.
+        best_loss (float or None): The best recorded value of the monitored metric.
+        counter (int): Counts the number of epochs since the last improvement.
+        should_stop (bool): Indicates whether training should be stopped.
+    Methods:
+        __init__(patience=3, min_delta=0.0):
+            Initializes the EarlyStopping instance with the given patience and min_delta values.
+        step(val_loss):
+            Updates the state of the EarlyStopping instance based on the validation loss.
+            Args:
+                val_loss (float): The current value of the monitored metric.
+            Returns:
+                bool: True if training should be stopped, False otherwise.
+    """
+    
     def __init__(self, patience=3, min_delta=0.0):
 
         self.patience = patience

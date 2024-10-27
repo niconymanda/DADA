@@ -69,7 +69,7 @@ class AuthorTripletLossDataset(Dataset):
             return_tensors="pt"
         )
         avg_token_length = sum(len(self.tokenizer.tokenize(text)) for text in self.texts_by_author[anchor_label]) / len(self.texts_by_author[anchor_label])
-        print(f"Average token length for author {anchor_label}: {avg_token_length}")
+        # print(f"Average token length for author {anchor_label}: {avg_token_length}")
         
         positive_inputs = self.tokenizer(
             positive_example,
