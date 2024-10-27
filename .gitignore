@@ -130,6 +130,7 @@ celerybeat.pid
 env/
 venv/
 dada/
+dadaEnv/
 ENV/
 env.bak/
 venv.bak/
