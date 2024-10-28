@@ -15,6 +15,8 @@ from early_stopping import EarlyStopping
 import config
 from model import AuthorshipClassificationLLM
 from torch.nn import functional as F
+from typing import Optional, Literal
+import wandb
 
 class TrainerAuthorshipAttribution:
     """
@@ -43,7 +45,8 @@ class TrainerAuthorshipAttribution:
                  args, 
                  repository_id,
                  author_id_map,
-                 report_to=None, 
+                 project_name = 'authorship_attribution',
+                 report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
                  early_stopping=None):
         self.model = model
         self.loss_fn = loss_fn
@@ -62,6 +65,13 @@ class TrainerAuthorshipAttribution:
         
         if self.report_to == 'tensorboard':
             self.writer = SummaryWriter(f"{repository_id}/logs")
+            
+        self.writer = None
+        if self.report_to == 'tensorboard':
+            self.writer = SummaryWriter(f"{repository_id}/logs")
+        elif report_to == 'wandb':
+            wandb.init(project=project_name, config=vars(args))
+            wandb.watch(model)
         
         if early_stopping:
             self.early_stopping = EarlyStopping(patience=args.early_stopping_patience)
@@ -79,15 +89,10 @@ class TrainerAuthorshipAttribution:
         
         for epoch_n in range(self.args.epochs):
             train_loss = self.train_model(epoch_n)
-            if self.report_to is not None:
-                self.writer.add_scalar('Loss/Train-epochs', train_loss, epoch_n)
-
             val_loss = self.validate(epoch_n)
-            if self.report_to:
-                self.writer.add_scalar('Loss/Val-epochs', val_loss, epoch_n)
-            # if self.early_stopping.step(val_loss):
-            #     print("Early stopping triggered")
-            #     break 
+            if self.early_stopping.step(val_loss):
+                print("Early stopping triggered")
+                break 
         config.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth')
         
         if classification_head:
@@ -105,15 +110,10 @@ class TrainerAuthorshipAttribution:
             classification_optimizer = optim.Adam(classification_model.parameters(), lr=self.args.learning_rate)
             for epoch_n in range(self.args.epochs_classification):
                 train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
-                if self.report_to is not None:
-                    self.writer.add_scalar('Loss/Train-epochs_classif', train_loss, epoch_n)
-
                 val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
-                if self.report_to:
-                    self.writer.add_scalar('Loss/Val-epochs_classif', val_loss, epoch_n)
-                # if self.early_stopping.step(val_loss):
-                #     print("Early stopping triggered")
-                #     break
+                if self.early_stopping.step(val_loss):
+                    print("Early stopping triggered")
+                    break
             config.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth')
             return self.model, classification_model
         return self.model, None 
@@ -151,9 +151,20 @@ class TrainerAuthorshipAttribution:
 
             current_loss += loss_value.item()
             if i % self.args.logging_step == self.args.logging_step - 1:
-                self.writer.add_scalar('Loss/Train_classification', current_loss / self.args.logging_step, epoch_n * len(self.train_dataloader) + i)
-                current_loss = 0.0
-
+                metrics = {
+                    "Loss": current_loss / self.args.logging_step,
+                    "epoch": epoch_n,
+                    "step": i
+                }
+                self._log_metrics(metrics, phase='Train_classificaion')
+                current_loss = 0.0  
+                         
+        train_loss = total_loss / len(self.val_dataloader)
+        metrics = {
+            "Loss": train_loss,
+            "epoch": epoch_n
+        }
+        self._log_metrics(metrics, phase='Train_classificaion_epochs')
         return total_loss / len(self.train_dataloader)
     
     def validate_classification(self, classificaion_model, loss_fn_classification, epoch_n):
@@ -186,9 +197,21 @@ class TrainerAuthorshipAttribution:
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
                 if i % self.args.logging_step == self.args.logging_step - 1:
-                    self.writer.add_scalar('Loss/Val_classification', current_loss / self.args.logging_step, epoch_n * len(self.val_dataloader) + i)
-                    current_loss = 0.0       
-        return total_loss / len(self.val_dataloader)
+                    metrics = {
+                        "Loss": current_loss / self.args.logging_step,
+                        "epoch": epoch_n,
+                        "step": i
+                    }
+                    self._log_metrics(metrics, phase='Val_classificaion')
+                    current_loss = 0.0  
+                         
+        val_loss = total_loss / len(self.val_dataloader)
+        metrics = {
+            "Loss": val_loss,
+            "epoch": epoch_n
+        }
+        self._log_metrics(metrics, phase='Val_classificaion_epochs')
+        return val_loss
 
     def train_model(self, epoch_n):
         """
@@ -226,13 +249,28 @@ class TrainerAuthorshipAttribution:
             distance_negative = F.pairwise_distance(anchor_embeddings, negative_embeddings, p=2)
             correct_count += torch.sum(distance_positive < distance_negative).item()
             
+            # if i % self.args.logging_step == self.args.logging_step - 1:
+            #     self.writer.add_scalar('Loss/Train', current_loss / self.args.logging_step, epoch_n * len(self.train_dataloader) + i)
+            #     current_loss = 0.0
             if i % self.args.logging_step == self.args.logging_step - 1:
-                self.writer.add_scalar('Loss/Train', current_loss / self.args.logging_step, epoch_n * len(self.train_dataloader) + i)
-                current_loss = 0.0
+                    metrics = {
+                        "Loss": current_loss / self.args.logging_step,
+                        "Accuracy": correct_count / len(self.train_dataloader.dataset),
+                        "epoch": epoch_n,
+                        "step": i
+                    }
+                    self._log_metrics(metrics, phase='Train')
+                    current_loss = 0.0
                 
-        accuracy  = correct_count / len(self.val_dataloader.dataset)     
-        self.writer.add_scalar('Accuracy/Train', accuracy , epoch_n)
-
+        # accuracy  = correct_count / len(self.train_dataloader.dataset)     
+        # self.writer.add_scalar('Accuracy/Train', accuracy , epoch_n)
+        train_loss = total_loss / len(self.train_dataloader)
+        metrics = {
+            "Loss_epoch": train_loss,
+            "Accuracy_epoch": correct_count / len(self.train_dataloader.dataset),
+            "epoch": epoch_n,
+        }
+        self._log_metrics(metrics, phase='Train_epoch')
         return total_loss / len(self.train_dataloader)
 
     def validate(self, epoch_n):
@@ -270,13 +308,37 @@ class TrainerAuthorshipAttribution:
                 correct_count += torch.sum(distance_positive < distance_negative).item()
                 
                 if i % self.args.logging_step == self.args.logging_step - 1:
-                    self.writer.add_scalar('Loss/Val', current_loss / self.args.logging_step, epoch_n * len(self.val_dataloader) + i)
+                    # self.writer.add_scalar('Loss/Val', current_loss / self.args.logging_step, epoch_n * len(self.val_dataloader) + i)
+                    # current_loss = 0.0
+                    metrics = {
+                    "Loss": current_loss / self.args.logging_step,
+                    "Accuracy": correct_count / len(self.val_dataloader.dataset),
+                    "epoch": epoch_n,
+                    "step": i
+                    }
+                    self._log_metrics(metrics, phase='Val')
                     current_loss = 0.0
                     
-            val_accuracy  = correct_count / len(self.val_dataloader.dataset)  
-            self.writer.add_scalar('Accuracy/Val', val_accuracy , epoch_n)
-                   
-        return total_loss / len(self.val_dataloader)
+            # val_accuracy  = correct_count / len(self.val_dataloader.dataset)  
+            # self.writer.add_scalar('Accuracy/Val', val_accuracy , epoch_n)
+            val_loss = total_loss / len(self.val_dataloader)
+            metrics = {
+                    "Loss_epoch": val_loss,
+                    "Accuracy_epoch": correct_count / len(self.val_dataloader.dataset),
+                    "epoch": epoch_n,
+                    }
+            self._log_metrics(metrics, phase='Val_epoch')
+        return val_loss
+    
+    def _log_metrics(self, metrics, phase):
+        if self.report_to == 'wandb':
+            for key, value in metrics.items():
+                wandb.log({f"{phase}/{key}": value}) if (key != 'epoch' or key !='step') else None
+        elif self.report_to == 'tensorboard':
+            for key, value in metrics.items():
+                if 'epoch' in phase:
+                    self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'])
+                self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.val_dataloader) + metrics['step'])
 
 def train_tune(config, train_dataset, val_dataset, model, device):
     """

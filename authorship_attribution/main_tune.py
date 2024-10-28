@@ -15,7 +15,7 @@ from test_model import TesterAuthorshipAttribution
 def main(args):
     config.init_env(args)
     data, spoofed_data, author_id_map = config.load_data(args)
-    repository_id = f"./output/n_authors_{len(author_id_map.keys())}/{args.model_name}_tune"
+    repository_id = f"./output/n_authors_{len(author_id_map.keys())}_tune/{args.model_name}_tune"
     
     train_data, temp_data = train_test_split(data, test_size=0.3, stratify=data['label'])
     val_data, test_data = train_test_split(temp_data, test_size=0.5, stratify=temp_data['label'])
