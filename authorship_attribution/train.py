@@ -14,6 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from early_stopping import EarlyStopping
 import config
 from model import AuthorshipClassificationLLM
+from torch.nn import functional as F
 
 class TrainerAuthorshipAttribution:
     """
@@ -84,9 +85,9 @@ class TrainerAuthorshipAttribution:
             val_loss = self.validate(epoch_n)
             if self.report_to:
                 self.writer.add_scalar('Loss/Val-epochs', val_loss, epoch_n)
-            if self.early_stopping.step(val_loss):
-                print("Early stopping triggered")
-                break 
+            # if self.early_stopping.step(val_loss):
+            #     print("Early stopping triggered")
+            #     break 
         config.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth')
         
         if classification_head:
@@ -110,9 +111,9 @@ class TrainerAuthorshipAttribution:
                 val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
                 if self.report_to:
                     self.writer.add_scalar('Loss/Val-epochs_classif', val_loss, epoch_n)
-                if self.early_stopping.step(val_loss):
-                    print("Early stopping triggered")
-                    break
+                # if self.early_stopping.step(val_loss):
+                #     print("Early stopping triggered")
+                #     break
             config.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth')
             return self.model, classification_model
         return self.model, None 
@@ -136,7 +137,7 @@ class TrainerAuthorshipAttribution:
         classification_model.train()
         total_loss = 0
         current_loss = 0.0
-        for i,batch in enumerate(tqdm(self.train_dataloader)):
+        for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
             input_ids = batch['anchor_input_ids'].to(self.device)
             attention_mask = batch['anchor_attention_mask'].to(self.device)
             labels = batch['label'].to(self.device)
@@ -175,7 +176,7 @@ class TrainerAuthorshipAttribution:
         current_loss = 0.0
 
         with torch.no_grad():
-            for i,batch in enumerate(tqdm(self.val_dataloader)):
+            for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
                 input_ids = batch['anchor_input_ids'].to(self.device)
                 attention_mask = batch['anchor_attention_mask'].to(self.device)
                 labels = batch['label'].to(self.device)
@@ -201,7 +202,8 @@ class TrainerAuthorshipAttribution:
         self.model.train()
         total_loss = 0
         current_loss = 0.0
-        for i,batch in enumerate(tqdm(self.train_dataloader)):
+        correct_count = 0
+        for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
             anchor_input_ids = batch['anchor_input_ids'].to(self.device)
             anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
             positive_input_ids = batch['positive_input_ids'].to(self.device)
@@ -217,11 +219,19 @@ class TrainerAuthorshipAttribution:
             loss_value.backward()
             self.optimizer.step()
             total_loss += loss_value.item()
-
             current_loss += loss_value.item()
+            
+            # Accuracy calculation
+            distance_positive = F.pairwise_distance(anchor_embeddings, positive_embeddings, p=2)
+            distance_negative = F.pairwise_distance(anchor_embeddings, negative_embeddings, p=2)
+            correct_count += torch.sum(distance_positive < distance_negative).item()
+            
             if i % self.args.logging_step == self.args.logging_step - 1:
                 self.writer.add_scalar('Loss/Train', current_loss / self.args.logging_step, epoch_n * len(self.train_dataloader) + i)
                 current_loss = 0.0
+                
+        accuracy  = correct_count / len(self.val_dataloader.dataset)     
+        self.writer.add_scalar('Accuracy/Train', accuracy , epoch_n)
 
         return total_loss / len(self.train_dataloader)
 
@@ -237,9 +247,9 @@ class TrainerAuthorshipAttribution:
         self.model.eval()
         total_loss = 0
         current_loss = 0.0
-
+        correct_count = 0
         with torch.no_grad():
-            for i,batch in enumerate(tqdm(self.val_dataloader)):
+            for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
                 anchor_input_ids = batch['anchor_input_ids'].to(self.device)
                 anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
                 positive_input_ids = batch['positive_input_ids'].to(self.device)
@@ -253,138 +263,133 @@ class TrainerAuthorshipAttribution:
                 loss_value = self.loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
+                
+                # Accuracy calculation
+                distance_positive = F.pairwise_distance(anchor_embeddings, positive_embeddings, p=2)
+                distance_negative = F.pairwise_distance(anchor_embeddings, negative_embeddings, p=2)
+                correct_count += torch.sum(distance_positive < distance_negative).item()
+                
                 if i % self.args.logging_step == self.args.logging_step - 1:
-                    # print(f"Validation loss: {current_loss / args.logging_step}")
-                    self.writer.add_scalar('Loss/Val', current_loss / self.args.logging_step, epoch_n * len(val_dataloader) + i)
-                    current_loss = 0.0       
+                    self.writer.add_scalar('Loss/Val', current_loss / self.args.logging_step, epoch_n * len(self.val_dataloader) + i)
+                    current_loss = 0.0
+                    
+            val_accuracy  = correct_count / len(self.val_dataloader.dataset)  
+            self.writer.add_scalar('Accuracy/Val', val_accuracy , epoch_n)
+                   
         return total_loss / len(self.val_dataloader)
 
-    def train_tune(self, config, train_dataset, val_dataset, model, device):
-        """
-        Trains and tunes a model using the provided configuration, datasets, and device.
-        Args:
-            config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
-            train_dataset (Dataset): The dataset used for training.
-            val_dataset (Dataset): The dataset used for validation.
-            model (nn.Module): The model to be trained.
-            device (str): The device to run the training on, either 'cpu' or 'cuda'.
-        Returns:
-            None
-        The function performs the following steps:
-        1. Sets up the device for training (CPU or GPU).
-        2. Initializes the loss function and optimizer.
-        3. Loads a checkpoint if available to resume training from a previous state.
-        4. Creates data loaders for the training and validation datasets.
-        5. Trains the model for the specified number of epochs, performing validation at the end of each epoch.
-        6. Implements early stopping based on validation loss to prevent overfitting.
-        7. Saves checkpoints during training to allow resuming from the last state.
-        Note:
-            The function uses a TripletLoss with a fixed margin of 0.5.
-        """
-        
-        batch_size = config["batch_size"]
-        learning_rate = config["lr"]
-        # margin = config["margin"]
-
-        device = "cpu"
-        if torch.cuda.is_available():
-            device = "cuda:0"
-            if torch.cuda.device_count() > 1:
-                model = nn.DataParallel(model)
-        model.to(device)
-        loss_fn = TripletLoss(margin=0.5)
-        loss_fn = loss_fn.to(device)
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-
-        checkpoint = get_checkpoint()
-        if checkpoint:
-            with checkpoint.as_directory() as checkpoint_dir:
-                data_path = Path(checkpoint_dir) / "data.pkl"
-                with open(data_path, "rb") as fp:
-                    checkpoint_state = pickle.load(fp)
-                start_epoch = checkpoint_state["epoch"]
-                model.load_state_dict(checkpoint_state["net_state_dict"])
-                optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
-        else:
-            start_epoch = 0
-
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
-
-
-        best_val_loss = float("inf")
-        patience = 3
-        patience_counter = 0
-
-        for epoch in range(start_epoch, config["epochs"]):
-            model.train()
-            total_loss = 0.0
-            for batch in train_dataloader:
+def train_tune(config, train_dataset, val_dataset, model, device):
+    """
+    Trains and tunes a model using the provided configuration, datasets, and device.
+    Args:
+        config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
+        train_dataset (Dataset): The dataset used for training.
+        val_dataset (Dataset): The dataset used for validation.
+        model (nn.Module): The model to be trained.
+        device (str): The device to run the training on, either 'cpu' or 'cuda'.
+    Returns:
+        None
+    The function performs the following steps:
+    1. Sets up the device for training (CPU or GPU).
+    2. Initializes the loss function and optimizer.
+    3. Loads a checkpoint if available to resume training from a previous state.
+    4. Creates data loaders for the training and validation datasets.
+    5. Trains the model for the specified number of epochs, performing validation at the end of each epoch.
+    6. Implements early stopping based on validation loss to prevent overfitting.
+    7. Saves checkpoints during training to allow resuming from the last state.
+    Note:
+        The function uses a TripletLoss with a fixed margin of 0.5.
+    """
+    
+    batch_size = config["batch_size"]
+    learning_rate = config["lr"]
+    margin = config["margin"]
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            model = nn.DataParallel(model)
+    model.to(device)
+    loss_fn = TripletLoss(margin=margin)
+    loss_fn = loss_fn.to(device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    checkpoint = get_checkpoint()
+    if checkpoint:
+        with checkpoint.as_directory() as checkpoint_dir:
+            data_path = Path(checkpoint_dir) / "data.pkl"
+            with open(data_path, "rb") as fp:
+                checkpoint_state = pickle.load(fp)
+            start_epoch = checkpoint_state["epoch"]
+            model.load_state_dict(checkpoint_state["net_state_dict"])
+            optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
+    else:
+        start_epoch = 0
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+    best_val_loss = float("inf")
+    patience = 3
+    patience_counter = 0
+    for epoch in range(start_epoch, config["epochs"]):
+        model.train()
+        total_loss = 0.0
+        for batch in train_dataloader:
+            anchor_input_ids = batch['anchor_input_ids'].to(device)
+            anchor_attention_mask = batch['anchor_attention_mask'].to(device)
+            positive_input_ids = batch['positive_input_ids'].to(device)
+            positive_attention_mask = batch['positive_attention_mask'].to(device)
+            negative_input_ids = batch['negative_input_ids'].to(device)
+            negative_attention_mask = batch['negative_attention_mask'].to(device)
+            optimizer.zero_grad()
+            anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
+            positive_embeddings = model(positive_input_ids, positive_attention_mask)
+            negative_embeddings = model(negative_input_ids, negative_attention_mask)
+            loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+            loss_value.backward()
+            optimizer.step()
+            total_loss += loss_value.item()
+            
+        # Validate the model
+        val_loss = 0.0
+        model.eval()
+        with torch.no_grad():
+            for batch in val_dataloader:
                 anchor_input_ids = batch['anchor_input_ids'].to(device)
                 anchor_attention_mask = batch['anchor_attention_mask'].to(device)
                 positive_input_ids = batch['positive_input_ids'].to(device)
                 positive_attention_mask = batch['positive_attention_mask'].to(device)
                 negative_input_ids = batch['negative_input_ids'].to(device)
                 negative_attention_mask = batch['negative_attention_mask'].to(device)
-
-                optimizer.zero_grad()
-
                 anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
                 positive_embeddings = model(positive_input_ids, positive_attention_mask)
                 negative_embeddings = model(negative_input_ids, negative_attention_mask)
-
                 loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
-                loss_value.backward()
-
-                optimizer.step()
-                total_loss += loss_value.item()
-
-            val_loss = 0.0
-            model.eval()
-            with torch.no_grad():
-                for batch in val_dataloader:
-                    anchor_input_ids = batch['anchor_input_ids'].to(device)
-                    anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-                    positive_input_ids = batch['positive_input_ids'].to(device)
-                    positive_attention_mask = batch['positive_attention_mask'].to(device)
-                    negative_input_ids = batch['negative_input_ids'].to(device)
-                    negative_attention_mask = batch['negative_attention_mask'].to(device)
-
-                    anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
-                    positive_embeddings = model(positive_input_ids, positive_attention_mask)
-                    negative_embeddings = model(negative_input_ids, negative_attention_mask)
-
-                    loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
-                    val_loss += loss_value.item()
-            avg_val_loss = val_loss / len(val_dataloader)
-
-            checkpoint_data = {
-                "epoch": epoch,
-                "net_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-            }
-            with tempfile.TemporaryDirectory() as checkpoint_dir:
-                data_path = Path(checkpoint_dir) / "data.pkl"
-                with open(data_path, "wb") as fp:
-                    pickle.dump(checkpoint_data, fp)
-
-                checkpoint = Checkpoint.from_directory(checkpoint_dir)
-                train.report(
-                    {"loss": avg_val_loss},
-                    checkpoint=checkpoint,
-                )
-            avg_val_loss = val_loss / len(val_dataloader)
-            train.report(val_loss=avg_val_loss)
-
-            if avg_val_loss < best_val_loss:
-                best_val_loss = avg_val_loss
-                patience_counter = 0 
-            else:
-                patience_counter += 1
-
-            if patience_counter >= patience:
-                print(f"Early stopping at epoch {epoch} with best validation loss: {best_val_loss}")
-                break
+                val_loss += loss_value.item()
+        avg_val_loss = val_loss / len(val_dataloader)
+        checkpoint_data = {
+            "epoch": epoch,
+            "net_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+        }
+        with tempfile.TemporaryDirectory() as checkpoint_dir:
+            data_path = Path(checkpoint_dir) / "data.pkl"
+            with open(data_path, "wb") as fp:
+                pickle.dump(checkpoint_data, fp)
+            checkpoint = Checkpoint.from_directory(checkpoint_dir)
+            train.report(
+                {"loss": avg_val_loss},
+                checkpoint=checkpoint,
+            )
+        avg_val_loss = val_loss / len(val_dataloader)
+        train.report(val_loss=avg_val_loss)
+        # Early stopping
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            patience_counter = 0 
+        else:
+            patience_counter += 1
+        if patience_counter >= patience:
+            print(f"Early stopping at epoch {epoch} with best validation loss: {best_val_loss}")
+            break
 
 
 

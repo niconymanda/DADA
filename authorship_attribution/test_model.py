@@ -10,6 +10,22 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 
 
 class TesterAuthorshipAttribution:
+    """
+    A class used to test authorship attribution models.
+    Attributes
+    ----------
+    model : torch.nn.Module
+        The authorship attribution model to be tested.
+    repository_id : str
+        The identifier for the repository where the logs and model will be saved.
+    author_id_map : dict
+        A mapping from author IDs to author names.
+    classification_model : torch.nn.Module, optional
+        The classification model to be used for testing (default is None).
+    device : torch.device
+        The device to run the model on (e.g., 'cpu' or 'cuda').
+    """
+    
     def __init__(self, model, repository_id, author_id_map, classification_model=None):
         self.model = model
         self.repository_id = repository_id
@@ -18,6 +34,23 @@ class TesterAuthorshipAttribution:
         self.device = config.get_device()
         
     def test_abx_accuracy(self, test_dataloader):
+        """
+        Evaluate the ABX accuracy of the model using the provided test dataloader (can be bona-fide and spoofed).
+        Test the model by comparing the distance between the anchor and positive examples with the distance between the anchor and minimum of negative examples.
+        Args:
+            test_dataloader (DataLoader): A DataLoader object that provides batches of test data. Each batch should be a dictionary containing:
+                - 'anchor_input_ids': Tensor of input IDs for anchor examples.
+                - 'anchor_attention_mask': Tensor of attention masks for anchor examples.
+                - 'positive_input_ids': Tensor of input IDs for positive examples.
+                - 'positive_attention_mask': Tensor of attention masks for positive examples.
+                - 'label': Tensor of labels for anchor examples.
+                - 'negative_labels': Tensor of labels for negative examples.
+                - 'negative_input_ids': Tensor of input IDs for negative examples.
+                - 'negative_attention_mask': Tensor of attention masks for negative examples.
+        Returns:
+            float: The accuracy of the model on the test set.
+        """
+        
         self.model.eval() 
         correct = 0
         total = 0
@@ -33,7 +66,8 @@ class TesterAuthorshipAttribution:
                 anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
                 positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
 
-                dist_ax = F.pairwise_distance(anchor_embeddings, positive_embeddings)
+                dist_ax = F.pairwise_distance(anchor_embeddings, positive_embeddings, p=2)
+                
 
                 negative_labels = batch['negative_labels']
                 negative_inputs_ids_list = batch['negative_input_ids']
@@ -47,7 +81,7 @@ class TesterAuthorshipAttribution:
                         negative_input_ids = negative_inputs_ids_list[i, neg_idx].to(self.device)
                         negative_attention_mask = negative_attention_masks_list[i, neg_idx].to(self.device)
                         negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
-                        dist_bx = F.pairwise_distance(anchor_embeddings[i].unsqueeze(0), negative_embeddings)
+                        dist_bx = F.pairwise_distance(anchor_embeddings[i].unsqueeze(0), negative_embeddings, p=2)
                         if dist_bx < min_dist:
                             min_dist = dist_bx
                             correct_label = negative_labels[i][neg_idx]
@@ -63,6 +97,19 @@ class TesterAuthorshipAttribution:
         return accuracy
 
     def test_classification(self, test_dataloader):
+        """
+        Evaluates the classification model on the provided test data.
+        Args:
+            test_dataloader (DataLoader): DataLoader containing the test dataset.
+        Returns:
+            dict: A dictionary containing the following evaluation metrics:
+                - 'accuracy' (float): The accuracy of the model on the test dataset.
+                - 'precision' (float): The weighted precision of the model on the test dataset.
+                - 'recall' (float): The weighted recall of the model on the test dataset.
+                - 'f1_score' (float): The weighted F1 score of the model on the test dataset.
+                - 'confusion_matrix' (ndarray): The confusion matrix of the model's predictions.
+        """
+        
         self.classification_model.eval()
         all_preds = []
         all_labels = []
@@ -105,6 +152,23 @@ class TesterAuthorshipAttribution:
         return results
 
     def plot_tsne_for_authors(self, dataloader):
+        """
+        Plots a t-SNE visualization for author embeddings.
+        This function takes a dataloader containing batches of data, extracts embeddings
+        using the model, and then applies t-SNE to reduce the dimensionality of these embeddings.
+        The resulting 2D t-SNE plot is displayed and saved as an image file.
+        Args:
+            dataloader (DataLoader): A PyTorch DataLoader containing batches of data. Each batch
+                                     should be a dictionary with keys 'anchor_input_ids', 
+                                     'anchor_attention_mask', and 'label'.
+        Returns:
+            None
+        Note:
+            - The function assumes that the model and device are already set up as attributes of the class.
+            - The function also assumes that `self.author_id_map` is a dictionary mapping author IDs to author names.
+            - The t-SNE plot is saved in the directory specified by `self.repository_id`.
+        """
+        
         self.model.eval()
         all_embeddings = []
         all_labels = []
