@@ -13,7 +13,7 @@ class EarlyStopping:
         step(val_loss):
             Updates the state of the EarlyStopping instance based on the validation loss.
             Args:
-                val_loss (float): The current value of the monitored metric.
+                validation_loss (float): The current value of the monitored metric.
             Returns:
                 bool: True if training should be stopped, False otherwise.
     """
@@ -22,19 +22,16 @@ class EarlyStopping:
 
         self.patience = patience
         self.min_delta = min_delta
-        self.best_loss = None
         self.counter = 0
-        self.should_stop = False
+        self.min_validation_loss = float('inf')
 
-    def step(self, val_loss):
-        if self.best_loss is None:
-            self.best_loss = val_loss
-        elif val_loss < self.best_loss - self.min_delta:
-            self.best_loss = val_loss
-            self.counter = 0 
-        else:
+    def step(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
             self.counter += 1
             if self.counter >= self.patience:
-                self.should_stop = True
-        return self.should_stop
+                return True
+        return False
 
