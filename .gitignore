@@ -1,6 +1,6 @@
 Data/
 output/
-
+wandb/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -130,6 +130,7 @@ celerybeat.pid
 env/
 venv/
 dada/
+dadaEnv/
 ENV/
 env.bak/
 venv.bak/

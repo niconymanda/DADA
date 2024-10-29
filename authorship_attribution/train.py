@@ -9,76 +9,370 @@ from loss_functions import TripletLoss
 from ray.train import Checkpoint, get_checkpoint
 from pathlib import Path
 import ray.cloudpickle as pickle
+import os 
+from torch.utils.tensorboard import SummaryWriter
+from early_stopping import EarlyStopping
+import config
+from model import AuthorshipClassificationLLM
+from torch.nn import functional as F
+from typing import Optional, Literal
+import wandb
 
-def train_model(model, loss_fn, train_dataloader, optimizer, device, writer, epoch_n, args):
-    model.train()
-    total_loss = 0
-    current_loss = 0.0
-    for i,batch in enumerate(tqdm(train_dataloader)):
-        anchor_input_ids = batch['anchor_input_ids'].to(device)
-        anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-        positive_input_ids = batch['positive_input_ids'].to(device)
-        positive_attention_mask = batch['positive_attention_mask'].to(device)
-        negative_input_ids = batch['negative_input_ids'].to(device)
-        negative_attention_mask = batch['negative_attention_mask'].to(device)
+class TrainerAuthorshipAttribution:
+    """
+    TrainerAuthorshipAttribution is a class designed to handle the training and validation of a model for authorship attribution tasks. It supports early stopping, logging to TensorBoard, and optional training of a classification head.
+    Attributes:
+        model (torch.nn.Module): The model to be trained.
+        loss_fn (callable): The loss function to be used (e.g. TripletLoss).
+        optimizer (torch.optim.Optimizer): The optimizer for updating model parameters.
+        train_dataloader (torch.utils.data.DataLoader): DataLoader for the training data.
+        val_dataloader (torch.utils.data.DataLoader): DataLoader for the validation data.
+        report_to (str, optional): The logging tool to report to (e.g., 'tensorboard'). Defaults to None.
+        early_stopping (EarlyStopping, optional): An instance of EarlyStopping for early stopping. Defaults to None.
+        args (argparse.Namespace): Additional arguments, including epochs, logging_step, and learning_rate.
+        repository_id (str): The repository ID for saving logs and checkpoints.
+        author_id_map (dict): A mapping of author IDs.
+        writer (torch.utils.tensorboard.SummaryWriter, optional): TensorBoard writer for logging. Initialized if report_to is 'tensorboard'.
+        output_dir (str): Directory for saving logs and checkpoints.
+    
+    """
+    
+    def __init__(self, model, 
+                 loss_fn, 
+                 optimizer, 
+                 train_dataloader, 
+                 val_dataloader, 
+                 args, 
+                 repository_id,
+                 author_id_map,
+                 project_name = 'authorship_attribution',
+                 report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
+                 early_stopping=None):
+        self.model = model
+        self.loss_fn = loss_fn
+        self.optimizer = optimizer
+        self.train_dataloader = train_dataloader
+        self.val_dataloader = val_dataloader
+        self.report_to = report_to
+        self.args = args
+        self.repository_id = repository_id
+        self.output_dir = f"{repository_id}/logs"
+        self.author_id_map = author_id_map
         
-        optimizer.zero_grad()
-        anchor_embeddins = model(anchor_input_ids, anchor_attention_mask)
-        positive_embeddins = model(positive_input_ids, positive_attention_mask)
-        negative_embeddins = model(negative_input_ids, negative_attention_mask)
-        loss_value = loss_fn(anchor_embeddins, positive_embeddins, negative_embeddins)
-        loss_value.backward()
-        optimizer.step()
-        total_loss += loss_value.item()
+        self.device = config.get_device()
+        self.model.to(self.device)
+        self.loss_fn.to(self.device)
         
-        current_loss += loss_value.item()
-        if i % args.logging_step == args.logging_step - 1:
-            writer.add_scalar('Loss/Train', current_loss / args.logging_step, epoch_n * len(train_dataloader) + i)
-            current_loss = 0.0
+        if self.report_to == 'tensorboard':
+            self.writer = SummaryWriter(f"{repository_id}/logs")
             
-    return total_loss / len(train_dataloader)
-
-def validate(model, loss_fn, val_dataloader, device, writer, epoch_n, args):
-    model.eval()
-    total_loss = 0
-    curret_loss = 0.0
-
-    with torch.no_grad():
-        for i,batch in enumerate(tqdm(val_dataloader)):
-            anchor_input_ids = batch['anchor_input_ids'].to(device)
-            anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-            positive_input_ids = batch['positive_input_ids'].to(device)
-            positive_attention_mask = batch['positive_attention_mask'].to(device)
-            negative_input_ids = batch['negative_input_ids'].to(device)
-            negative_attention_mask = batch['negative_attention_mask'].to(device)
+        self.writer = None
+        if self.report_to == 'tensorboard':
+            self.writer = SummaryWriter(f"{repository_id}/logs")
+        elif report_to == 'wandb':
+            wandb.init(project=project_name, config=vars(args))
+            wandb.watch(model)
+        
+        if early_stopping:
+            self.early_stopping = EarlyStopping(patience=args.early_stopping_patience)
             
-            anchor_embeddins = model(anchor_input_ids, anchor_attention_mask)
-            positive_embeddins = model(positive_input_ids, positive_attention_mask)
-            negative_embeddins = model(negative_input_ids, negative_attention_mask)
-            loss_value = loss_fn(anchor_embeddins, positive_embeddins, negative_embeddins)
+        
+    def train(self, classification_head=False):
+        """
+        Trains the model for a specified number of epochs and optionally trains a classification head.
+        Args:
+            classification_head (bool, optional): If True, trains an additional classification head after the main training. Defaults to False.
+        Returns:
+            model: The trained model.
+            classification_model (optional): The trained classification model if `classification_head` is True.
+        """
+        
+        for epoch_n in range(self.args.epochs):
+            train_loss = self.train_model(epoch_n)
+            val_loss = self.validate(epoch_n)
+            if self.early_stopping.step(val_loss):
+                print("Early stopping triggered")
+                break 
+        config.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth')
+        
+        if classification_head:
+            classification_model = AuthorshipClassificationLLM(self.model, num_labels=len(self.author_id_map.keys()))
+            # Freeze all layers except the classification head
+            for name, param in classification_model.named_parameters():
+                if 'classifier' in name:
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
+                    
+            classification_loss = nn.CrossEntropyLoss()
+            classification_model.to(self.device)
+            classification_loss.to(self.device)
+            classification_optimizer = optim.Adam(classification_model.parameters(), lr=self.args.learning_rate)
+            early_stopping_classif = EarlyStopping(patience=self.args.early_stopping_patience)
+            
+            for epoch_n in range(self.args.epochs_classification):
+                train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
+                val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
+                if early_stopping_classif.step(val_loss):
+                    print("Early stopping triggered")
+                    break
+            config.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth')
+            return self.model, classification_model
+        return self.model, None 
+    
+    def train_classification(self, classification_model, loss_fn_classification, optimizer_classification, epoch_n):
+        """
+        Trains only the cassification head of the model for one epoch.
+        Args:
+            model (torch.nn.Module): The classification head model to be trained.
+            loss_fn (callable): The loss function.
+            train_dataloader (torch.utils.data.DataLoader): DataLoader for the training data.
+            optimizer (torch.optim.Optimizer): The optimizer for updating model parameters.
+            device (torch.device): The device to run the model on (e.g., 'cpu' or 'cuda').
+            writer (torch.utils.tensorboard.SummaryWriter): TensorBoard writer for logging.
+            epoch_n (int): The current epoch number.
+            args (argparse.Namespace): Additional arguments, including logging_step.
+        Returns:
+            float: The average loss over the training dataset.
+        """
+        
+        classification_model.train()
+        total_loss = 0
+        current_loss = 0.0
+        for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
+            input_ids = batch['anchor_input_ids'].to(self.device)
+            attention_mask = batch['anchor_attention_mask'].to(self.device)
+            labels = batch['label'].to(self.device)
+
+            self.optimizer.zero_grad()
+            out_model = classification_model(input_ids, attention_mask)
+            loss_value = loss_fn_classification(out_model, labels)
+            loss_value.backward()
+            optimizer_classification.step()
             total_loss += loss_value.item()
-            curret_loss += loss_value.item()
-            if i % args.logging_step == args.logging_step - 1:
-                print(f"Validation loss: {curret_loss / args.logging_step}")
-                writer.add_scalar('Loss/Val', curret_loss / args.logging_step, epoch_n * len(val_dataloader) + i)
-                curret_loss = 0.0       
-    return total_loss / len(val_dataloader)
+
+            current_loss += loss_value.item()
+            if i % self.args.logging_step == self.args.logging_step - 1:
+                metrics = {
+                    "Loss": current_loss / self.args.logging_step,
+                    "epoch": epoch_n,
+                    "step": i
+                }
+                self._log_metrics(metrics, phase='Train_classificaion')
+                current_loss = 0.0  
+                         
+        train_loss = total_loss / len(self.val_dataloader)
+        metrics = {
+            "Loss": train_loss,
+            "epoch": epoch_n
+        }
+        self._log_metrics(metrics, phase='Train_classificaion_epochs')
+        return total_loss / len(self.train_dataloader)
+    
+    def validate_classification(self, classificaion_model, loss_fn_classification, epoch_n):
+        """
+        Validates the performance of a classification head on a validation dataset.
+        Args:
+            model (torch.nn.Module): The model to be validated.
+            loss_fn (callable): The loss function used to compute the loss.
+            val_dataloader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
+            device (torch.device): The device (CPU or GPU) on which the model and data are loaded.
+            writer (torch.utils.tensorboard.SummaryWriter): TensorBoard writer for logging validation loss.
+            epoch_n (int): The current epoch number.
+            args (argparse.Namespace): Additional arguments, including logging_step for logging frequency.
+        Returns:
+            float: The average validation loss over the entire validation dataset.
+        """
+        
+        classificaion_model.eval()
+        total_loss = 0
+        current_loss = 0.0
+
+        with torch.no_grad():
+            for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
+                input_ids = batch['anchor_input_ids'].to(self.device)
+                attention_mask = batch['anchor_attention_mask'].to(self.device)
+                labels = batch['label'].to(self.device)
+
+                logits = classificaion_model(input_ids, attention_mask)
+                loss_value = loss_fn_classification(logits, labels)
+                total_loss += loss_value.item()
+                current_loss += loss_value.item()
+                if i % self.args.logging_step == self.args.logging_step - 1:
+                    metrics = {
+                        "Loss": current_loss / self.args.logging_step,
+                        "epoch": epoch_n,
+                        "step": i
+                    }
+                    self._log_metrics(metrics, phase='Val_classificaion')
+                    current_loss = 0.0  
+                         
+        val_loss = total_loss / len(self.val_dataloader)
+        metrics = {
+            "Loss": val_loss,
+            "epoch": epoch_n
+        }
+        self._log_metrics(metrics, phase='Val_classificaion_epochs')
+        return val_loss
+
+    def train_model(self, epoch_n):
+        """
+        Trains only the the given LLM model using the provided training data.
+        Args:
+            epoch_n (int): The current epoch number.
+        Returns:
+            float: The average loss over the training data.
+        """
+        
+        self.model.train()
+        total_loss = 0
+        current_loss = 0.0
+        correct_count = 0
+        for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
+            anchor_input_ids = batch['anchor_input_ids'].to(self.device)
+            anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
+            positive_input_ids = batch['positive_input_ids'].to(self.device)
+            positive_attention_mask = batch['positive_attention_mask'].to(self.device)
+            negative_input_ids = batch['negative_input_ids'].to(self.device)
+            negative_attention_mask = batch['negative_attention_mask'].to(self.device)
+
+            self.optimizer.zero_grad()
+            anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
+            positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
+            negative_embeddings = self.model(negative_input_ids, negative_attention_mask)
+            loss_value = self.loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+            loss_value.backward()
+            self.optimizer.step()
+            total_loss += loss_value.item()
+            current_loss += loss_value.item()
+            
+            # Accuracy calculation
+            distance_positive = F.pairwise_distance(anchor_embeddings, positive_embeddings, p=2)
+            distance_negative = F.pairwise_distance(anchor_embeddings, negative_embeddings, p=2)
+            correct_count += torch.sum(distance_positive < distance_negative).item()
+            
+            if i % self.args.logging_step == self.args.logging_step - 1:
+                    metrics = {
+                        "Loss": current_loss / self.args.logging_step,
+                        "epoch": epoch_n,
+                        "step": i
+                    }
+                    self._log_metrics(metrics, phase='Train')
+                    current_loss = 0.0
+                
+        train_loss = total_loss / len(self.train_dataloader)
+        metrics = {
+            "Loss": train_loss,
+            "Accuracy": correct_count / len(self.train_dataloader.dataset),
+            "epoch": epoch_n,
+        }
+        self._log_metrics(metrics, phase='Train_epoch')
+        return total_loss / len(self.train_dataloader)
+
+    def validate(self, epoch_n):
+        """
+        Validates the model on the validation dataset.
+        Args:
+            epoch_n (int): The current epoch number.
+        Returns:
+            float: The average validation loss over the entire validation dataset.
+        """
+        
+        self.model.eval()
+        total_loss = 0
+        current_loss = 0.0
+        correct_count = 0
+        with torch.no_grad():
+            for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
+                anchor_input_ids = batch['anchor_input_ids'].to(self.device)
+                anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
+                positive_input_ids = batch['positive_input_ids'].to(self.device)
+                positive_attention_mask = batch['positive_attention_mask'].to(self.device)
+                negative_input_ids = batch['negative_input_ids'].to(self.device)
+                negative_attention_mask = batch['negative_attention_mask'].to(self.device)
+
+                anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
+                positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
+                negative_embeddings = self.model(negative_input_ids, negative_attention_mask)
+                loss_value = self.loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+                total_loss += loss_value.item()
+                current_loss += loss_value.item()
+                
+                # Accuracy calculation
+                distance_positive = F.pairwise_distance(anchor_embeddings, positive_embeddings, p=2)
+                distance_negative = F.pairwise_distance(anchor_embeddings, negative_embeddings, p=2)
+                correct_count += torch.sum(distance_positive < distance_negative).item()
+                
+                if i % self.args.logging_step == self.args.logging_step - 1:
+                    metrics = {
+                    "Loss": current_loss / self.args.logging_step,
+                    "Accuracy": correct_count / len(self.val_dataloader.dataset),
+                    "epoch": epoch_n,
+                    "step": i
+                    }
+                    self._log_metrics(metrics, phase='Val')
+                    current_loss = 0.0
+                    
+        val_loss = total_loss / len(self.val_dataloader)
+        metrics = {
+                "Loss": val_loss,
+                "Accuracy": correct_count / len(self.val_dataloader.dataset),
+                "epoch": epoch_n,
+                }
+        self._log_metrics(metrics, phase='Val_epoch')
+        return val_loss
+    
+    def _log_metrics(self, metrics, phase):
+        if self.report_to == 'wandb':
+            for key, value in metrics.items():
+                wandb.log({f"{phase}/{key}": value}) if (key != 'epoch' and key != 'step') else None
+        elif self.report_to == 'tensorboard':
+            for key, value in metrics.items():
+                if 'epoch' in phase:
+                    # print(f"{phase}/{key}, epoch")
+                    self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch']) if (key != 'epoch' and key != 'step') else None
+                if 'Train' in phase:                    
+                    self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.train_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
+                elif 'Val' in phase:
+                    self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.val_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
+                else:
+                    print("Invalid phase")
 
 def train_tune(config, train_dataset, val_dataset, model, device):
+    """
+    Trains and tunes a model using the provided configuration, datasets, and device.
+    Args:
+        config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
+        train_dataset (Dataset): The dataset used for training.
+        val_dataset (Dataset): The dataset used for validation.
+        model (nn.Module): The model to be trained.
+        device (str): The device to run the training on, either 'cpu' or 'cuda'.
+    Returns:
+        None
+    The function performs the following steps:
+    1. Sets up the device for training (CPU or GPU).
+    2. Initializes the loss function and optimizer.
+    3. Loads a checkpoint if available to resume training from a previous state.
+    4. Creates data loaders for the training and validation datasets.
+    5. Trains the model for the specified number of epochs, performing validation at the end of each epoch.
+    6. Implements early stopping based on validation loss to prevent overfitting.
+    7. Saves checkpoints during training to allow resuming from the last state.
+    Note:
+        The function uses a TripletLoss with a fixed margin of 0.5.
+    """
+    
     batch_size = config["batch_size"]
     learning_rate = config["lr"]
-    # margin = config["margin"]
-    
+    margin = config["margin"]
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda:0"
         if torch.cuda.device_count() > 1:
             model = nn.DataParallel(model)
     model.to(device)
-    loss_fn = TripletLoss(margin=0.5)
+    loss_fn = TripletLoss(margin=margin)
     loss_fn = loss_fn.to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    
     checkpoint = get_checkpoint()
     if checkpoint:
         with checkpoint.as_directory() as checkpoint_dir:
@@ -90,15 +384,11 @@ def train_tune(config, train_dataset, val_dataset, model, device):
             optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
     else:
         start_epoch = 0
-        
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
-    
-
     best_val_loss = float("inf")
     patience = 3
     patience_counter = 0
-    
     for epoch in range(start_epoch, config["epochs"]):
         model.train()
         total_loss = 0.0
@@ -109,19 +399,16 @@ def train_tune(config, train_dataset, val_dataset, model, device):
             positive_attention_mask = batch['positive_attention_mask'].to(device)
             negative_input_ids = batch['negative_input_ids'].to(device)
             negative_attention_mask = batch['negative_attention_mask'].to(device)
-
             optimizer.zero_grad()
-
             anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
             positive_embeddings = model(positive_input_ids, positive_attention_mask)
             negative_embeddings = model(negative_input_ids, negative_attention_mask)
-
             loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
             loss_value.backward()
-
             optimizer.step()
             total_loss += loss_value.item()
-
+            
+        # Validate the model
         val_loss = 0.0
         model.eval()
         with torch.no_grad():
@@ -132,15 +419,12 @@ def train_tune(config, train_dataset, val_dataset, model, device):
                 positive_attention_mask = batch['positive_attention_mask'].to(device)
                 negative_input_ids = batch['negative_input_ids'].to(device)
                 negative_attention_mask = batch['negative_attention_mask'].to(device)
-
                 anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
                 positive_embeddings = model(positive_input_ids, positive_attention_mask)
                 negative_embeddings = model(negative_input_ids, negative_attention_mask)
-
                 loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 val_loss += loss_value.item()
         avg_val_loss = val_loss / len(val_dataloader)
-
         checkpoint_data = {
             "epoch": epoch,
             "net_state_dict": model.state_dict(),
@@ -150,7 +434,6 @@ def train_tune(config, train_dataset, val_dataset, model, device):
             data_path = Path(checkpoint_dir) / "data.pkl"
             with open(data_path, "wb") as fp:
                 pickle.dump(checkpoint_data, fp)
-
             checkpoint = Checkpoint.from_directory(checkpoint_dir)
             train.report(
                 {"loss": avg_val_loss},
@@ -158,16 +441,15 @@ def train_tune(config, train_dataset, val_dataset, model, device):
             )
         avg_val_loss = val_loss / len(val_dataloader)
         train.report(val_loss=avg_val_loss)
-
+        # Early stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             patience_counter = 0 
         else:
             patience_counter += 1
-
         if patience_counter >= patience:
             print(f"Early stopping at epoch {epoch} with best validation loss: {best_val_loss}")
             break
 
 
-            
+
