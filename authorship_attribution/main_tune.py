@@ -32,8 +32,8 @@ def main(args):
     device = config.get_device()
     
     config_tune = {
-        "lr": tune.loguniform(1e-5, 1e-2),  
-        "batch_size": tune.choice([16, 32]), 
+        "lr": tune.loguniform(1e-8, 1e-2),  
+        "batch_size": tune.choice([8, 16, 32, 64]), 
         "margin": 1.0,  
         "epochs": 15
     }
@@ -50,15 +50,13 @@ def main(args):
     tune.with_parameters(train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device, args=args),
     resources_per_trial={"cpu":64, "gpu": 1},  
     config=config_tune,
-    num_samples=2,  
+    num_samples=10,  
     scheduler=scheduler,
     progress_reporter=CLIReporter(
         metric_columns=["loss", "training_iteration"]
     )
 )  
 
-    # best_config = analysis.best_config
-    # print("Best hyperparameters found were: ", best_config)
     best_trial = analysis.get_best_trial("loss", mode="min", scope="all")
     print(f"Best trial config: {best_trial.config}")
     print(f"Best trial final validation loss: {best_trial.last_result['loss']}")
@@ -73,22 +71,17 @@ def main(args):
 
         best_trained_model.load_state_dict(best_checkpoint_data["net_state_dict"])
         test_dataloader = DataLoader(test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
+        spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
 
         tester = TesterAuthorshipAttribution(model=best_trained_model,
                     repository_id=repository_id, 
                     author_id_map=author_id_map)
         acc = tester.test_abx_accuracy(test_dataloader)
         print("Best trial test set accuracy: {}".format(acc))
-    # spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
+        tester.plot_tsne_for_authors(test_dataloader)
+        acc_sp = tester.test_abx_accuracy(spoofed_data_loader)
+        print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
 
-    # tester = TesterAuthorshipAttribution(model=model,
-    #                 repository_id=repository_id, 
-    #                 author_id_map=author_id_map)
-    # acc = tester.test_abx_accuracy(test_dataloader)
-    # print(f"Test ABX Accuracy : {acc:.4f}")
-    # tester.plot_tsne_for_authors(test_dataloader)
-    # acc_sp = tester.test_abx_accuracy(spoofed_data_loader)
-    # print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
     
     #Test results on classification model
     # tester.test_classification(test_dataloader)

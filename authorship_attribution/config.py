@@ -61,7 +61,7 @@ def load_data(args):
     # Split spoofed data
     spoofed_data = data[data['type'] == 'spoof']
     data = data[data['type'] != 'spoof'] 
-    return data[:500], spoofed_data, author_id_map
+    return data, spoofed_data, author_id_map
 
 def write_results_to_file(results, file_path, args):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
