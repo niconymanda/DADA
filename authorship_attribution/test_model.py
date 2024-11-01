@@ -66,9 +66,8 @@ class TesterAuthorshipAttribution:
                 anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
                 positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
 
-                dist_ax = F.pairwise_distance(anchor_embeddings, positive_embeddings, p=2)
+                dist_ax = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
                 
-
                 negative_labels = batch['negative_labels']
                 negative_inputs_ids_list = batch['negative_input_ids']
                 negative_attention_masks_list = batch['negative_attention_mask']
@@ -81,7 +80,7 @@ class TesterAuthorshipAttribution:
                         negative_input_ids = negative_inputs_ids_list[i, neg_idx].to(self.device)
                         negative_attention_mask = negative_attention_masks_list[i, neg_idx].to(self.device)
                         negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
-                        dist_bx = F.pairwise_distance(anchor_embeddings[i].unsqueeze(0), negative_embeddings, p=2)
+                        dist_bx = torch.norm(anchor_embeddings[i].unsqueeze(0) - negative_embeddings, dim=1, p=2)
                         if dist_bx < min_dist:
                             min_dist = dist_bx
                             correct_label = negative_labels[i][neg_idx]
@@ -93,7 +92,6 @@ class TesterAuthorshipAttribution:
                     total += 1
 
         accuracy = correct / total
-        print(f"Test Accuracy: {accuracy:.4f}")
         return accuracy
 
     def test_classification(self, test_dataloader):

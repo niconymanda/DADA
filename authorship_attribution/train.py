@@ -12,7 +12,7 @@ import ray.cloudpickle as pickle
 import os 
 from torch.utils.tensorboard import SummaryWriter
 from early_stopping import EarlyStopping
-import config
+import config as cfg
 from model import AuthorshipClassificationLLM
 from torch.nn import functional as F
 from typing import Optional, Literal
@@ -59,7 +59,7 @@ class TrainerAuthorshipAttribution:
         self.output_dir = f"{repository_id}/logs"
         self.author_id_map = author_id_map
         
-        self.device = config.get_device()
+        self.device = cfg.get_device()
         self.model.to(self.device)
         self.loss_fn.to(self.device)
         
@@ -75,6 +75,8 @@ class TrainerAuthorshipAttribution:
         
         if early_stopping:
             self.early_stopping = EarlyStopping(patience=args.early_stopping_patience)
+            self.early_stopping_classif = EarlyStopping(patience=self.args.early_stopping_patience)
+            
             
         
     def train(self, classification_head=False):
@@ -93,7 +95,7 @@ class TrainerAuthorshipAttribution:
             if self.early_stopping.step(val_loss):
                 print("Early stopping triggered")
                 break 
-        config.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth')
+        cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth')
         
         if classification_head:
             classification_model = AuthorshipClassificationLLM(self.model, num_labels=len(self.author_id_map.keys()))
@@ -108,15 +110,14 @@ class TrainerAuthorshipAttribution:
             classification_model.to(self.device)
             classification_loss.to(self.device)
             classification_optimizer = optim.Adam(classification_model.parameters(), lr=self.args.learning_rate)
-            early_stopping_classif = EarlyStopping(patience=self.args.early_stopping_patience)
             
             for epoch_n in range(self.args.epochs_classification):
                 train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
                 val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
-                if early_stopping_classif.step(val_loss):
+                if self.early_stopping_classif.step(val_loss):
                     print("Early stopping triggered")
                     break
-            config.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth')
+            cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth')
             return self.model, classification_model
         return self.model, None 
     
@@ -247,8 +248,8 @@ class TrainerAuthorshipAttribution:
             current_loss += loss_value.item()
             
             # Accuracy calculation
-            distance_positive = F.pairwise_distance(anchor_embeddings, positive_embeddings, p=2)
-            distance_negative = F.pairwise_distance(anchor_embeddings, negative_embeddings, p=2)
+            distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
+            distance_negative = torch.norm(anchor_embeddings - negative_embeddings, dim=1, p=2)
             correct_count += torch.sum(distance_positive < distance_negative).item()
             
             if i % self.args.logging_step == self.args.logging_step - 1:
@@ -299,8 +300,8 @@ class TrainerAuthorshipAttribution:
                 current_loss += loss_value.item()
                 
                 # Accuracy calculation
-                distance_positive = F.pairwise_distance(anchor_embeddings, positive_embeddings, p=2)
-                distance_negative = F.pairwise_distance(anchor_embeddings, negative_embeddings, p=2)
+                distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
+                distance_negative = torch.norm(anchor_embeddings - negative_embeddings, dim=1, p=2)
                 correct_count += torch.sum(distance_positive < distance_negative).item()
                 
                 if i % self.args.logging_step == self.args.logging_step - 1:
@@ -338,7 +339,7 @@ class TrainerAuthorshipAttribution:
                 else:
                     print("Invalid phase")
 
-def train_tune(config, train_dataset, val_dataset, model, device):
+def train_tune(config, train_dataset, val_dataset, model, device, args):
     """
     Trains and tunes a model using the provided configuration, datasets, and device.
     Args:
@@ -364,11 +365,12 @@ def train_tune(config, train_dataset, val_dataset, model, device):
     batch_size = config["batch_size"]
     learning_rate = config["lr"]
     margin = config["margin"]
-    device = "cpu"
-    if torch.cuda.is_available():
-        device = "cuda:0"
-        if torch.cuda.device_count() > 1:
-            model = nn.DataParallel(model)
+    # device = "cpu"
+    # if torch.cuda.is_available():
+    #     device = "cuda:0"
+    #     if torch.cuda.device_count() > 1:
+    #         model = nn.DataParallel(model)
+    device = cfg.get_device()
     model.to(device)
     loss_fn = TripletLoss(margin=margin)
     loss_fn = loss_fn.to(device)
@@ -377,6 +379,7 @@ def train_tune(config, train_dataset, val_dataset, model, device):
     if checkpoint:
         with checkpoint.as_directory() as checkpoint_dir:
             data_path = Path(checkpoint_dir) / "data.pkl"
+            print(f"Resuming from checkpoint in {data_path}")
             with open(data_path, "rb") as fp:
                 checkpoint_state = pickle.load(fp)
             start_epoch = checkpoint_state["epoch"]
@@ -386,9 +389,8 @@ def train_tune(config, train_dataset, val_dataset, model, device):
         start_epoch = 0
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
-    best_val_loss = float("inf")
-    patience = 3
-    patience_counter = 0
+    early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
+
     for epoch in range(start_epoch, config["epochs"]):
         model.train()
         total_loss = 0.0
@@ -410,6 +412,7 @@ def train_tune(config, train_dataset, val_dataset, model, device):
             
         # Validate the model
         val_loss = 0.0
+        correct_count = 0
         model.eval()
         with torch.no_grad():
             for batch in val_dataloader:
@@ -424,6 +427,11 @@ def train_tune(config, train_dataset, val_dataset, model, device):
                 negative_embeddings = model(negative_input_ids, negative_attention_mask)
                 loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 val_loss += loss_value.item()
+
+                distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
+                distance_negative = torch.norm(anchor_embeddings - negative_embeddings, dim=1, p=2)
+                correct_count += torch.sum(distance_positive < distance_negative).item()
+
         avg_val_loss = val_loss / len(val_dataloader)
         checkpoint_data = {
             "epoch": epoch,
@@ -436,20 +444,14 @@ def train_tune(config, train_dataset, val_dataset, model, device):
                 pickle.dump(checkpoint_data, fp)
             checkpoint = Checkpoint.from_directory(checkpoint_dir)
             train.report(
-                {"loss": avg_val_loss},
+                {"loss": avg_val_loss, "accuracy": correct_count / len(val_dataloader.dataset)},
                 checkpoint=checkpoint,
             )
-        avg_val_loss = val_loss / len(val_dataloader)
-        train.report(val_loss=avg_val_loss)
-        # Early stopping
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            patience_counter = 0 
-        else:
-            patience_counter += 1
-        if patience_counter >= patience:
-            print(f"Early stopping at epoch {epoch} with best validation loss: {best_val_loss}")
-            break
+        if early_stopping_tune.step(avg_val_loss):
+            print("Early stopping triggered")
+            break 
+ 
+        
 
 
 

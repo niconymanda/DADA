@@ -14,11 +14,11 @@ def get_args():
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=15, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=10, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--epochs', type=int, default=2, help='Number of epochs to train for')
+    parser.add_argument('--epochs_classification', type=int, default=2, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
-    parser.add_argument('--model_name', type=str, default='FacebookAI/roberta-large', help='Model to use')
+    parser.add_argument('--model_name', type=str, default='google-bert/bert-large-uncased', help='Model to use')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
     parser.add_argument('--early_stopping_patience', type=int, default=5, help='Patience for early stopping based on validation loss')
@@ -61,7 +61,7 @@ def load_data(args):
     # Split spoofed data
     spoofed_data = data[data['type'] == 'spoof']
     data = data[data['type'] != 'spoof'] 
-    return data, spoofed_data, author_id_map
+    return data[:500], spoofed_data, author_id_map
 
 def write_results_to_file(results, file_path, args):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)

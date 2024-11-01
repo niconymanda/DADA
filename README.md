@@ -6,22 +6,24 @@ The increasing use of generative AI models to create realistic deepfakes poses s
 #### Prerequisites
 `pip install -r requirements.txt`
 #### How to run 
-`cd DADA`
-`python authorship_attribution/main.py --model_name 'BERT-like model'` 
+```bash
+cd DADA
+python authorship_attribution/main.py --model_name 'BERT-like model'
+``` 
 ### Dataset 
 The dataset used for training and testing is an augmented version of the original "In the Wild" dataset, supplemented with data from "WikiQuotes" as well as quotes, tweets, and interviews of all the public figures included in the original dataset. This augmentation was necessary as the initial dataset was not sufficiently large to effectively fine-tune a LLM. By incorporating a broader range of data sources, we ensured more comprehensive coverage of the linguistic styles, topics, and contextual variety needed for robust model performance. 
 ### Model
 
 ### TODOs
 
-- [ ] Contastive Loss
+- [x] Contastive Loss
 - [x] Triplet Loss
 - [x] ABX test 
 - [ ] Roberta
 - [ ] Test T5
 - [ ] Test BERT
 - [ ] Test Deberta
-- [ ] Hyperparameter tuning (Optuna/RayTune)
+- [x] Hyperparameter tuning (Optuna/RayTune)
 
 
 ### Results

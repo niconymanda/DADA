@@ -33,10 +33,6 @@ class TripletLoss(nn.Module):
         self.margin = margin
     
     def forward(self, anchor: torch.Tensor, positive: torch.Tensor, negative: torch.Tensor) -> torch.Tensor:
-        # distance_positive = F.pairwise_distance(anchor, positive, p=2)
-        # distance_negative = F.pairwise_distance(anchor, negative, p=2)
-        # loss = torch.clamp(distance_positive - distance_negative + self.margin, min=0.0)
-        # return loss.mean()
         distance_positive = torch.norm(anchor - positive, dim=1, p=2) 
         distance_negative = torch.norm(anchor - negative, dim=1, p=2) 
         losses = torch.relu(distance_positive - distance_negative + self.margin)
@@ -63,7 +59,7 @@ class ContrastiveLoss(nn.Module):
         self.margin = margin
     
     def forward(self, anchor: torch.Tensor, positive: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        distance = F.pairwise_distance(anchor, positive, p=2)
+        distance = torch.norm(anchor - positive, dim=1, p=2)
         loss = torch.where(target == 1, distance.pow(2), torch.clamp(self.margin - distance, min=0.0).pow(2))
 
         return loss.mean()
