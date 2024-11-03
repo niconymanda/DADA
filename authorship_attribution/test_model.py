@@ -6,8 +6,8 @@ import numpy as np
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score
+from sklearn.preprocessing import label_binarize
 
 class TesterAuthorshipAttribution:
     """
@@ -106,6 +106,7 @@ class TesterAuthorshipAttribution:
                 - 'recall' (float): The weighted recall of the model on the test dataset.
                 - 'f1_score' (float): The weighted F1 score of the model on the test dataset.
                 - 'confusion_matrix' (ndarray): The confusion matrix of the model's predictions.
+                - 'auc' (float): The area under the ROC curve (AUC) of the model on the test dataset.
         """
         
         self.classification_model.eval()
@@ -119,6 +120,7 @@ class TesterAuthorshipAttribution:
                 labels = batch['label'].to(self.device)
 
                 outputs = self.classification_model(input_ids, attention_mask)
+                # probs = torch.softmax(outputs, dim=1)  # Convert logits to probabilities
                 preds = outputs.argmax(dim=1)
 
                 all_preds.extend(preds.cpu().numpy())
@@ -133,12 +135,18 @@ class TesterAuthorshipAttribution:
         f1 = f1_score(all_labels, all_preds, average='weighted')
         conf_matrix = confusion_matrix(all_labels, all_preds)
 
+        classes = np.unique(all_labels)
+        y_true_binarized = label_binarize(all_labels, classes=classes)
+        y_pred_binarized = label_binarize(all_preds, classes=classes)
+        auc = roc_auc_score(y_true_binarized, y_pred_binarized,labels = classes, average="macro", multi_class="ovo")
+
         results = {
             'accuracy': accuracy,
             'precision': precision,
             'recall': recall,
             'f1_score': f1,
-            'confusion_matrix': conf_matrix
+            'confusion_matrix': conf_matrix,
+            'auc': auc
         }
 
         print(f"Test Accuracy: {accuracy:.4f}")
@@ -146,6 +154,7 @@ class TesterAuthorshipAttribution:
         print(f"Test Recall: {recall:.4f}")
         print(f"Test F1 Score: {f1:.4f}")
         print(f"Confusion Matrix:\n{conf_matrix}")
+        print(f"Macro AUC Score: {auc:.4f}")
 
         return results
 

@@ -40,6 +40,7 @@ class TrainerAuthorshipAttribution:
     def __init__(self, model, 
                  loss_fn, 
                  optimizer, 
+                 lr_scheduler,
                  train_dataloader, 
                  val_dataloader, 
                  args, 
@@ -51,6 +52,7 @@ class TrainerAuthorshipAttribution:
         self.model = model
         self.loss_fn = loss_fn
         self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.report_to = report_to
@@ -58,23 +60,22 @@ class TrainerAuthorshipAttribution:
         self.repository_id = repository_id
         self.output_dir = f"{repository_id}/logs"
         self.author_id_map = author_id_map
+        self.early_stopping = early_stopping
         
         self.device = cfg.get_device()
         self.model.to(self.device)
         self.loss_fn.to(self.device)
-        
-        if self.report_to == 'tensorboard':
-            self.writer = SummaryWriter(f"{repository_id}/logs")
-            
-        self.writer = None
+
         if self.report_to == 'tensorboard':
             self.writer = SummaryWriter(f"{repository_id}/logs")
         elif report_to == 'wandb':
             wandb.init(project=project_name, config=vars(args))
             wandb.watch(model)
+        else:
+            raise ValueError("Invalid report_to value. Must be 'tensorboard' or 'wandb'")
         
-        if early_stopping:
-            self.early_stopping = EarlyStopping(patience=args.early_stopping_patience)
+        if self.early_stopping:
+            self.early_stopping_model = EarlyStopping(patience=args.early_stopping_patience)
             self.early_stopping_classif = EarlyStopping(patience=self.args.early_stopping_patience)
             
             
@@ -92,12 +93,14 @@ class TrainerAuthorshipAttribution:
         for epoch_n in range(self.args.epochs):
             train_loss = self.train_model(epoch_n)
             val_loss = self.validate(epoch_n)
-            if self.early_stopping.step(val_loss):
-                print("Early stopping triggered")
-                break 
+            if self.early_stopping:
+                if self.early_stopping_model.step(val_loss):
+                    print("Early stopping triggered")
+                    break 
         cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth')
         
         if classification_head:
+            print("Training classification head!")
             classification_model = AuthorshipClassificationLLM(self.model, num_labels=len(self.author_id_map.keys()))
             # Freeze all layers except the classification head
             for name, param in classification_model.named_parameters():
@@ -109,14 +112,16 @@ class TrainerAuthorshipAttribution:
             classification_loss = nn.CrossEntropyLoss()
             classification_model.to(self.device)
             classification_loss.to(self.device)
-            classification_optimizer = optim.Adam(classification_model.parameters(), lr=self.args.learning_rate)
+            classification_optimizer = optim.AdamW(classification_model.parameters(), lr=self.args.learning_rate_classification)
             
             for epoch_n in range(self.args.epochs_classification):
                 train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
                 val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
-                if self.early_stopping_classif.step(val_loss):
-                    print("Early stopping triggered")
-                    break
+                if self.early_stopping:
+                    if self.early_stopping_classif.step(val_loss):
+                        print("Early stopping triggered")
+                        break 
+                    
             cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth')
             return self.model, classification_model
         return self.model, None 
@@ -188,22 +193,28 @@ class TrainerAuthorshipAttribution:
         classificaion_model.eval()
         total_loss = 0
         current_loss = 0.0
-
+        correct = 0
+        total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
                 input_ids = batch['anchor_input_ids'].to(self.device)
                 attention_mask = batch['anchor_attention_mask'].to(self.device)
                 labels = batch['label'].to(self.device)
 
-                logits = classificaion_model(input_ids, attention_mask)
-                loss_value = loss_fn_classification(logits, labels)
+                outputs = classificaion_model(input_ids, attention_mask)
+                loss_value = loss_fn_classification(outputs, labels)
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
+                preds = outputs.argmax(dim=1)
+                total += labels.size(0)
+                correct += (preds == labels).sum().item()
+
                 if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
                         "Loss": current_loss / self.args.logging_step,
                         "epoch": epoch_n,
-                        "step": i
+                        "step": i,
+                        "Accuracy": correct / total
                     }
                     self._log_metrics(metrics, phase='Val_classificaion')
                     current_loss = 0.0  
@@ -211,7 +222,8 @@ class TrainerAuthorshipAttribution:
         val_loss = total_loss / len(self.val_dataloader)
         metrics = {
             "Loss": val_loss,
-            "epoch": epoch_n
+            "epoch": epoch_n,
+            "Accuracy": correct / total
         }
         self._log_metrics(metrics, phase='Val_classificaion_epochs')
         return val_loss
@@ -242,10 +254,12 @@ class TrainerAuthorshipAttribution:
             positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
             negative_embeddings = self.model(negative_input_ids, negative_attention_mask)
             loss_value = self.loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
-            loss_value.backward()
-            self.optimizer.step()
             total_loss += loss_value.item()
             current_loss += loss_value.item()
+            
+            loss_value.backward()
+            self.optimizer.step()
+            self.lr_scheduler.step()
             
             # Accuracy calculation
             distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
@@ -307,7 +321,6 @@ class TrainerAuthorshipAttribution:
                 if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
                     "Loss": current_loss / self.args.logging_step,
-                    "Accuracy": correct_count / len(self.val_dataloader.dataset),
                     "epoch": epoch_n,
                     "step": i
                     }
@@ -332,7 +345,7 @@ class TrainerAuthorshipAttribution:
                 if 'epoch' in phase:
                     # print(f"{phase}/{key}, epoch")
                     self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch']) if (key != 'epoch' and key != 'step') else None
-                if 'Train' in phase:                    
+                elif 'Train' in phase:                    
                     self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.train_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
                 elif 'Val' in phase:
                     self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.val_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
@@ -374,7 +387,7 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
     model.to(device)
     loss_fn = TripletLoss(margin=margin)
     loss_fn = loss_fn.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
     checkpoint = get_checkpoint()
     if checkpoint:
         with checkpoint.as_directory() as checkpoint_dir:
@@ -413,6 +426,7 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         # Validate the model
         val_loss = 0.0
         correct_count = 0
+        avg_val_loss = 0.0
         model.eval()
         with torch.no_grad():
             for batch in val_dataloader:
@@ -440,6 +454,7 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         }
         with tempfile.TemporaryDirectory() as checkpoint_dir:
             data_path = Path(checkpoint_dir) / "data.pkl"
+            print(data_path)
             with open(data_path, "wb") as fp:
                 pickle.dump(checkpoint_data, fp)
             checkpoint = Checkpoint.from_directory(checkpoint_dir)

@@ -12,8 +12,8 @@ python authorship_attribution/main.py --model_name 'BERT-like model'
 ``` 
 ### Dataset 
 The dataset used for training and testing is an augmented version of the original "In the Wild" dataset, supplemented with data from "WikiQuotes" as well as quotes, tweets, and interviews of all the public figures included in the original dataset. This augmentation was necessary as the initial dataset was not sufficiently large to effectively fine-tune a LLM. By incorporating a broader range of data sources, we ensured more comprehensive coverage of the linguistic styles, topics, and contextual variety needed for robust model performance. 
-### Model
-
+### Authorship Classification Model
+This project fine-tunes a BERT-like model to perform authorship classification, using Triplet Loss to enhance separation between author embeddings. A linear classification head is added on top of the model to classify texts based on authorship. The model architecture is flexible and can utilize any Transformer-based model, such as BERT, RoBERTa, or DeBERTa, making it adaptable for various pre-trained encoders. The Triplet Loss setup encourages the model to group embeddings by author, helping improve the accuracy and robustness of author identification.
 ### TODOs
 
 - [x] Contastive Loss
@@ -30,7 +30,7 @@ The dataset used for training and testing is an augmented version of the origina
 #### Results on Test set
 | Model  | Specs  | Accuracy | F1 Score | Presicion | Recall | 
 | ------------- | ------------- |  ------------- | ------------- | ------------- |  ------------- |
-| RoBERTa  base  | e: 20, b_s: 32  | 0.18  | 0.16  | 0.18  | 0.15  | 
+| RoBERTa  base  | ...  | ...  | ...  | ...  | ...  | 
 | RoBERTa  base  | ...  | ...  | ...  | ...  | ...  | 
 | RoBERTa large | ...  | ...  | ...  | ...  | ... |
 | T5 | ...  | ...  | ...  | ...  | ... |
@@ -39,7 +39,7 @@ The dataset used for training and testing is an augmented version of the origina
 #### Results on spoofed set
 | Model  | Specs  | Accuracy |  Presicion | Recall | F1 Score |
 | ------------- | ------------- |  ------------- | ------------- | ------------- |  ------------- |
-| RoBERTa  base  | e: 20, b_s: 32  | 0.62  | 0.63  | 0.62  | 0.60  | 
+| RoBERTa  base  | ...  | ...  | ...  | ...  | ...  | 
 | RoBERTa large | ...  | ...  | ...  | ...  | ... |
 | T5 | ...  | ...  | ...  | ...  | ... |
 ...
