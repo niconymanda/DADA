@@ -1,0 +1,26 @@
+cbor2 zmq
+sb3-contrib
+venv
+numpy 
+scikit-learn
+matplotlib
+pandas 
+json 
+transformers 
+torch
+jsonlines
+spacy
+gdown
+tensorboard
+torchvision
+MinkowskiEngine
+huggingface_hub
+datasets
+ipywidgets
+tensorboardx
+librosa
+tensorflow
+pyctcdecode
+kenlm
+ray[data,train,tune,serve]
+optuna
