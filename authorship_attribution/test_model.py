@@ -27,7 +27,9 @@ class TesterAuthorshipAttribution:
         The device to run the model on (e.g., 'cpu' or 'cuda').
     """
     
-    def __init__(self, model, repository_id, author_id_map, classification_model=None):
+    def __init__(self, model, repository_id, author_id_map, 
+                 classification_model=None, 
+                 distance_function='l2'):
         self.model = model
         self.repository_id = repository_id
         self.author_id_map = author_id_map
@@ -35,6 +37,13 @@ class TesterAuthorshipAttribution:
         self.device = config.get_device()
         self.all_cosine_distances_positive = []
         self.all_cosine_distances_negative = []
+
+        if distance_function == 'l2':
+            self.distance_function = torch.pairwise_distance
+        elif distance_function == 'cosine':
+            self.distance_function = lambda x, y: 1 - F.cosine_similarity(x, y)
+        else:
+            raise ValueError(f"Unknown distance function: {distance_function}")
         
     def test_abx_accuracy(self, test_dataloader):
         """
@@ -69,7 +78,7 @@ class TesterAuthorshipAttribution:
                 # Anchor-Postive distances
                 anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
                 positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
-                dist_ax = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
+                dist_ax = self.distance_function(anchor_embeddings, positive_embeddings)
                 
                 cosine_similarity_pos = F.cosine_similarity(anchor_embeddings, positive_embeddings)
                 cosine_distance_pos = 1 - cosine_similarity_pos
@@ -92,7 +101,7 @@ class TesterAuthorshipAttribution:
                         negative_input_ids = negative_inputs_ids_list[i, neg_idx].to(self.device)
                         negative_attention_mask = negative_attention_masks_list[i, neg_idx].to(self.device)
                         negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
-                        dist_bx = torch.norm(anchor_embeddings[i].unsqueeze(0) - negative_embeddings, dim=1, p=2)
+                        dist_bx = self.distance_function(anchor_embeddings[i].unsqueeze(0), negative_embeddings)
                         if dist_bx < min_dist:
                             min_dist = dist_bx
                             pred_label = negative_labels[i][neg_idx]

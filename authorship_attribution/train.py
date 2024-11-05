@@ -49,7 +49,8 @@ class TrainerAuthorshipAttribution:
                  project_name = 'authorship_attribution',
                  report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
                  early_stopping=None,
-                 save_model=False):
+                 save_model=False,
+                 distance_function='l2'):
         self.model = model
         self.loss_fn = loss_fn
         self.optimizer = optimizer
@@ -66,6 +67,13 @@ class TrainerAuthorshipAttribution:
         self.device = cfg.get_device()
         self.model.to(self.device)
         self.loss_fn.to(self.device)
+
+        if distance_function == 'l2':
+            self.distance_function = torch.pairwise_distance
+        elif distance_function == 'cosine':
+            self.distance_function = lambda x, y: 1 - F.cosine_similarity(x, y)
+        else:
+            raise ValueError(f"Unknown distance function: {distance_function}")
 
         if self.report_to == 'tensorboard':
             self.writer = SummaryWriter(f"{repository_id}/logs")
@@ -264,8 +272,8 @@ class TrainerAuthorshipAttribution:
             self.lr_scheduler.step() if self.lr_scheduler else None
             
             # Accuracy calculation
-            distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
-            distance_negative = torch.norm(anchor_embeddings - negative_embeddings, dim=1, p=2)
+            distance_positive = self.distance_function(anchor_embeddings, positive_embeddings)
+            distance_negative = self.distance_function(anchor_embeddings, negative_embeddings)
             correct_count += torch.sum(distance_positive < distance_negative).item()
             
             if i % self.args.logging_step == self.args.logging_step - 1:
@@ -317,8 +325,8 @@ class TrainerAuthorshipAttribution:
                 current_loss += loss_value.item()
                 
                 # Accuracy calculation
-                distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
-                distance_negative = torch.norm(anchor_embeddings - negative_embeddings, dim=1, p=2)
+                distance_positive = self.distance_function(anchor_embeddings, positive_embeddings)
+                distance_negative = self.distance_function(anchor_embeddings, negative_embeddings)
                 correct_count += torch.sum(distance_positive < distance_negative).item()
                 total += anchor_input_ids.size(0)
 
@@ -447,8 +455,8 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
                 loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 val_loss += loss_value.item()
 
-                distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
-                distance_negative = torch.norm(anchor_embeddings - negative_embeddings, dim=1, p=2)
+                distance_positive = torch.norm(anchor_embeddings, positive_embeddings, dim=1, p=2)
+                distance_negative = torch.norm(anchor_embeddings, negative_embeddings, dim=1, p=2)
                 correct_count += torch.sum(distance_positive < distance_negative).item()
 
         avg_val_loss = val_loss / len(val_dataloader)

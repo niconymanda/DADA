@@ -15,7 +15,7 @@ def main(args):
     config.init_env(args)
     data, spoofed_data, author_id_map = config.load_data(args)
     current_time = time.strftime("%Y%m%d-%H%M%S")
-    repository_id = f"./output_new/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
+    repository_id = f"./output/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
     os.makedirs(repository_id, exist_ok=True)
     
     train_data, temp_data = train_test_split(data, test_size=0.4, stratify=data['label'])
@@ -35,7 +35,8 @@ def main(args):
     test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
     spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
     
-    loss_fn = torch.nn.TripletMarginLoss(margin=1.0, p=2)
+    loss_fn = TripletLoss(margin=0.1, distance_function=args.distance_function)
+    # loss_fn = torch.nn.TripletMarginLoss(margin=1.0)
     model = AuthorshipLLM(args.model_name)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
     
@@ -46,7 +47,7 @@ def main(args):
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-4)
     num_training_steps = args.epochs * (len(train_dataset) // args.batch_size) 
     warmup_steps = int(0.1 * num_training_steps)  
-    # lr_scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
+    # lr_scheduler =    (
     #     optimizer,
     #     num_warmup_steps=warmup_steps,
     #     num_training_steps=num_training_steps,
@@ -69,7 +70,8 @@ def main(args):
                                            author_id_map=author_id_map,
                                            report_to='tensorboard',
                                            early_stopping=True,
-                                           save_model=False
+                                           save_model=False,
+                                           distance_function=args.distance_function,
                                            )
     model, classification_model = trainer.train(classification_head=True)
     
@@ -87,7 +89,8 @@ def main(args):
     tester = TesterAuthorshipAttribution(model=model, 
                     classification_model=classification_model,
                     repository_id=repository_id, 
-                    author_id_map=author_id_map)
+                    author_id_map=author_id_map,
+                    distance_function=args.distance_function)
     acc = tester.test_abx_accuracy(test_dataloader)
     results['abx_accuracy'] = acc
     print(f"Test ABX Accuracy : {acc:.4f}")
