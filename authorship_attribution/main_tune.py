@@ -34,7 +34,7 @@ def main(args):
     config_tune = {
         "lr": tune.loguniform(1e-8, 1e-2),  
         "batch_size": tune.choice([8, 16, 32, 64]), 
-        "margin": 1.0,  
+        "margin": tune.choice([0.1, 0.5, 0.7, 1.0]),
         "epochs": 15
     }
 

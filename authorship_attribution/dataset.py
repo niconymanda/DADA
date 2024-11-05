@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer  
+from transformers import AutoTokenizer, DebertaV2Tokenizer
 import random 
 
 class AuthorClassificationDataset(Dataset):
@@ -73,7 +73,7 @@ class AuthorTripletLossDataset(Dataset):
     
     def __init__(self, data, tokenizer_name, max_length=64, train=True):
         self.data = data
-        self.tokenizer =  AutoTokenizer.from_pretrained(tokenizer_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
         self.max_length = max_length
         self.train = train

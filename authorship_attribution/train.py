@@ -48,7 +48,8 @@ class TrainerAuthorshipAttribution:
                  author_id_map,
                  project_name = 'authorship_attribution',
                  report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
-                 early_stopping=None):
+                 early_stopping=None,
+                 save_model=False):
         self.model = model
         self.loss_fn = loss_fn
         self.optimizer = optimizer
@@ -61,7 +62,7 @@ class TrainerAuthorshipAttribution:
         self.output_dir = f"{repository_id}/logs"
         self.author_id_map = author_id_map
         self.early_stopping = early_stopping
-        
+        self.save_model = save_model
         self.device = cfg.get_device()
         self.model.to(self.device)
         self.loss_fn.to(self.device)
@@ -97,7 +98,7 @@ class TrainerAuthorshipAttribution:
                 if self.early_stopping_model.step(val_loss):
                     print("Early stopping triggered")
                     break 
-        cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth')
+        cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
         
         if classification_head:
             print("Training classification head!")
@@ -122,7 +123,7 @@ class TrainerAuthorshipAttribution:
                         print("Early stopping triggered")
                         break 
                     
-            cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth')
+            cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
             return self.model, classification_model
         return self.model, None 
     
@@ -241,6 +242,7 @@ class TrainerAuthorshipAttribution:
         total_loss = 0
         current_loss = 0.0
         correct_count = 0
+        iters = len(self.train_dataloader)
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
             anchor_input_ids = batch['anchor_input_ids'].to(self.device)
             anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
@@ -259,7 +261,7 @@ class TrainerAuthorshipAttribution:
             
             loss_value.backward()
             self.optimizer.step()
-            self.lr_scheduler.step()
+            self.lr_scheduler.step() if self.lr_scheduler else None
             
             # Accuracy calculation
             distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
@@ -297,6 +299,7 @@ class TrainerAuthorshipAttribution:
         total_loss = 0
         current_loss = 0.0
         correct_count = 0
+        total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
                 anchor_input_ids = batch['anchor_input_ids'].to(self.device)
@@ -317,10 +320,12 @@ class TrainerAuthorshipAttribution:
                 distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
                 distance_negative = torch.norm(anchor_embeddings - negative_embeddings, dim=1, p=2)
                 correct_count += torch.sum(distance_positive < distance_negative).item()
-                
+                total += anchor_input_ids.size(0)
+
                 if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
-                    "Loss": current_loss / self.args.logging_step,
+                    "Loss": current_loss / self.args.logging_step,  
+                    "Accuracy": correct_count / total,
                     "epoch": epoch_n,
                     "step": i
                     }
@@ -330,7 +335,7 @@ class TrainerAuthorshipAttribution:
         val_loss = total_loss / len(self.val_dataloader)
         metrics = {
                 "Loss": val_loss,
-                "Accuracy": correct_count / len(self.val_dataloader.dataset),
+                "Accuracy": correct_count / total,
                 "epoch": epoch_n,
                 }
         self._log_metrics(metrics, phase='Val_epoch')

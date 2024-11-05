@@ -20,10 +20,12 @@ class AuthorshipClassificationLLM(nn.Module):
 class AuthorshipLLM(nn.Module):
     def __init__(self, model_name):
         super(AuthorshipLLM, self).__init__()
-
+        self.model_name = model_name
         self.model = AutoModel.from_pretrained(model_name)
+        
+        # print(f"Loaded model: {self.model}")
         
     def forward(self, input_ids, attention_mask=None):
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = outputs.pooler_output 
+        pooled_output = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs.last_hidden_state[:, 0] 
         return pooled_output

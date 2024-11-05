@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import os
 import pandas as pd
+import json
 
 
 def get_args():
@@ -15,17 +16,17 @@ def get_args():
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
     parser.add_argument('--epochs', type=int, default=30, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=30, help='Number of epochs to train the classifcation head for')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--epochs_classification', type=int, default=15, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
-    parser.add_argument('--weight_decay', type=float, default=0, help='weight_decay')
+    parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight_decay')
     parser.add_argument('--model_name', type=str, default='FacebookAI/roberta-large', help='Model to use')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
-    parser.add_argument('--early_stopping_patience', type=int, default=2, help='Patience for early stopping based on validation loss')
+    parser.add_argument('--early_stopping_patience', type=int, default=3, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
-    parser.add_argument('--min_quotes_per_author', type=int, default=250, help='Min number of quotes per author')
+    parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
     # 350 quotes=5 authors, 450 quotes=3 authors
     return parser.parse_args()
 
@@ -93,7 +94,7 @@ def init_env(args):
         np.random.seed(seed_val)
         torch.manual_seed(seed_val)
         torch.cuda.manual_seed_all(seed_val)
-    os.environ["CUDA_VISIBLE_DEVICES"]="1"
+    os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -116,3 +117,33 @@ def load_checkpoint(model, optimizer, path):
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     print(f"Model loaded from {path}")
     return model, optimizer, checkpoint['epoch']
+
+def save_model_config(
+    args,
+    lr_scheduler_name: str,
+    output_path: str = "model_config.json"
+):
+    # Configuration dictionary
+    config = {
+        "data": args.data,
+        "epochs": args.epochs,
+        "epochs_classification": args.epochs_classification,
+        "batch_size": args.batch_size,
+        "learning_rate": args.learning_rate,
+        "learning_rate_classification": args.learning_rate_classification,
+        "weight_decay": args.weight_decay,
+        "model_name": args.model_name,
+        "seed": args.seed,
+        "layers_to_train": args.layers_to_train,
+        "early_stopping_patience": args.early_stopping_patience,
+        "logging_step": args.logging_step,
+        "min_quotes_per_author": args.min_quotes_per_author,
+        "lr_scheduler_name": lr_scheduler_name
+    }
+    
+    # Save to JSON file
+    with open(output_path, "w") as f:
+        json.dump(config, f, indent=4)
+    
+    print(f"Configuration saved to {output_path}")
+
