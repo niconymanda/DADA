@@ -23,20 +23,24 @@ The dataset used for training and testing is an augmented version of the origina
 This project fine-tunes a BERT-like model to perform authorship classification, using Triplet Loss to enhance separation between author embeddings. A linear classification head is added on top of the model to classify texts based on authorship. The model architecture is flexible and can utilize any Transformer-based model, such as BERT, RoBERTa, or DeBERTa, making it adaptable for various pre-trained encoders. The Triplet Loss setup encourages the model to group embeddings by author, helping improve the accuracy and robustness of author identification.
 ### TODOs
 
-- [] Implement test function for the spoofed data
+- [ ] Implement test function for the spoofed data.
+- [ ] Refactor config files, run training from the config file and save model params to config file.
+- [ ] Put the init of the optimizer, lr scheduler in the trainer
+- [ ] Test with more encoders 
+- [ ] Tests with cosine similarity in the Triplet loss instead of the L2 Norm 
 
 ## Repository Structure
   ```
  ├──  authorship_attribution
- │    └──`config.py`: Contains the default configuration settings for the model and training process.
- │    └──`dataset.py`: Handles data loading, tokenization, and preparation for training and evaluation.
- │    └──`early_stopping.py`: Implements the early stopping mechanism to prevent overfitting during model training.
- │    └──`loss_functions.py`: Defines custom loss functions used in the model training, such as Triplet Loss.
- │    └──`main.py`: The main script to run the model training.
- │    └──`main_tune.py`: Script to perform hyperparameter tuning on the model.
- │    └──`model.py`: Defines the architecture of the model, including the BERT-like model and the classification head.
- │    └──`test_model.py`: Script to evaluate the trained model on the test dataset.
- │    └──`train.py`: Contains the training loop and logic for training the model.
+ │    └──config.py: Contains the default configuration settings for the model and training process.
+ │    └──dataset.py: Handles data loading, tokenization, and preparation for training and evaluation.
+ │    └──early_stopping.py: Implements the early stopping mechanism to prevent overfitting during model training.
+ │    └──loss_functions.py: Defines custom loss functions used in the model training, such as Triplet Loss.
+ │    └──main.py: The main script to run the model training.
+ │    └──main_tune.py: Script to perform hyperparameter tuning on the model.
+ │    └──model.py: Defines the architecture of the model, including the BERT-like model and the classification head.
+ │    └──test_model.py: Script to evaluate the trained model on the test dataset.
+ │    └──train.py: Contains the training loop and logic for training the model.
   ```
 
 ## Features
