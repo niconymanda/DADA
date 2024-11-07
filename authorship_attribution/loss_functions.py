@@ -28,19 +28,31 @@ class TripletLoss(nn.Module):
                 torch.Tensor: The computed triplet loss.
     """
     
-    def __init__(self, margin=1.0):
+    def __init__(self, margin=0.1, distance_function='l2', reduction='mean'):
         super(TripletLoss, self).__init__()
         self.margin = margin
+        self.reduction = reduction
+        if distance_function == 'l2':
+            self.distance_function = torch.pairwise_distance
+        elif distance_function == 'cosine':
+            self.distance_function = lambda x, y: 1 - F.cosine_similarity(x, y)
+        else:
+            raise ValueError(f"Unknown distance function: {distance_function}")
     
     def forward(self, anchor: torch.Tensor, positive: torch.Tensor, negative: torch.Tensor) -> torch.Tensor:
-        # distance_positive = F.pairwise_distance(anchor, positive, p=2)
-        # distance_negative = F.pairwise_distance(anchor, negative, p=2)
-        # loss = torch.clamp(distance_positive - distance_negative + self.margin, min=0.0)
-        # return loss.mean()
-        distance_positive = torch.norm(anchor - positive, dim=1, p=2) 
-        distance_negative = torch.norm(anchor - negative, dim=1, p=2) 
-        losses = torch.relu(distance_positive - distance_negative + self.margin)
-        return torch.mean(losses)
+        
+        distance_positive = self.distance_function(anchor, positive) 
+        distance_negative = self.distance_function(anchor, negative) 
+        print(f"distance_positive: {distance_positive}")
+        print(f"distance_negative: {distance_negative}")
+        loss = torch.clamp_min(self.margin + distance_positive - distance_negative, 0)
+
+        if self.reduction == "sum":
+            return torch.sum(loss)
+        elif self.reduction == "mean":
+            return torch.mean(loss)
+        else:  # reduction == "none"
+            return loss
     
 class ContrastiveLoss(nn.Module):
     """
@@ -63,7 +75,7 @@ class ContrastiveLoss(nn.Module):
         self.margin = margin
     
     def forward(self, anchor: torch.Tensor, positive: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        distance = F.pairwise_distance(anchor, positive, p=2)
+        distance = torch.norm(anchor - positive, dim=1, p=2)
         loss = torch.where(target == 1, distance.pow(2), torch.clamp(self.margin - distance, min=0.0).pow(2))
 
         return loss.mean()

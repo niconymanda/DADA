@@ -1,5 +1,6 @@
 import torch.nn as nn
 from transformers import AutoModel
+from torch.nn import functional as F
 
 class AuthorshipClassificationLLM(nn.Module):
     def __init__(self, model, num_labels, class_weights=None):
@@ -17,13 +18,17 @@ class AuthorshipClassificationLLM(nn.Module):
         logits = self.classifier(outputs)
         probs = self.softmax(logits)
         return probs
+    
 class AuthorshipLLM(nn.Module):
     def __init__(self, model_name):
         super(AuthorshipLLM, self).__init__()
-
+        self.model_name = model_name
         self.model = AutoModel.from_pretrained(model_name)
+        
+        # print(f"Loaded model: {self.model}")
         
     def forward(self, input_ids, attention_mask=None):
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = outputs.pooler_output 
+        pooled_output = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs.last_hidden_state[:, 0] 
+        pooled_output = F.normalize(pooled_output, p=2, dim=1)
         return pooled_output

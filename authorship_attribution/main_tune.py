@@ -11,11 +11,15 @@ from ray.tune.schedulers import ASHAScheduler
 import torch
 from torch.utils.data import DataLoader
 from test_model import TesterAuthorshipAttribution
+import os
+import pickle
+from pathlib import Path
 
 def main(args):
     config.init_env(args)
     data, spoofed_data, author_id_map = config.load_data(args)
-    repository_id = f"./output/n_authors_{len(author_id_map.keys())}_tune/{args.model_name}_tune"
+    repository_id = f"./output/n_authors_{len(author_id_map.keys())}_tune/{args.model_name}"
+    os.makedirs(repository_id, exist_ok=True)
     
     train_data, temp_data = train_test_split(data, test_size=0.3, stratify=data['label'])
     val_data, test_data = train_test_split(temp_data, test_size=0.5, stratify=temp_data['label'])
@@ -28,9 +32,9 @@ def main(args):
     device = config.get_device()
     
     config_tune = {
-        "lr": tune.loguniform(1e-5, 1e-2),  
-        "batch_size": tune.choice([4, 8]), 
-        "margin": tune.uniform(0.1, 2.0),  
+        "lr": tune.loguniform(1e-8, 1e-2),  
+        "batch_size": tune.choice([8, 16, 32, 64]), 
+        "margin": tune.choice([0.1, 0.5, 0.7, 1.0]),
         "epochs": 15
     }
 
@@ -43,34 +47,44 @@ def main(args):
     )
 
     analysis = tune.run(
-    tune.with_parameters(train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device),
+    tune.with_parameters(train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device, args=args),
     resources_per_trial={"cpu":64, "gpu": 1},  
     config=config_tune,
-    num_samples=4,  
+    num_samples=10,  
     scheduler=scheduler,
     progress_reporter=CLIReporter(
         metric_columns=["loss", "training_iteration"]
     )
 )  
 
-    best_config = analysis.best_config
-    print("Best hyperparameters found were: ", best_config)
     best_trial = analysis.get_best_trial("loss", mode="min", scope="all")
-    print("Best trial config: {}".format(best_trial.config))
-    print("Best trial final validation loss: {}".format(best_trial.last_result["loss"]))
+    print(f"Best trial config: {best_trial.config}")
+    print(f"Best trial final validation loss: {best_trial.last_result['loss']}")
     torch.save(model.state_dict(), f"{repository_id}/best_model.pth")
-    
-    test_dataloader = DataLoader(test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
-    spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
+    best_trained_model = AuthorshipLLM(args.model_name)
+    best_trained_model.to(device)
+    best_checkpoint = analysis.get_best_checkpoint(trial=best_trial, metric="accuracy", mode="max")
+    with best_checkpoint.as_directory() as checkpoint_dir:
+        data_path = Path(checkpoint_dir) / "data.pkl"
+        with open(data_path, "rb") as fp:
+            best_checkpoint_data = pickle.load(fp)
 
-    tester = TesterAuthorshipAttribution(model=model,
+        best_trained_model.load_state_dict(best_checkpoint_data["net_state_dict"])
+        test_dataloader = DataLoader(test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
+        spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
+
+        tester = TesterAuthorshipAttribution(model=best_trained_model,
                     repository_id=repository_id, 
                     author_id_map=author_id_map)
-    acc = tester.test_abx_accuracy(test_dataloader)
-    print(f"Test ABX Accuracy : {acc:.4f}")
-    tester.plot_tsne_for_authors(test_dataloader)
-    acc_sp = tester.test_abx_accuracy(spoofed_data_loader)
-    print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
+        acc = tester.test_abx_accuracy(test_dataloader)
+        print("Best trial test set accuracy: {}".format(acc))
+        tester.plot_tsne_for_authors(test_dataloader)
+        acc_sp = tester.test_abx_accuracy(spoofed_data_loader)
+        print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
+
+    
+    #Test results on classification model
+    # tester.test_classification(test_dataloader)
 if __name__ == '__main__':
     args = config.get_args()
     main(args)
