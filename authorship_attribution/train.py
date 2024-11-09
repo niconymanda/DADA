@@ -17,6 +17,8 @@ from model import AuthorshipClassificationLLM
 from torch.nn import functional as F
 from typing import Optional, Literal
 import wandb
+from transformers import get_linear_schedule_with_warmup
+
 
 class TrainerAuthorshipAttribution:
     """
@@ -38,23 +40,19 @@ class TrainerAuthorshipAttribution:
     """
     
     def __init__(self, model, 
-                 loss_fn, 
-                 optimizer, 
-                 lr_scheduler,
                  train_dataloader, 
                  val_dataloader, 
                  args, 
                  repository_id,
                  author_id_map,
+                 loss_fn=None, 
+                 optimizer=None, 
+                 lr_scheduler=None,
                  project_name = 'authorship_attribution',
                  report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
-                 early_stopping=None,
-                 save_model=False,
-                 distance_function='l2'):
+                 early_stopping=True,
+                 save_model=False):
         self.model = model
-        self.loss_fn = loss_fn
-        self.optimizer = optimizer
-        self.lr_scheduler = lr_scheduler
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.report_to = report_to
@@ -65,16 +63,14 @@ class TrainerAuthorshipAttribution:
         self.early_stopping = early_stopping
         self.save_model = save_model
         self.device = cfg.get_device()
+        self.loss_fn = self.get_loss_fn() if loss_fn is None else loss_fn   
+        self.optimizer = self.get_optimizer() if optimizer is None else optimizer
+        self.lr_scheduler = self.get_lr_scheduler() if lr_scheduler is None  else lr_scheduler
         self.model.to(self.device)
         self.loss_fn.to(self.device)
 
-        if distance_function == 'l2':
-            self.distance_function = torch.pairwise_distance
-        elif distance_function == 'cosine':
-            self.distance_function = lambda x, y: 1 - F.cosine_similarity(x, y)
-        else:
-            raise ValueError(f"Unknown distance function: {distance_function}")
-
+        self.distance_function = cfg.get_distance_function(args.distance_function)
+        
         if self.report_to == 'tensorboard':
             self.writer = SummaryWriter(f"{repository_id}/logs")
         elif report_to == 'wandb':
@@ -364,6 +360,29 @@ class TrainerAuthorshipAttribution:
                     self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.val_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
                 else:
                     print("Invalid phase")
+
+    def get_loss_fn(self):
+        return TripletLoss(margin=self.args.margin, distance_function=self.args.distance_function)
+    
+    def get_optimizer(self):
+        return optim.AdamW(self.model.parameters(), lr=self.args.learning_rate)
+    
+    def get_lr_scheduler(self):
+        num_training_steps = self.args.epochs * (len(self.train_dataloader) // self.args.batch_size) 
+        warmup_steps = int(0.1 * num_training_steps)  
+        
+        if self.args.lr_scheduler == 'linear_warmup':
+            return get_linear_schedule_with_warmup(
+                optimizer=self.optimizer,
+                num_warmup_steps=warmup_steps,
+                num_training_steps=num_training_steps
+                )
+        if self.args.lr_scheduler == 'linear':
+            return optim.lr_scheduler.StepLR(self.optimizer, step_size=30, gamma=0.1, last_epoch=-1, verbose=False)
+        elif self.args.lr_scheduler == 'cosine':
+            return optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100, eta_min=0, last_epoch=-1, verbose=False)
+        else:
+            raise ValueError("Invalid lr_scheduler value. Must be 'linear_warmup', 'linear', or 'cosine'")
 
 def train_tune(config, train_dataset, val_dataset, model, device, args):
     """

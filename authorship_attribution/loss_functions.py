@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import config
 
 class TripletLoss(nn.Module):
     """
@@ -32,20 +32,17 @@ class TripletLoss(nn.Module):
         super(TripletLoss, self).__init__()
         self.margin = margin
         self.reduction = reduction
-        if distance_function == 'l2':
-            self.distance_function = torch.pairwise_distance
-        elif distance_function == 'cosine':
-            self.distance_function = lambda x, y: 1 - F.cosine_similarity(x, y)
-        else:
-            raise ValueError(f"Unknown distance function: {distance_function}")
+        
+        self.distance_function = config.get_distance_function(distance_function)
+
     
     def forward(self, anchor: torch.Tensor, positive: torch.Tensor, negative: torch.Tensor) -> torch.Tensor:
         
         distance_positive = self.distance_function(anchor, positive) 
         distance_negative = self.distance_function(anchor, negative) 
-        print(f"distance_positive: {distance_positive}")
-        print(f"distance_negative: {distance_negative}")
-        loss = torch.clamp_min(self.margin + distance_positive - distance_negative, 0)
+        # print(f"distance_positive: {distance_positive}")
+        # print(f"distance_negative: {distance_negative}")
+        loss = torch.clamp_min(distance_positive - distance_negative + self.margin, 0)
 
         if self.reduction == "sum":
             return torch.sum(loss)

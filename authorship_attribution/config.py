@@ -4,6 +4,7 @@ import torch
 import os
 import pandas as pd
 import json
+import torch.nn.functional as F
 
 
 def get_args():
@@ -15,10 +16,10 @@ def get_args():
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=5, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--epochs', type=int, default=14, help='Number of epochs to train for')
+    parser.add_argument('--epochs_classification', type=int, default=8, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=5e-5, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
     parser.add_argument('--weight_decay', type=float, default=0.001, help='weight_decay')
     parser.add_argument('--model_name', type=str, default='FacebookAI/roberta-large', help='Model to use')
@@ -27,8 +28,10 @@ def get_args():
     parser.add_argument('--early_stopping_patience', type=int, default=3, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
     parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
-    parser.add_argument('--distance_function', type=str, default='cosine', help='Distance function for triplet loss (l2 or cosine)')
-
+    parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
+    parser.add_argument('--margin', type=float, default=0.9, help='Margin for triplet loss')
+    parser.add_argument('--lr_scheduler', type=str, default='linear_warmup', help='Learning rate scheduler')
+    
     # 350 quotes=5 authors, 450 quotes=3 authors
     return parser.parse_args()
 
@@ -96,7 +99,7 @@ def init_env(args):
         np.random.seed(seed_val)
         torch.manual_seed(seed_val)
         torch.cuda.manual_seed_all(seed_val)
-    os.environ["CUDA_VISIBLE_DEVICES"]="0"
+    os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -122,30 +125,85 @@ def load_checkpoint(model, optimizer, path):
 
 def save_model_config(
     args,
-    lr_scheduler_name: str,
     output_path: str = "model_config.json"
 ):
-    # Configuration dictionary
-    config = {
-        "data": args.data,
-        "epochs": args.epochs,
-        "epochs_classification": args.epochs_classification,
-        "batch_size": args.batch_size,
-        "learning_rate": args.learning_rate,
-        "learning_rate_classification": args.learning_rate_classification,
-        "weight_decay": args.weight_decay,
-        "model_name": args.model_name,
-        "seed": args.seed,
-        "layers_to_train": args.layers_to_train,
-        "early_stopping_patience": args.early_stopping_patience,
-        "logging_step": args.logging_step,
+    config_new = {
         "min_quotes_per_author": args.min_quotes_per_author,
-        "lr_scheduler_name": lr_scheduler_name
+        "architecture":{
+            "name": "AuthorshipLLM",
+            "args": {
+                "model_name": args.model_name,
+                "epochs": args.epochs,
+                "learning_rate": args.learning_rate,
+                "weight_decay": args.weight_decay,
+                "early_stopping_patience": args.early_stopping_patience,
+                "logging_step": args.logging_step,
+                "n_gpu": 1
+                }
+        },
+        "architecture_classifier":{
+            "name": "AuthorshipClassificationLLM",
+            "args": {
+                "model_name": "Liner head with softmax",
+                "epochs": args.epochs_classification,
+                "learning_rate": args.learning_rate_classification,
+                "weight_decay": args.weight_decay,
+                "early_stopping_patience": args.early_stopping_patience,
+                "logging_step": args.logging_step,
+                "n_gpu": 1
+                }
+        },
+        "loss_function": {
+            "name": "TripletLoss",
+            "args": {
+                "margin": args.margin,
+                "distance_function": args.distance_function,
+                "reduction": "mean"
+            }
+        },
+        "data_loader": {
+          "type": "AuthorTripletLossDataset",         # selecting data loader
+          "args":{
+            "data": args.data,             # dataset path
+            "batch_size": args.batch_size,                # batch size
+            "shuffle": True,                 # shuffle training data before splitting
+            "validation_split": 0.2,         # size of validation dataset. float(portion) or int(number of samples)
+            "num_workers": 2,                # number of cpu processes to be used for data loading
+          }
+        },
+        "optimizer_LLM_model": {
+          "type": "AdamW",
+          "args":{
+            "lr": args.learning_rate,                     # learning_rate
+            "weight_decay": args.weight_decay,               # (optional) weight decay
+          }
+        },                        
+        "lr_scheduler": {
+          "type": args.lr_scheduler,                  # learning rate scheduler
+          "args":{
+            
+          }
+        },
+        "trainer": {
+          "epochs": args.epochs,                     # number of training epochs
+          "save_dir": "output/",              # checkpoints are saved in save_dir/models/name
+          "monitor": "min val_loss",          # mode and metric for model performance monitoring. set 'off' to disable.
+          "early_stop": args.early_stopping_patience,                 # number of epochs to wait before early stop. set 0 to disable.
+          "report_to": "tensorboard",               # enable tensorboard visualization
+        },
+        "seed": args.seed,                         # random seed	
     }
     
     # Save to JSON file
     with open(output_path, "w") as f:
-        json.dump(config, f, indent=4)
+        json.dump(config_new, f, indent=4)
     
     print(f"Configuration saved to {output_path}")
 
+def get_distance_function(distance_function):
+    if distance_function == 'l2':
+        return torch.pairwise_distance
+    elif distance_function == 'cosine':
+       return lambda x, y: 1 - F.cosine_similarity(x, y)
+    else:
+        raise ValueError(f"Unknown distance function: {distance_function}")
