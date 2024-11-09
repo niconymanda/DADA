@@ -68,7 +68,7 @@ def main(args):
                                            args=args,
                                            repository_id=repository_id,
                                            author_id_map=author_id_map,
-                                           report_to='tensorboard',
+                                           report_to='wandb',
                                            early_stopping=True,
                                            save_model=False,
                                            distance_function=args.distance_function,

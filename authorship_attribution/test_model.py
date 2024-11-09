@@ -106,7 +106,7 @@ class TesterAuthorshipAttribution:
                             min_dist = dist_bx
                             pred_label = negative_labels[i][neg_idx]
                             min_negative_embeddings = negative_embeddings
-                            print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
+                            # print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
                             # print(f"Min dist: {min_dist}, possible label: {correct_label}")
                     cosine_similarity_neg = F.cosine_similarity(anchor_embeddings[i], min_negative_embeddings)
                     cosine_distance_neg = 1 - cosine_similarity_neg

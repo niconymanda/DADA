@@ -33,7 +33,7 @@ def main(args):
     
     config_tune = {
         "lr": tune.loguniform(1e-8, 1e-2),  
-        "batch_size": tune.choice([8, 16, 32, 64]), 
+        "batch_size": tune.choice([32, 64]), 
         "margin": tune.choice([0.1, 0.5, 0.7, 1.0]),
         "epochs": 15
     }
@@ -48,7 +48,7 @@ def main(args):
 
     analysis = tune.run(
     tune.with_parameters(train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device, args=args),
-    resources_per_trial={"cpu":64, "gpu": 1},  
+    resources_per_trial={"cpu":24, "gpu": 1},  
     config=config_tune,
     num_samples=10,  
     scheduler=scheduler,

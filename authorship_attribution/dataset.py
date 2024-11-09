@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer, DebertaV2Tokenizer
+from transformers import AutoTokenizer  
 import random 
 
 class AuthorClassificationDataset(Dataset):
@@ -23,7 +23,7 @@ class AuthorClassificationDataset(Dataset):
     def __init__(self, data, tokenizer, max_length=128):
         self.texts = data['text'].tolist()
         self.labels = data['label'].tolist()
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+        self.tokenizer = T5Tokenizer.from_pretrained(tokenizer)
         self.max_length = max_length
 
     def __len__(self):

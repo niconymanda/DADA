@@ -1,5 +1,6 @@
 import torch.nn as nn
 from transformers import AutoModel
+from transformers import T5EncoderModel
 from torch.nn import functional as F
 
 class AuthorshipClassificationLLM(nn.Module):
@@ -23,7 +24,9 @@ class AuthorshipLLM(nn.Module):
     def __init__(self, model_name):
         super(AuthorshipLLM, self).__init__()
         self.model_name = model_name
-        self.model = AutoModel.from_pretrained(model_name)
+        
+        T5EncoderModel._keys_to_ignore_on_load_unexpected = ["decoder.*"]
+        self.model = T5EncoderModel.from_pretrained(model_name)
         
         # print(f"Loaded model: {self.model}")
         

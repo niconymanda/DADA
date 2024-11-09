@@ -121,7 +121,7 @@ class TrainerAuthorshipAttribution:
             classification_loss = nn.CrossEntropyLoss()
             classification_model.to(self.device)
             classification_loss.to(self.device)
-            classification_optimizer = optim.AdamW(classification_model.parameters(), lr=self.args.learning_rate_classification)
+            classification_optimizer = optim.AdamW(classification_model.parameters(), lr=0.0001)
             
             for epoch_n in range(self.args.epochs_classification):
                 train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
@@ -454,27 +454,30 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
                 negative_embeddings = model(negative_input_ids, negative_attention_mask)
                 loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 val_loss += loss_value.item()
-
-                distance_positive = torch.norm(anchor_embeddings, positive_embeddings, dim=1, p=2)
-                distance_negative = torch.norm(anchor_embeddings, negative_embeddings, dim=1, p=2)
+                
+                distance_positive = torch.norm(anchor_embeddings - positive_embeddings, dim=1, p=2)
+                distance_negative = torch.norm(anchor_embeddings - negative_embeddings, dim=1, p=2)
                 correct_count += torch.sum(distance_positive < distance_negative).item()
-
+        
         avg_val_loss = val_loss / len(val_dataloader)
-        checkpoint_data = {
-            "epoch": epoch,
-            "net_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-        }
-        with tempfile.TemporaryDirectory() as checkpoint_dir:
-            data_path = Path(checkpoint_dir) / "data.pkl"
-            print(data_path)
-            with open(data_path, "wb") as fp:
-                pickle.dump(checkpoint_data, fp)
-            checkpoint = Checkpoint.from_directory(checkpoint_dir)
-            train.report(
-                {"loss": avg_val_loss, "accuracy": correct_count / len(val_dataloader.dataset)},
-                checkpoint=checkpoint,
-            )
+        
+        # Only save every third epoch
+        if epoch%5 == 0:
+            checkpoint_data = {
+                "epoch": epoch,
+                "net_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+            }
+            with tempfile.TemporaryDirectory() as checkpoint_dir:
+                data_path = Path(checkpoint_dir) / "data.pkl"
+                print(data_path)
+                with open(data_path, "wb") as fp:
+                    pickle.dump(checkpoint_data, fp)
+                checkpoint = Checkpoint.from_directory(checkpoint_dir)
+                train.report(
+                    {"loss": avg_val_loss, "accuracy": correct_count / len(val_dataloader.dataset)},
+                    checkpoint=checkpoint,
+                )
         if early_stopping_tune.step(avg_val_loss):
             print("Early stopping triggered")
             break 

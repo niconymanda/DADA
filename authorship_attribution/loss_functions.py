@@ -43,8 +43,6 @@ class TripletLoss(nn.Module):
         
         distance_positive = self.distance_function(anchor, positive) 
         distance_negative = self.distance_function(anchor, negative) 
-        print(f"distance_positive: {distance_positive}")
-        print(f"distance_negative: {distance_negative}")
         loss = torch.clamp_min(self.margin + distance_positive - distance_negative, 0)
 
         if self.reduction == "sum":
