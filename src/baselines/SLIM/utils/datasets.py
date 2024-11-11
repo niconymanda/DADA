@@ -24,6 +24,7 @@ def load_audio(filename, sampling_rate=None):
     audio, sr = librosa.load(filename, sr=None)
     return audio, sr
 
+
 def pad(x, max_len):
     """
     From src/baselines/asvspoof2021/DF/Baseline-RawNet2/data_utils.py
@@ -32,48 +33,58 @@ def pad(x, max_len):
     if x_len >= max_len:
         return x[:max_len]
     # need to pad
-    num_repeats = int(max_len / x_len)+1
+    num_repeats = int(max_len / x_len) + 1
     padded_x = np.tile(x, (1, num_repeats))[:, :max_len][0]
     return padded_x
 
+
 def get_spoof_list(meta_dir, is_train=False, is_eval=False):
     d_meta = {}
-    file_list=[]
-    with open(meta_dir, 'r') as f:
-         l_meta = f.readlines()
+    file_list = []
+    with open(meta_dir, "r") as f:
+        l_meta = f.readlines()
 
-    if (is_train):
+    if is_train:
         for line in l_meta:
-             _, key,_,_,label = line.strip().split(' ')
-             file_list.append(key)
-             d_meta[key] = 1 if label == 'bonafide' else 0
-        return d_meta,file_list
-    
-    elif(is_eval):
+            _, key, _, _, label = line.strip().split(" ")
+            file_list.append(key)
+            d_meta[key] = 1 if label == "bonafide" else 0
+        return d_meta, file_list
+
+    elif is_eval:
         for line in l_meta:
-            key= line.strip()
+            key = line.strip()
             file_list.append(key)
         return file_list
     else:
         for line in l_meta:
-             _, key,_,_,label = line.strip().split(' ')
-             file_list.append(key)
-             d_meta[key] = 1 if label == 'bonafide' else 0
-        return d_meta,file_list
+            _, key, _, _, label = line.strip().split(" ")
+            file_list.append(key)
+            d_meta[key] = 1 if label == "bonafide" else 0
+        return d_meta, file_list
+
 
 class ASVSpoof21Dataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir, meta_dir, is_train=False, is_eval=False, sampling_rate=16000, max_duration=4):
+    def __init__(
+        self,
+        root_dir,
+        meta_dir,
+        is_train=False,
+        is_eval=False,
+        sampling_rate=16000,
+        max_duration=4,
+    ):
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
-        self.cut = self.sampling_rate * self.max_duration # padding
+        self.cut = self.sampling_rate * self.max_duration  # padding
         self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
         self.root_dir = root_dir
 
     def __len__(self):
         return len(self.data)
-    
+
     def load_audio_tensor(self, key):
-        filename = os.path.join(self.root_dir, f'flac/{key}.flac')
+        filename = os.path.join(self.root_dir, f"flac/{key}.flac")
         audio_arr, _ = load_audio(filename, self.sampling_rate)
         audio_tensor = torch.tensor(pad(audio_arr, self.cut)).float()
         return audio_tensor
@@ -95,7 +106,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
         sampling_rate=16000,
         max_duration=4,
     ):
-        """ 
+        """
         Args:
             root_dir (str): Root directory of the dataset
             metadata_file (str): Name of the metadata file
@@ -110,7 +121,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
 
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
-        self.cut = self.sampling_rate * self.max_duration # padding 
+        self.cut = self.sampling_rate * self.max_duration  # padding
 
         # Filter out spoofed data if include_spoofs is False
         if not self.include_spoofs:
