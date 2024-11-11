@@ -40,39 +40,40 @@ def main(args):
     model = AuthorshipLLM(args.model_name)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
     
-    num_training_steps = args.epochs * len(train_dataloader)
-    # lr_scheduler = get_scheduler(
-    #     "linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-    # )
-    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-4)
+    # num_training_steps = args.epochs * len(train_dataloader)
+    # # lr_scheduler = get_scheduler(
+    # #     "linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+    # # )
+    # # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, eta_min=1e-4)
     num_training_steps = args.epochs * (len(train_dataset) // args.batch_size) 
     warmup_steps = int(0.1 * num_training_steps)  
-    # lr_scheduler =    (
-    #     optimizer,
-    #     num_warmup_steps=warmup_steps,
-    #     num_training_steps=num_training_steps,
-    #     num_cycles=5
-    # )
+    # # lr_scheduler =    (
+    # #     optimizer,
+    # #     num_warmup_steps=warmup_steps,
+    # #     num_training_steps=num_training_steps,
+    # #     num_cycles=5
+    # # )
 
-    lr_scheduler = get_linear_schedule_with_warmup(
-        optimizer=optimizer,
-        num_warmup_steps=warmup_steps,
-        num_training_steps=num_training_steps
-    )
+    # lr_scheduler = get_linear_schedule_with_warmup(
+    #     optimizer=optimizer,
+    #     num_warmup_steps=warmup_steps,
+    #     num_training_steps=num_training_steps
+    # )
     trainer = TrainerAuthorshipAttribution(model=model,
-                                           loss_fn=loss_fn,  
-                                           optimizer=optimizer,
-                                           lr_scheduler=lr_scheduler,
-                                           train_dataloader=train_dataloader,
-                                           val_dataloader=val_dataloader,
-                                           args=args,
-                                           repository_id=repository_id,
-                                           author_id_map=author_id_map,
-                                           report_to='wandb',
-                                           early_stopping=True,
-                                           save_model=False,
-                                           distance_function=args.distance_function,
-                                           )
+                                            loss_fn=loss_fn,  
+                                            optimizer=optimizer,
+                                            lr_scheduler=args.lr_scheduler,
+                                            train_dataloader=train_dataloader,
+                                            val_dataloader=val_dataloader,
+                                            args=args,
+                                            repository_id=repository_id,
+                                            author_id_map=author_id_map,
+                                            num_training_steps=num_training_steps,
+                                            warmup_steps=warmup_steps,
+                                            report_to='wandb',
+                                            early_stopping=True,
+                                            save_model=False,
+                                            distance_function=args.distance_function)
     model, classification_model = trainer.train(classification_head=True)
     
     #Load model from checkpoint
@@ -99,7 +100,7 @@ def main(args):
     acc_sp = tester.test_abx_accuracy(spoofed_data_loader)
     print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
     results_spoofed['abx_accuracy'] = acc_sp
-    config.save_model_config(args, lr_scheduler_name=lr_scheduler.__class__.__name__, output_path=f"{repository_id}/model_config.json")
+    config.save_model_config(args,output_path=f"{repository_id}/model_config.json")
     #Test results on classification model
     classif_results = tester.test_classification(test_dataloader)
     results.update(classif_results)

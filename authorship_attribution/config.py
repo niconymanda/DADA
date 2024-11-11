@@ -15,10 +15,10 @@ def get_args():
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='/home/infres/iivanova-23/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=3, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=10, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--epochs', type=int, default=15, help='Number of epochs to train for')
+    parser.add_argument('--epochs_classification', type=int, default=15, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=0.0005456997948870698, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1.551211108506265e-08, help='Learning rate')
     parser.add_argument('--model_name', type=str, default='t5-base', help='Model to use')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     # parser.add_argument('--learning_rate_classification', type=float, default=0.0001, help='Learning rate for the classification head')
@@ -26,7 +26,8 @@ def get_args():
     parser.add_argument('--early_stopping_patience', type=int, default=5, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
     parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
-    parser.add_argument('--distance_function', type=str, default='cosine', help='Distance function for triplet loss (l2 or cosine)')
+    parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
+    parser.add_argument('--lr_scheduler', type=str, default='exp', help='Learning rate scheduler (steplr, exp or lin)')
     # 350 quotes=5 authors, 450 quotes=3 authors
     args, _ = parser.parse_known_args()
     return args
@@ -122,7 +123,6 @@ def load_checkpoint(model, optimizer, path):
 
 def save_model_config(
     args,
-    lr_scheduler_name: str,
     output_path: str = "model_config.json"
 ):
     # Configuration dictionary
@@ -132,15 +132,13 @@ def save_model_config(
         "epochs_classification": args.epochs_classification,
         "batch_size": args.batch_size,
         "learning_rate": args.learning_rate,
-        "learning_rate_classification": 0.0001, #args.learning_rate_classification,
-        "weight_decay": 0.01,#args.weight_decay,
         "model_name": args.model_name,
         "seed": args.seed,
         "layers_to_train": args.layers_to_train,
         "early_stopping_patience": args.early_stopping_patience,
         "logging_step": args.logging_step,
         "min_quotes_per_author": args.min_quotes_per_author,
-        "lr_scheduler_name": lr_scheduler_name
+        "lr_scheduler": args.lr_scheduler
     }
     
     # Save to JSON file

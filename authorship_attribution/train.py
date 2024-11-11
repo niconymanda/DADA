@@ -17,6 +17,7 @@ from model import AuthorshipClassificationLLM
 from torch.nn import functional as F
 from typing import Optional, Literal
 import wandb
+from transformers import get_linear_schedule_with_warmup
 
 class TrainerAuthorshipAttribution:
     """
@@ -46,15 +47,16 @@ class TrainerAuthorshipAttribution:
                  args, 
                  repository_id,
                  author_id_map,
-                 project_name = 'authorship_attribution',
+                 num_training_steps=None,
+                 warmup_steps=None,
                  report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
                  early_stopping=None,
                  save_model=False,
-                 distance_function='l2'):
+                 distance_function='l2'
+                 ):
         self.model = model
         self.loss_fn = loss_fn
         self.optimizer = optimizer
-        self.lr_scheduler = lr_scheduler
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.report_to = report_to
@@ -78,7 +80,7 @@ class TrainerAuthorshipAttribution:
         if self.report_to == 'tensorboard':
             self.writer = SummaryWriter(f"{repository_id}/logs")
         elif report_to == 'wandb':
-            wandb.init(project=project_name, config=vars(args))
+            wandb.init(project='authorship_attribution', config=vars(args))
             wandb.watch(model)
         else:
             raise ValueError("Invalid report_to value. Must be 'tensorboard' or 'wandb'")
@@ -87,8 +89,22 @@ class TrainerAuthorshipAttribution:
             self.early_stopping_model = EarlyStopping(patience=args.early_stopping_patience)
             self.early_stopping_classif = EarlyStopping(patience=self.args.early_stopping_patience)
             
+        if lr_scheduler == 'steplr':
+            # Decreases the learning rate by a factor (gamma) every step_size batch.
+            self.lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+        elif lr_scheduler == 'exp':
+            # Decreases the learning rate exponentially by a factor of gamma every batch.
+            self.lr_scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+        # elif lr_scheduler == 'plat':
+        #     # Reduces the learning rate when the metric (usually loss) stops improving.
+        #     self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer,  mode='min', factor=0.1, patience=5)
+        elif lr_scheduler == 'lin':
+            self.lr_scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=num_training_steps)
+        else:
+            raise ValueError(f"Unknown LR Scheduler: {lr_scheduler}")
+        print(lr_scheduler)
             
-        
+            
     def train(self, classification_head=False):
         """
         Trains the model for a specified number of epochs and optionally trains a classification head.
@@ -251,7 +267,7 @@ class TrainerAuthorshipAttribution:
         current_loss = 0.0
         correct_count = 0
         iters = len(self.train_dataloader)
-        for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
+        for i,  batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
             anchor_input_ids = batch['anchor_input_ids'].to(self.device)
             anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
             positive_input_ids = batch['positive_input_ids'].to(self.device)
@@ -269,7 +285,9 @@ class TrainerAuthorshipAttribution:
             
             loss_value.backward()
             self.optimizer.step()
-            self.lr_scheduler.step() if self.lr_scheduler else None
+
+            if self.lr_scheduler:
+                self.lr_scheduler.step()
             
             # Accuracy calculation
             distance_positive = self.distance_function(anchor_embeddings, positive_embeddings)
