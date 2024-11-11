@@ -15,8 +15,9 @@ from transformers import Trainer, TrainingArguments
 from transformers import TrainerCallback
 
 
-class StageOneTrainer():
+class StageOneTrainer:
     pass
 
-class StageTwoTrainer():
+
+class StageTwoTrainer:
     pass
