@@ -51,7 +51,8 @@ class TrainerAuthorshipAttribution:
                  project_name = 'authorship_attribution',
                  report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
                  early_stopping=True,
-                 save_model=False):
+                 save_model=False, 
+                 tune=False):
         self.model = model
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
@@ -63,12 +64,13 @@ class TrainerAuthorshipAttribution:
         self.early_stopping = early_stopping
         self.save_model = save_model
         self.device = cfg.get_device()
-        self.loss_fn = self.get_loss_fn() if loss_fn is None else loss_fn   
-        self.optimizer = self.get_optimizer() if optimizer is None else optimizer
-        self.lr_scheduler = self.get_lr_scheduler() if lr_scheduler is None  else lr_scheduler
-        self.model.to(self.device)
-        self.loss_fn.to(self.device)
+        if not tune:
+            self.loss_fn = self.get_loss_fn() if loss_fn is None else loss_fn   
+            self.optimizer = self.get_optimizer() if optimizer is None else optimizer
+            self.lr_scheduler = self.get_lr_scheduler(self.optimizer) if lr_scheduler is None  else lr_scheduler
+            self.loss_fn.to(self.device)
 
+        self.model.to(self.device)
         self.distance_function = cfg.get_distance_function(args.distance_function)
         
         if self.report_to == 'tensorboard':
@@ -380,96 +382,138 @@ class TrainerAuthorshipAttribution:
     def get_lr_scheduler(self, optimizer=None, num_training_steps=None):
         
         num_training_steps = self.args.epochs * len(self.train_dataloader) if num_training_steps is None else num_training_steps
-        warmup_steps = int(0.1 * num_training_steps)  
+        warmup_steps = int(0.3 * num_training_steps)  
         
         if self.args.lr_scheduler == 'linear_warmup':
             return get_linear_schedule_with_warmup(
-                optimizer=self.optimizer if optimizer is None else optimizer,
+                optimizer=optimizer,
                 num_warmup_steps=warmup_steps,
                 num_training_steps=num_training_steps
                 )
         if self.args.lr_scheduler == 'linear':
-            return optim.lr_scheduler.StepLR(self.optimizer, step_size=30, gamma=0.1, last_epoch=-1)
+            return optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1, last_epoch=-1)
         elif self.args.lr_scheduler == 'cosine':
-            return optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_training_steps, eta_min=1e-8, last_epoch=-1)
+            return optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.epochs*len(self.train_dataloader), eta_min=0, last_epoch=-1)
         else:
             raise ValueError("Invalid lr_scheduler value. Must be 'linear_warmup', 'linear', or 'cosine'")
 
-    def train_tune(self, config_tune, train_dataset, val_dataset, model, device, args):
-        """
-        Trains and tunes a model using the provided configuration, datasets, and device.
-        Args:
-            config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
-            train_dataset (Dataset): The dataset used for training.
-            val_dataset (Dataset): The dataset used for validation.
-            model (nn.Module): The model to be trained.
-            device (str): The device to run the training on, either 'cpu' or 'cuda'.
-        Returns:
-            None
-        The function performs the following steps:
-        1. Sets up the device for training (CPU or GPU).
-        2. Initializes the loss function and optimizer.
-        3. Loads a checkpoint if available to resume training from a previous state.
-        4. Creates data loaders for the training and validation datasets.
-        5. Trains the model for the specified number of epochs, performing validation at the end of each epoch.
-        6. Implements early stopping based on validation loss to prevent overfitting.
-        7. Saves checkpoints during training to allow resuming from the last state.
-        Note:
-            The function uses a TripletLoss with a fixed margin of 0.5.
-        """
 
-        batch_size_tune = config_tune["batch_size"]
-        learning_rate_tune = config_tune["lr"]
-        margin_tune = config_tune["margin"]
-        # device = "cpu"
-        # if torch.cuda.is_available():
-        #     device = "cuda:0"
-        #     if torch.cuda.device_count() > 1:
-        #         model = nn.DataParallel(model)
+def train_tune(config, train_dataset, val_dataset, model, device, args):
+    """
+    Trains and tunes a model using the provided configuration, datasets, and device.
+    Args:
+        config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
+        train_dataset (Dataset): The dataset used for training.
+        val_dataset (Dataset): The dataset used for validation.
+        model (nn.Module): The model to be trained.
+        device (str): The device to run the training on, either 'cpu' or 'cuda'.
+    Returns:
+        None
+    The function performs the following steps:
+    1. Sets up the device for training (CPU or GPU).
+    2. Initializes the loss function and optimizer.
+    3. Loads a checkpoint if available to resume training from a previous state.
+    4. Creates data loaders for the training and validation datasets.
+    5. Trains the model for the specified number of epochs, performing validation at the end of each epoch.
+    6. Implements early stopping based on validation loss to prevent overfitting.
+    7. Saves checkpoints during training to allow resuming from the last state.
+    Note:
+        The function uses a TripletLoss with a fixed margin of 0.5.
+    """
+    
+    batch_size = config["batch_size"]
+    learning_rate = config["lr"]
+    margin = config["margin"]
+    # device = "cpu"
+    # if torch.cuda.is_available():
+    #     device = "cuda:0"
+    #     if torch.cuda.device_count() > 1:
+    #         model = nn.DataParallel(model)
+    device = cfg.get_device()
+    model.to(device)
+    loss_fn = TripletLoss(margin=margin)
+    loss_fn = loss_fn.to(device)
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
+    lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"], eta_min=0, last_epoch=-1)
+    checkpoint = get_checkpoint()
 
-        optimizer_tune = optim.AdamW(model.parameters(), lr=learning_rate_tune)
-        checkpoint = get_checkpoint()
-        if checkpoint:
-            with checkpoint.as_directory() as checkpoint_dir:
-                data_path = Path(checkpoint_dir) / "data.pkl"
-                print(f"Resuming from checkpoint in {data_path}")
-                with open(data_path, "rb") as fp:
-                    checkpoint_state = pickle.load(fp)
-                start_epoch = checkpoint_state["epoch"]
-                model.load_state_dict(checkpoint_state["net_state_dict"])
-                optimizer_tune.load_state_dict(checkpoint_state["optimizer_state_dict"])
-        else:
-            start_epoch = 0
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size_tune, shuffle=True)
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size_tune)
-        early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
-        steps = config_tune['epochs'] * len(train_dataloader)
-        lr_scheduler_tune = self.get_lr_scheduler(optimizer_tune, steps)
-        loss_fn_tune = self.get_loss_fn(margin=margin_tune)
-        loss_fn_tune.to(device)
-        for epoch in range(start_epoch, config_tune["epochs"]):
-            self.train_model(epoch, train_dataloader, model, optimizer_tune, loss_fn_tune, lr_scheduler_tune, model, device)
-            avg_val_loss, accuracy = self.validate(epoch, val_dataloader, loss_fn_tune, model, device)
+    distance_function = cfg.get_distance_function(args.distance_function)
+    
+    if checkpoint:
+        with checkpoint.as_directory() as checkpoint_dir:
+            data_path = Path(checkpoint_dir) / "data.pkl"
+            print(f"Resuming from checkpoint in {data_path}")
+            with open(data_path, "rb") as fp:
+                checkpoint_state = pickle.load(fp)
+            start_epoch = checkpoint_state["epoch"]
+            model.load_state_dict(checkpoint_state["net_state_dict"])
+            optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
+    else:
+        start_epoch = 0
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+    # early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
+
+    for epoch in range(start_epoch, config["epochs"]):
+        model.train()
+        total_loss = 0.0
+        for batch in train_dataloader:
+            anchor_input_ids = batch['anchor_input_ids'].to(device)
+            anchor_attention_mask = batch['anchor_attention_mask'].to(device)
+            positive_input_ids = batch['positive_input_ids'].to(device)
+            positive_attention_mask = batch['positive_attention_mask'].to(device)
+            negative_input_ids = batch['negative_input_ids'].to(device)
+            negative_attention_mask = batch['negative_attention_mask'].to(device)
+            optimizer.zero_grad()
+            anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
+            positive_embeddings = model(positive_input_ids, positive_attention_mask)
+            negative_embeddings = model(negative_input_ids, negative_attention_mask)
+            loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+            
+            total_loss += loss_value.item()
+            loss_value.backward()
+            optimizer.step()
+            lr_scheduler.step()
+            
+        # Validate the model
+        val_loss = 0.0
+        correct_count = 0
+        avg_val_loss = 0.0
+        model.eval()
+        with torch.no_grad():
+            for batch in val_dataloader:
+                anchor_input_ids = batch['anchor_input_ids'].to(device)
+                anchor_attention_mask = batch['anchor_attention_mask'].to(device)
+                positive_input_ids = batch['positive_input_ids'].to(device)
+                positive_attention_mask = batch['positive_attention_mask'].to(device)
+                negative_input_ids = batch['negative_input_ids'].to(device)
+                negative_attention_mask = batch['negative_attention_mask'].to(device)
+                anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
+                positive_embeddings = model(positive_input_ids, positive_attention_mask)
+                negative_embeddings = model(negative_input_ids, negative_attention_mask)
+                loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+                val_loss += loss_value.item()
+
+                distance_positive = distance_function(anchor_embeddings, positive_embeddings)
+                distance_negative = distance_function(anchor_embeddings, negative_embeddings)
+                correct_count += torch.sum(distance_positive < distance_negative).item()
+
+        avg_val_loss = val_loss / len(val_dataloader)
+        if epoch % 5 == 0:
             checkpoint_data = {
                 "epoch": epoch,
                 "net_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer_tune.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
             }
             with tempfile.TemporaryDirectory() as checkpoint_dir:
                 data_path = Path(checkpoint_dir) / "data.pkl"
-                print(data_path)
                 with open(data_path, "wb") as fp:
                     pickle.dump(checkpoint_data, fp)
                 checkpoint = Checkpoint.from_directory(checkpoint_dir)
                 train.report(
-                    {"loss": avg_val_loss, "accuracy": accuracy},
+                    {"loss": avg_val_loss, "accuracy": correct_count / len(val_dataloader.dataset)},
                     checkpoint=checkpoint,
                 )
-            if early_stopping_tune.step(avg_val_loss):
-                print("Early stopping triggered")
-                break 
-            
-            
-
-
-
+        # if early_stopping_tune.step(avg_val_loss):
+        #     print("Early stopping triggered")
+        #     break 

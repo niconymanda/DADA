@@ -25,7 +25,7 @@ def get_args():
     parser.add_argument('--model_name', type=str, default='FacebookAI/roberta-large', help='Model to use')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
-    parser.add_argument('--early_stopping_patience', type=int, default=3, help='Patience for early stopping based on validation loss')
+    parser.add_argument('--early_stopping_patience', type=int, default=10, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
     parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
@@ -100,7 +100,7 @@ def init_env(args):
         np.random.seed(seed_val)
         torch.manual_seed(seed_val)
         torch.cuda.manual_seed_all(seed_val)
-    os.environ["CUDA_VISIBLE_DEVICES"]="1"
+    os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -155,7 +155,7 @@ def save_model_config(
                 }
         },
         "loss_function": {
-            "name": "TripletLoss",
+            "name": args.loss_function,
             "args": {
                 "margin": args.margin,
                 "distance_function": args.distance_function,
@@ -169,7 +169,7 @@ def save_model_config(
             "batch_size": args.batch_size,                # batch size
             "shuffle": True,                 # shuffle training data before splitting
             "validation_split": 0.2,         # size of validation dataset. float(portion) or int(number of samples)
-            "num_workers": 2,                # number of cpu processes to be used for data loading
+            "num_workers": 0,                # number of cpu processes to be used for data loading
           }
         },
         "optimizer_LLM_model": {

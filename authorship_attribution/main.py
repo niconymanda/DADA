@@ -17,7 +17,7 @@ def main(args):
     repository_id = f"/data/iivanova-23/output_data/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
     os.makedirs(repository_id, exist_ok=True)
     
-    train_data, temp_data = train_test_split(data, test_size=0.4, stratify=data['label'])
+    train_data, temp_data = train_test_split(data, test_size=0.3, stratify=data['label'])
     val_data, test_data = train_test_split(temp_data, test_size=0.5, stratify=temp_data['label'])
     train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True)
     val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True)

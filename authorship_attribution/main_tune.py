@@ -2,7 +2,6 @@ import config
 from sklearn.model_selection import train_test_split
 from dataset import AuthorTripletLossDataset
 from model import AuthorshipLLM
-from train import train_tune
 from ray.tune.schedulers import ASHAScheduler
 import ray
 from ray import tune
@@ -14,7 +13,7 @@ from test_model import TesterAuthorshipAttribution
 import os
 import pickle
 from pathlib import Path
-from train import TrainerAuthorshipAttribution
+from train import train_tune
 
 def main(args):
     config.init_env(args)
@@ -35,8 +34,8 @@ def main(args):
     config_tune = {
         "lr": tune.loguniform(1e-8, 1e-2),  
         "batch_size": tune.choice([8, 16, 32, 64]), 
-        "margin": tune.choice([0.1, 0.5, 0.7, 1.0]),
-        "epochs": 15
+        "margin": tune.choice([0.1, 0.5, 1.0, 1.5, 2.0]),	
+        "epochs": 14
     }
 
     scheduler = ASHAScheduler(
@@ -47,19 +46,8 @@ def main(args):
         reduction_factor=2  
     )
 
-    trainer = TrainerAuthorshipAttribution(model=model,
-                                           train_dataloader=None,
-                                           val_dataloader=None,
-                                           args=args,
-                                           repository_id=repository_id,
-                                           author_id_map=author_id_map,
-                                           report_to='tensorboard',
-                                           early_stopping=True,
-                                           save_model=False,
-                                           )
-
     analysis = tune.run(
-    tune.with_parameters(trainer.train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device, args=args),
+    tune.with_parameters(train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device, args=args),
     resources_per_trial={"cpu":64, "gpu": 1},  
     config=config_tune,
     num_samples=10,  
