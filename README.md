@@ -26,6 +26,7 @@ This project fine-tunes a BERT-like model to perform authorship classification, 
 - [ ] Implement test function for the spoofed data.
 - [ ] Implement run training from the config file and save model params to config file.
 - [x] Put the init of the optimizer, lr scheduler, loss function in the `Trainer` class
+- [ ] Implement ~~triplet~~, ~~contrastive~~, ada_triplet, hinge, ~~cos2~~ loss
 - [ ] Test with more encoders 
 - [ ] Tests with cosine similarity in the Triplet loss instead of the L2 Norm 
 

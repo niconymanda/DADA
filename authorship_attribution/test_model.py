@@ -82,13 +82,14 @@ class TesterAuthorshipAttribution:
         self.plot_cosine_distence_distribution('spoofed')
 
         #Test results on classification model
-        classif_results = self.test_classification(test_dataloader)
-        results.update(classif_results)
-        config.write_results_to_file(results, './output/results.txt', self.args)
+        if self.classification_model is not None:
+            classif_results = self.test_classification(test_dataloader)
+            results.update(classif_results)
+            config.write_results_to_file(results, './output/results.txt', self.args)
 
-        classif_results_spoofed = self.test_classification(spoofed_dataloader)
-        results_spoofed.update(classif_results_spoofed)
-        config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args)
+            classif_results_spoofed = self.test_classification(spoofed_dataloader)
+            results_spoofed.update(classif_results_spoofed)
+            config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args)
 
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
 
@@ -248,7 +249,7 @@ class TesterAuthorshipAttribution:
         """
         if self.classification_model is None:
             print("Classification model not provided for testing.")
-            return None
+            return None 
         self.classification_model.eval()
         all_preds = []
         all_labels = []

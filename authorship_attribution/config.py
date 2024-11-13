@@ -16,12 +16,12 @@ def get_args():
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=14, help='Number of epochs to train for')
+    parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train for')
     parser.add_argument('--epochs_classification', type=int, default=8, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
-    parser.add_argument('--weight_decay', type=float, default=0.001, help='weight_decay')
+    parser.add_argument('--weight_decay', type=float, default=0.0001, help='weight_decay')
     parser.add_argument('--model_name', type=str, default='FacebookAI/roberta-large', help='Model to use')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
@@ -29,10 +29,11 @@ def get_args():
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
     parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
-    parser.add_argument('--margin', type=float, default=0.9, help='Margin for triplet loss')
-    parser.add_argument('--lr_scheduler', type=str, default='linear_warmup', help='Learning rate scheduler')
+    parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
+    parser.add_argument('--margin', type=float, default=1.0, help='Margin for triplet loss')
+    parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler')
     
-    # 350 quotes=5 authors, 450 quotes=3 authors
+    # 350 quotes=5 authors, 450 quotes=3 authors,
     return parser.parse_args()
 
 def load_data(args):

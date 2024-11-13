@@ -14,6 +14,7 @@ from test_model import TesterAuthorshipAttribution
 import os
 import pickle
 from pathlib import Path
+from train import TrainerAuthorshipAttribution
 
 def main(args):
     config.init_env(args)
@@ -46,8 +47,19 @@ def main(args):
         reduction_factor=2  
     )
 
+    trainer = TrainerAuthorshipAttribution(model=model,
+                                           train_dataloader=None,
+                                           val_dataloader=None,
+                                           args=args,
+                                           repository_id=repository_id,
+                                           author_id_map=author_id_map,
+                                           report_to='tensorboard',
+                                           early_stopping=True,
+                                           save_model=False,
+                                           )
+
     analysis = tune.run(
-    tune.with_parameters(train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device, args=args),
+    tune.with_parameters(trainer.train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device, args=args),
     resources_per_trial={"cpu":64, "gpu": 1},  
     config=config_tune,
     num_samples=10,  

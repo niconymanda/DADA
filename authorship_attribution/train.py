@@ -5,7 +5,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import tempfile
 from ray import train
-from loss_functions import TripletLoss
+from loss_functions import TripletLoss, ContrastiveLoss, SquaredCosineSimilarityLoss
 from ray.train import Checkpoint, get_checkpoint
 from pathlib import Path
 import ray.cloudpickle as pickle
@@ -96,8 +96,10 @@ class TrainerAuthorshipAttribution:
         """
         
         for epoch_n in range(self.args.epochs):
-            train_loss = self.train_model(epoch_n)
-            val_loss = self.validate(epoch_n)
+            # train_loss = self.train_model(epoch_n)
+            # val_loss = self.validate(epoch_n)
+            train_loss = self.train_model(epoch_n, self.train_dataloader, self.optimizer, self.loss_fn, self.lr_scheduler, self.model, self.device)
+            val_loss, accuracy = self.validate(epoch_n, self.val_dataloader, self.loss_fn, self.model, self.device)
             if self.early_stopping:
                 if self.early_stopping_model.step(val_loss):
                     print("Early stopping triggered")
@@ -233,7 +235,7 @@ class TrainerAuthorshipAttribution:
         self._log_metrics(metrics, phase='Val_classificaion_epochs')
         return val_loss
 
-    def train_model(self, epoch_n):
+    def train_model(self, epoch_n, train_dataloader, optimizer, loss_fn, lr_scheduler, model, device):
         """
         Trains only the the given LLM model using the provided training data.
         Args:
@@ -242,30 +244,30 @@ class TrainerAuthorshipAttribution:
             float: The average loss over the training data.
         """
         
-        self.model.train()
+        model.train()
         total_loss = 0
         current_loss = 0.0
         correct_count = 0
-        iters = len(self.train_dataloader)
-        for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
-            anchor_input_ids = batch['anchor_input_ids'].to(self.device)
-            anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
-            positive_input_ids = batch['positive_input_ids'].to(self.device)
-            positive_attention_mask = batch['positive_attention_mask'].to(self.device)
-            negative_input_ids = batch['negative_input_ids'].to(self.device)
-            negative_attention_mask = batch['negative_attention_mask'].to(self.device)
+        iters = len(train_dataloader)
+        for i,batch in enumerate(tqdm(train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
+            anchor_input_ids = batch['anchor_input_ids'].to(device)
+            anchor_attention_mask = batch['anchor_attention_mask'].to(device)
+            positive_input_ids = batch['positive_input_ids'].to(device)
+            positive_attention_mask = batch['positive_attention_mask'].to(device)
+            negative_input_ids = batch['negative_input_ids'].to(device)
+            negative_attention_mask = batch['negative_attention_mask'].to(device)
 
-            self.optimizer.zero_grad()
-            anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
-            positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
-            negative_embeddings = self.model(negative_input_ids, negative_attention_mask)
-            loss_value = self.loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+            optimizer.zero_grad()
+            anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
+            positive_embeddings = model(positive_input_ids, positive_attention_mask)
+            negative_embeddings = model(negative_input_ids, negative_attention_mask)
+            loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
             total_loss += loss_value.item()
             current_loss += loss_value.item()
             
             loss_value.backward()
-            self.optimizer.step()
-            self.lr_scheduler.step() if self.lr_scheduler else None
+            optimizer.step()
+            lr_scheduler.step()
             
             # Accuracy calculation
             distance_positive = self.distance_function(anchor_embeddings, positive_embeddings)
@@ -281,16 +283,16 @@ class TrainerAuthorshipAttribution:
                     self._log_metrics(metrics, phase='Train')
                     current_loss = 0.0
                 
-        train_loss = total_loss / len(self.train_dataloader)
+        train_loss = total_loss / len(train_dataloader)
         metrics = {
             "Loss": train_loss,
-            "Accuracy": correct_count / len(self.train_dataloader.dataset),
+            "Accuracy": correct_count / len(train_dataloader.dataset),
             "epoch": epoch_n,
         }
         self._log_metrics(metrics, phase='Train_epoch')
-        return total_loss / len(self.train_dataloader)
+        return total_loss / len(train_dataloader)
 
-    def validate(self, epoch_n):
+    def validate(self, epoch_n, val_dataloader, loss_fn, model, device):
         """
         Validates the model on the validation dataset.
         Args:
@@ -299,24 +301,24 @@ class TrainerAuthorshipAttribution:
             float: The average validation loss over the entire validation dataset.
         """
         
-        self.model.eval()
+        model.eval()
         total_loss = 0
         current_loss = 0.0
         correct_count = 0
         total = 0
         with torch.no_grad():
-            for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
-                anchor_input_ids = batch['anchor_input_ids'].to(self.device)
-                anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
-                positive_input_ids = batch['positive_input_ids'].to(self.device)
-                positive_attention_mask = batch['positive_attention_mask'].to(self.device)
-                negative_input_ids = batch['negative_input_ids'].to(self.device)
-                negative_attention_mask = batch['negative_attention_mask'].to(self.device)
+            for i,batch in enumerate(tqdm(val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
+                anchor_input_ids = batch['anchor_input_ids'].to(device)
+                anchor_attention_mask = batch['anchor_attention_mask'].to(device)
+                positive_input_ids = batch['positive_input_ids'].to(device)
+                positive_attention_mask = batch['positive_attention_mask'].to(device)
+                negative_input_ids = batch['negative_input_ids'].to(device)
+                negative_attention_mask = batch['negative_attention_mask'].to(device)
 
-                anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
-                positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
-                negative_embeddings = self.model(negative_input_ids, negative_attention_mask)
-                loss_value = self.loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+                anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
+                positive_embeddings = model(positive_input_ids, positive_attention_mask)
+                negative_embeddings = model(negative_input_ids, negative_attention_mask)
+                loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
                 
@@ -343,7 +345,7 @@ class TrainerAuthorshipAttribution:
                 "epoch": epoch_n,
                 }
         self._log_metrics(metrics, phase='Val_epoch')
-        return val_loss
+        return val_loss, correct_count / total
     
     def _log_metrics(self, metrics, phase):
         if self.report_to == 'wandb':
@@ -361,144 +363,113 @@ class TrainerAuthorshipAttribution:
                 else:
                     print("Invalid phase")
 
-    def get_loss_fn(self):
-        return TripletLoss(margin=self.args.margin, distance_function=self.args.distance_function)
+    def get_loss_fn(self, margin=None):
+        margin = self.args.margin if margin is None else margin
+        if self.args.loss_function == 'triplet':
+            return TripletLoss(margin=margin, distance_function=self.args.distance_function)
+        elif self.args.loss_function == 'contrastive':
+            return ContrastiveLoss(margin=margin)
+        elif self.args.loss_function == 'cos2':
+            return SquaredCosineSimilarityLoss()
+        else:
+            raise ValueError("Invalid loss_function value. Must be 'triplet', 'contrastive', or 'cos2'")
     
     def get_optimizer(self):
         return optim.AdamW(self.model.parameters(), lr=self.args.learning_rate)
     
-    def get_lr_scheduler(self):
-        num_training_steps = self.args.epochs * (len(self.train_dataloader) // self.args.batch_size) 
+    def get_lr_scheduler(self, optimizer=None, num_training_steps=None):
+        
+        num_training_steps = self.args.epochs * len(self.train_dataloader) if num_training_steps is None else num_training_steps
         warmup_steps = int(0.1 * num_training_steps)  
         
         if self.args.lr_scheduler == 'linear_warmup':
             return get_linear_schedule_with_warmup(
-                optimizer=self.optimizer,
+                optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=warmup_steps,
                 num_training_steps=num_training_steps
                 )
         if self.args.lr_scheduler == 'linear':
-            return optim.lr_scheduler.StepLR(self.optimizer, step_size=30, gamma=0.1, last_epoch=-1, verbose=False)
+            return optim.lr_scheduler.StepLR(self.optimizer, step_size=30, gamma=0.1, last_epoch=-1)
         elif self.args.lr_scheduler == 'cosine':
-            return optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=100, eta_min=0, last_epoch=-1, verbose=False)
+            return optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=num_training_steps, eta_min=1e-8, last_epoch=-1)
         else:
             raise ValueError("Invalid lr_scheduler value. Must be 'linear_warmup', 'linear', or 'cosine'")
 
-def train_tune(config, train_dataset, val_dataset, model, device, args):
-    """
-    Trains and tunes a model using the provided configuration, datasets, and device.
-    Args:
-        config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
-        train_dataset (Dataset): The dataset used for training.
-        val_dataset (Dataset): The dataset used for validation.
-        model (nn.Module): The model to be trained.
-        device (str): The device to run the training on, either 'cpu' or 'cuda'.
-    Returns:
-        None
-    The function performs the following steps:
-    1. Sets up the device for training (CPU or GPU).
-    2. Initializes the loss function and optimizer.
-    3. Loads a checkpoint if available to resume training from a previous state.
-    4. Creates data loaders for the training and validation datasets.
-    5. Trains the model for the specified number of epochs, performing validation at the end of each epoch.
-    6. Implements early stopping based on validation loss to prevent overfitting.
-    7. Saves checkpoints during training to allow resuming from the last state.
-    Note:
-        The function uses a TripletLoss with a fixed margin of 0.5.
-    """
-    
-    batch_size = config["batch_size"]
-    learning_rate = config["lr"]
-    margin = config["margin"]
-    # device = "cpu"
-    # if torch.cuda.is_available():
-    #     device = "cuda:0"
-    #     if torch.cuda.device_count() > 1:
-    #         model = nn.DataParallel(model)
-    device = cfg.get_device()
-    model.to(device)
-    loss_fn = TripletLoss(margin=margin)
-    loss_fn = loss_fn.to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
-    checkpoint = get_checkpoint()
-    if checkpoint:
-        with checkpoint.as_directory() as checkpoint_dir:
-            data_path = Path(checkpoint_dir) / "data.pkl"
-            print(f"Resuming from checkpoint in {data_path}")
-            with open(data_path, "rb") as fp:
-                checkpoint_state = pickle.load(fp)
-            start_epoch = checkpoint_state["epoch"]
-            model.load_state_dict(checkpoint_state["net_state_dict"])
-            optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
-    else:
-        start_epoch = 0
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
-    early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
+    def train_tune(self, config_tune, train_dataset, val_dataset, model, device, args):
+        """
+        Trains and tunes a model using the provided configuration, datasets, and device.
+        Args:
+            config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
+            train_dataset (Dataset): The dataset used for training.
+            val_dataset (Dataset): The dataset used for validation.
+            model (nn.Module): The model to be trained.
+            device (str): The device to run the training on, either 'cpu' or 'cuda'.
+        Returns:
+            None
+        The function performs the following steps:
+        1. Sets up the device for training (CPU or GPU).
+        2. Initializes the loss function and optimizer.
+        3. Loads a checkpoint if available to resume training from a previous state.
+        4. Creates data loaders for the training and validation datasets.
+        5. Trains the model for the specified number of epochs, performing validation at the end of each epoch.
+        6. Implements early stopping based on validation loss to prevent overfitting.
+        7. Saves checkpoints during training to allow resuming from the last state.
+        Note:
+            The function uses a TripletLoss with a fixed margin of 0.5.
+        """
 
-    for epoch in range(start_epoch, config["epochs"]):
-        model.train()
-        total_loss = 0.0
-        for batch in train_dataloader:
-            anchor_input_ids = batch['anchor_input_ids'].to(device)
-            anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-            positive_input_ids = batch['positive_input_ids'].to(device)
-            positive_attention_mask = batch['positive_attention_mask'].to(device)
-            negative_input_ids = batch['negative_input_ids'].to(device)
-            negative_attention_mask = batch['negative_attention_mask'].to(device)
-            optimizer.zero_grad()
-            anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
-            positive_embeddings = model(positive_input_ids, positive_attention_mask)
-            negative_embeddings = model(negative_input_ids, negative_attention_mask)
-            loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
-            loss_value.backward()
-            optimizer.step()
-            total_loss += loss_value.item()
+        batch_size_tune = config_tune["batch_size"]
+        learning_rate_tune = config_tune["lr"]
+        margin_tune = config_tune["margin"]
+        # device = "cpu"
+        # if torch.cuda.is_available():
+        #     device = "cuda:0"
+        #     if torch.cuda.device_count() > 1:
+        #         model = nn.DataParallel(model)
+
+        optimizer_tune = optim.AdamW(model.parameters(), lr=learning_rate_tune)
+        checkpoint = get_checkpoint()
+        if checkpoint:
+            with checkpoint.as_directory() as checkpoint_dir:
+                data_path = Path(checkpoint_dir) / "data.pkl"
+                print(f"Resuming from checkpoint in {data_path}")
+                with open(data_path, "rb") as fp:
+                    checkpoint_state = pickle.load(fp)
+                start_epoch = checkpoint_state["epoch"]
+                model.load_state_dict(checkpoint_state["net_state_dict"])
+                optimizer_tune.load_state_dict(checkpoint_state["optimizer_state_dict"])
+        else:
+            start_epoch = 0
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size_tune, shuffle=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size_tune)
+        early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
+        steps = config_tune['epochs'] * len(train_dataloader)
+        lr_scheduler_tune = self.get_lr_scheduler(optimizer_tune, steps)
+        loss_fn_tune = self.get_loss_fn(margin=margin_tune)
+        loss_fn_tune.to(device)
+        for epoch in range(start_epoch, config_tune["epochs"]):
+            self.train_model(epoch, train_dataloader, model, optimizer_tune, loss_fn_tune, lr_scheduler_tune, model, device)
+            avg_val_loss, accuracy = self.validate(epoch, val_dataloader, loss_fn_tune, model, device)
+            checkpoint_data = {
+                "epoch": epoch,
+                "net_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer_tune.state_dict(),
+            }
+            with tempfile.TemporaryDirectory() as checkpoint_dir:
+                data_path = Path(checkpoint_dir) / "data.pkl"
+                print(data_path)
+                with open(data_path, "wb") as fp:
+                    pickle.dump(checkpoint_data, fp)
+                checkpoint = Checkpoint.from_directory(checkpoint_dir)
+                train.report(
+                    {"loss": avg_val_loss, "accuracy": accuracy},
+                    checkpoint=checkpoint,
+                )
+            if early_stopping_tune.step(avg_val_loss):
+                print("Early stopping triggered")
+                break 
             
-        # Validate the model
-        val_loss = 0.0
-        correct_count = 0
-        avg_val_loss = 0.0
-        model.eval()
-        with torch.no_grad():
-            for batch in val_dataloader:
-                anchor_input_ids = batch['anchor_input_ids'].to(device)
-                anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-                positive_input_ids = batch['positive_input_ids'].to(device)
-                positive_attention_mask = batch['positive_attention_mask'].to(device)
-                negative_input_ids = batch['negative_input_ids'].to(device)
-                negative_attention_mask = batch['negative_attention_mask'].to(device)
-                anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
-                positive_embeddings = model(positive_input_ids, positive_attention_mask)
-                negative_embeddings = model(negative_input_ids, negative_attention_mask)
-                loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
-                val_loss += loss_value.item()
-
-                distance_positive = torch.norm(anchor_embeddings, positive_embeddings, dim=1, p=2)
-                distance_negative = torch.norm(anchor_embeddings, negative_embeddings, dim=1, p=2)
-                correct_count += torch.sum(distance_positive < distance_negative).item()
-
-        avg_val_loss = val_loss / len(val_dataloader)
-        checkpoint_data = {
-            "epoch": epoch,
-            "net_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-        }
-        with tempfile.TemporaryDirectory() as checkpoint_dir:
-            data_path = Path(checkpoint_dir) / "data.pkl"
-            print(data_path)
-            with open(data_path, "wb") as fp:
-                pickle.dump(checkpoint_data, fp)
-            checkpoint = Checkpoint.from_directory(checkpoint_dir)
-            train.report(
-                {"loss": avg_val_loss, "accuracy": correct_count / len(val_dataloader.dataset)},
-                checkpoint=checkpoint,
-            )
-        if early_stopping_tune.step(avg_val_loss):
-            print("Early stopping triggered")
-            break 
- 
-        
+            
 
 
 

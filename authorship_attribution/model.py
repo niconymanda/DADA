@@ -24,9 +24,23 @@ class AuthorshipLLM(nn.Module):
         super(AuthorshipLLM, self).__init__()
         self.model_name = model_name
         self.model = AutoModel.from_pretrained(model_name)
+        hidden_size = self.model.config.hidden_size
+        self.batch_norm = nn.BatchNorm1d(hidden_size)
+        
+        # self.init_embeddings()
+
+    def init_embeddings(self):
+        """
+        Initialize embeddings with a Gaussian distribution N(0, 1).
+        """
+        for param in self.model.embeddings.parameters():
+            nn.init.normal_(param, mean=0.0, std=1.0)
         
     def forward(self, input_ids, attention_mask=None):
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs.last_hidden_state[:, 0] 
-        pooled_output = F.normalize(pooled_output, p=2, dim=1)
+        # pooled_output = F.normalize(pooled_output, p=2, dim=1)
+        pooled_output = self.batch_norm(pooled_output)
+        
         return pooled_output
+        # return pooled_output
