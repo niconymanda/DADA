@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import pandas as pd
 import os
 import librosa
+import yaml
 
 SUPPORTED_FORMATS = ["wav", "mp3", "flac"]
 
@@ -137,7 +138,8 @@ class InTheWildDataset(torch.utils.data.Dataset):
 
         # Filter out data based on filename in config['split']
         if config is not None:
-            self.df = self.df[self.df[filename_col].isin(config[split])]
+            self.config = yaml.safe_load(open(config, "r"))
+            self.df = self.df[self.df[filename_col].isin(self.config[split])]
 
         # Create id to filename mapping and id to label mapping
         ids = np.arange(len(self.df))
@@ -151,6 +153,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
 
     def load_audio_tensor(self, idx):
         # Load audio file
+        # print(idx)
         filename = os.path.join(self.root_dir, self.id_to_filename[idx])
         audio_arr, _ = load_audio(filename, self.sampling_rate)
         audio_tensor = torch.tensor(pad(audio_arr, self.cut)).float()
