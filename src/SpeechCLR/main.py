@@ -1,7 +1,8 @@
 import torch
 import numpy as np
+import random
 import argparse
-from utils.training import SpeechCLRTrainer, SpeechCLRTrainerVanilla
+from utils.training import SpeechCLRTrainerVanilla
 import os
 
 def get_args():
@@ -13,21 +14,38 @@ def get_args():
     parser.add_argument('--model_save_path', type=str, default='./models', help='Path to save the trained model')
     parser.add_argument('--log_interval', type=int, default=10, help='Interval for logging training status')
     parser.add_argument('--dataset_config', type=str, default='configs/inthewild.yaml', help='Path to the dataset configuration file')
-    parser.add_argument('--output_dir', type=str, default='./output', help='Path to save the output files')
+    parser.add_argument('--log_dir', type=str, default='./runs', help='Path to save logs')
     parser.add_argument('--max_duration', type=int, default=4, help='Maximum duration of audio files')
     parser.add_argument('--sampling_rate', type=int, default=16000, help='Sampling rate of audio files')
     parser.add_argument('--early_stopping_patience', type=int, default=3, help='Number of epochs to wait before early stopping')
     parser.add_argument('--early_stopping_threshold', type=float, default=0.01, help='Threshold for early stopping')
     parser.add_argument('--triplet_margin', type=float, default=1.0, help='Margin for triplet loss')
-    parser.add_argument('--loss_fn', type=str, default='triplet_cosine', help='Loss function to use for training', choices=['triplet', 'triplet_cosine'])
+    parser.add_argument('--loss_fn', type=str, default='triplet_cosine', help='Loss function to use for training', choices=['triplet', 'triplet_cosine', 'ada_triplet'])
     parser.add_argument('--gpu_id', type=int, default=0, help='ID of the GPU to use for training')
-
+    parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
+    parser.add_argument('--at_lambda', type=float, default=0.5, help='Lambda for AdaTriplet loss')
+    parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility')
     return parser.parse_args()
+
+def seed_everything(seed: int):
+    """fix the seed for reproducibility."""
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    #  CUBLAS_WORKSPACE_CONFIG=:4096:8
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
 
 if __name__ == "__main__":
     args = get_args()
-
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+
+    seed_everything(args.seed)
     # args.device = f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu"
     trainer = SpeechCLRTrainerVanilla(args)
     trainer.train()
+    # trainer.validate()

@@ -1,0 +1,6 @@
+--2024-11-22 14:56:08--  https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=
+Resolving ieeexplore.ieee.org (ieeexplore.ieee.org)... 2600:9000:218f:600:1e:d873:7a00:93a1, 2600:9000:218f:5600:1e:d873:7a00:93a1, 2600:9000:218f:a600:1e:d873:7a00:93a1, ...
+Connecting to ieeexplore.ieee.org (ieeexplore.ieee.org)|2600:9000:218f:600:1e:d873:7a00:93a1|:443... connected.
+HTTP request sent, awaiting response... 418 Unknown Code
+2024-11-22 14:56:08 ERROR 418: Unknown Code.
+

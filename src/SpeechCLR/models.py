@@ -49,10 +49,10 @@ class CompressionModule(nn.Module):
 
     def forward(self, x):
         x_pool = self.pool(x)
-        x = self.bottleneck(x_pool)
-        x = self.head(x + x_pool)
-        x = nn.functional.normalize(x, p=2, dim=-1)
-        return x
+        x_bottle = self.bottleneck(x_pool)
+        x_head = self.head(x_bottle + x_pool)
+        x_norm = nn.functional.normalize(x_head, p=2, dim=-1)
+        return x_norm
 
 
 class SpeechEmbedder(nn.Module):
@@ -108,31 +108,61 @@ class SpeechEmbedder(nn.Module):
     def eval(self):
         self.compression.eval()
 
-    def forward(self, input):
+    def forward(self, input, mode="triplet"):
 
-        a, p, n = input["anchor"], input["positive"], input["negative"]
-        x_a, x_p, x_n = self.get_features(a), self.get_features(p), self.get_features(n)
+        if mode=="classification":
+            x = self.get_features(input['x'])
+            x = self.compression(x)
+            return x
+        
+        elif mode=="triplet":
+            a, p, n = input["anchor"], input["positive"], input["negative"]
+            x_a, x_p, x_n = self.get_features(a), self.get_features(p), self.get_features(n)
 
-        x_a, x_p, x_n = (
-            self.compression(x_a),
-            self.compression(x_p),
-            self.compression(x_n),
-        )
+            x_a, x_p, x_n = (
+                self.compression(x_a),
+                self.compression(x_p),
+                self.compression(x_n),
+            )
 
-        x_a, x_p, x_n = (
-            rearrange(x_a, "n t f -> n f t"),
-            rearrange(x_p, "n t f -> n f t"),
-            rearrange(x_n, "n t f -> n f t"),
-        )
+            x_a, x_p, x_n = (
+                rearrange(x_a, "n t f -> n f t"),
+                rearrange(x_p, "n t f -> n f t"),
+                rearrange(x_n, "n t f -> n f t"),
+            )
 
-        x_a, x_p, x_n = (
-            x_a.mean(dim=-1),
-            x_p.mean(dim=-1),
-            x_n.mean(dim=-1),
-        )
+            x_a, x_p, x_n = (
+                x_a.mean(dim=-1),
+                x_p.mean(dim=-1),
+                x_n.mean(dim=-1),
+            )
 
-        return {
-            "anchor": x_a,
-            "positive": x_p,
-            "negative": x_n,
-        }
+            return {
+                "anchor": x_a,
+                "positive": x_p,
+                "negative": x_n,
+            }
+        
+        elif mode=="pair":
+            a, b = input["a"], input["b"]
+            x_a, x_b = self.get_features(a), self.get_features(b)
+
+            x_a, x_b = self.compression(x_a), self.compression(x_b)
+
+            x_a, x_b = (
+                rearrange(x_a, "n t f -> n f t"),
+                rearrange(x_b, "n t f -> n f t"),
+            )
+
+            x_a, x_b = (
+                x_a.mean(dim=-1),
+                x_b.mean(dim=-1),
+            )
+
+            return {
+                "a": x_a,
+                "b": x_b,
+            }
+        
+        else:
+            raise NotImplementedError(f"Mode {self.mode} not implemented")

@@ -154,7 +154,11 @@ class InTheWildDataset(torch.utils.data.Dataset):
     def load_audio_tensor(self, idx):
         # Load audio file
         # print(idx)
-        filename = os.path.join(self.root_dir, self.id_to_filename[idx])
+        try:
+            filename = os.path.join(self.root_dir, self.id_to_filename[idx])
+        except Exception as e:
+            print(e)
+            print(idx)
         audio_arr, _ = load_audio(filename, self.sampling_rate)
         audio_tensor = torch.tensor(pad(audio_arr, self.cut)).float()
         return audio_tensor
@@ -166,11 +170,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
         )
         negative_ids = np.where(self.df["speaker"].values != anchor_author)[0]
 
-        if self.split != "train":
-            return positive_id, negative_ids
-
-        else:
-            return positive_id, np.random.choice(negative_ids)
+        return positive_id, np.random.choice(negative_ids)
 
     def __len__(self):
         return len(self.id_to_filename)
@@ -180,7 +180,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
         y = self.id_to_label[idx]
 
         if self.mode == "classification":
-            return {"input_tensor": x, "label": y}
+            return {"x": x, "label": y}
 
         elif self.mode == "triplet":
             id_p, id_n = self.get_triplets_from_anchor(idx)
@@ -189,5 +189,17 @@ class InTheWildDataset(torch.utils.data.Dataset):
             x_n = self.load_audio_tensor(id_n)
 
             return {"anchor": x, "positive": x_p, "negative": x_n}
+        
+        elif self.mode == "pair":
+            a = x
+            a_label = y
+
+            # Choose another idx at random
+            idx2 = np.random.choice(np.arange(len(self.df)))
+            b = self.load_audio_tensor(idx2)
+            b_label = self.id_to_label[idx2]
+
+            return {"a": a, "b": b, "a_label": a_label, "b_label": b_label}
+
         else:
-            raise NotImplementedError("Mode not implemented")
+            raise NotImplementedError(f"Mode {self.mode} not implemented")

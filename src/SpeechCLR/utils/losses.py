@@ -3,6 +3,94 @@ import torch.nn.functional as F
 from torch.nn import TripletMarginLoss, TripletMarginWithDistanceLoss
 import os
 
+import torch.nn as nn
+from torch.nn.functional import cosine_similarity
+
+class SquaredSimilarity(nn.Module):
+    def __init__(self):
+        super(SquaredSimilarity, self).__init__()
+        self.sq_cos = lambda x, y : F.cosine_similarity(x, y) ** 2
+
+    def forward(self, x, y, x_label, y_label):
+        batch_size = x.size(0)
+
+        same_mask = (x_label.unsqueeze(1) == y_label.unsqueeze(0)).float()
+        diff_mask = ~same_mask
+
+        loss = torch.zeros(batch_size, device=x.device)
+        loss[same_mask] = self.sq_cos(x[same_mask], y[same_mask])
+        loss[diff_mask] = 1 - self.sq_cos(x[diff_mask], y[diff_mask])
+
+        return loss.mean()
+
+
+class NormalisedEuclideanDistance(nn.Module):
+    def __init__(self):
+        super(NormalisedEuclideanDistance, self).__init__()
+
+    def forward(self, x, y):
+        pass
+
+class TripletMarginCosineLoss(nn.Module):
+    def __init__(self, margin=1.0):
+        super(TripletMarginCosineLoss, self).__init__()
+        self.margin = margin
+        self.counter = 0
+
+    def update(self):   
+        self.counter += 1
+
+    def forward(self, anchor, positive, negative):
+        pos_dist = 1 - F.cosine_similarity(anchor, positive)
+        neg_dist = 1 - F.cosine_similarity(anchor, negative)
+
+        loss = F.relu(pos_dist - neg_dist + self.margin)
+        return loss.mean()
+
+class AdaTriplet(nn.Module):
+    def __init__(self, K_d=2, K_an=2, eps=0, beta=0, lambda_=1):
+        super(AdaTriplet, self).__init__()
+        self.K_d = K_d  
+        self.K_an = K_an
+        self.eps = eps
+        self.beta = beta
+        self.lambda_ = lambda_
+
+        # stats, init?
+        self.mu_d = 0
+        self.mu_an = 0
+        self.counter = 0
+
+    def reset(self):
+        self.mu_d = 0
+        self.mu_an = 0
+        self.counter = 0
+
+    def update_stats(self, phi_ap, phi_an):
+        delta = phi_ap - phi_an
+        self.mu_d = (self.counter * self.mu_d + delta) / (self.counter + 1)
+        self.mu_an = (self.counter * self.mu_an + phi_an) / (self.counter + 1)
+        self.counter = self.counter + 1
+
+    def update_margins(self):
+        self.eps = self.mu_d / self.K_d
+        self.beta = self.mu_an / self.K_an
+
+    def __repr__(self):
+        return f"AdaTriplet(K_d={self.K_d}, K_an={self.K_an}, eps={self.eps}, beta={self.beta}, lambda_={self.lambda_})"
+
+    def forward(self, anchor, positive, negative):
+        phi_ap = cosine_similarity(anchor, positive)
+        phi_an = cosine_similarity(anchor, negative)
+
+        self.update_stats(phi_ap, phi_an)
+        self.update_margins()
+
+        loss = torch.clamp_min(phi_an - phi_ap + self.eps, 0) 
+        loss = loss + self.lambda_ * torch.clamp_min(phi_an - self.beta, 0)
+        loss = torch.mean(loss)
+        return loss
+
 
 class CosineDistance(torch.nn.Module):
     def __init__(self):
