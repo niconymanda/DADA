@@ -393,7 +393,7 @@ class TrainerAuthorshipAttribution:
         if self.args.lr_scheduler == 'linear':
             return optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1, last_epoch=-1)
         elif self.args.lr_scheduler == 'cosine':
-            return optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.epochs*len(self.train_dataloader), eta_min=0, last_epoch=-1)
+            return optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.epochs*len(self.train_dataloader), eta_min=1e-7, last_epoch=-1)
         else:
             raise ValueError("Invalid lr_scheduler value. Must be 'linear_warmup', 'linear', or 'cosine'")
 
@@ -434,7 +434,6 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
     loss_fn = TripletLoss(margin=margin)
     loss_fn = loss_fn.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
-    lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"], eta_min=0, last_epoch=-1)
     checkpoint = get_checkpoint()
 
     distance_function = cfg.get_distance_function(args.distance_function)
@@ -452,6 +451,7 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         start_epoch = 0
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+    lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"]*len(train_dataloader), eta_min=0, last_epoch=-1)
     # early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
 
     for epoch in range(start_epoch, config["epochs"]):
@@ -499,7 +499,7 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
                 correct_count += torch.sum(distance_positive < distance_negative).item()
 
         avg_val_loss = val_loss / len(val_dataloader)
-        if epoch % 5 == 0:
+        if epoch % config['epochs']-1 == 0:
             checkpoint_data = {
                 "epoch": epoch,
                 "net_state_dict": model.state_dict(),

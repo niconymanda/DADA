@@ -24,10 +24,23 @@ class AuthorshipLLM(nn.Module):
         super(AuthorshipLLM, self).__init__()
         self.model_name = model_name
         self.model = AutoModel.from_pretrained(model_name)
+        # print(self.model)
         hidden_size = self.model.config.hidden_size
         self.batch_norm = nn.BatchNorm1d(hidden_size)
-        
+        self.layer_norm = nn.LayerNorm(hidden_size)
         # self.init_embeddings()
+        # self.freeze_layers()
+
+    def freeze_layers(self, n_layers=5):
+        """
+        Freeze the first n_layers of the model.
+        """
+        for param in self.model.parameters():
+            param.requires_grad = False
+        for param in self.model.encoder.parameters():
+            param.requires_grad = True
+        for param in self.model.pooler.parameters():
+            param.requires_grad = True
 
     def init_embeddings(self):
         """
@@ -40,7 +53,7 @@ class AuthorshipLLM(nn.Module):
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs.last_hidden_state[:, 0] 
         # pooled_output = F.normalize(pooled_output, p=2, dim=1)
-        pooled_output = self.batch_norm(pooled_output)
+        # pooled_output = self.batch_norm(pooled_output)
+        pooled_output = self.layer_norm(pooled_output)
         
         return pooled_output
-        # return pooled_output

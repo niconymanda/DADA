@@ -35,7 +35,7 @@ def main(args):
         "lr": tune.loguniform(1e-8, 1e-2),  
         "batch_size": tune.choice([8, 16, 32, 64]), 
         "margin": tune.choice([0.1, 0.5, 1.0, 1.5, 2.0]),	
-        "epochs": 14
+        "epochs": 12
     }
 
     scheduler = ASHAScheduler(

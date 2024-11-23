@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import config
+import torch.nn.functional as F
 
 class TripletLoss(nn.Module):
     """
@@ -96,13 +97,13 @@ class SquaredCosineSimilarityLoss(nn.Module):
         self.reduction = reduction
     
     def forward(self, anchor: torch.Tensor, positive: torch.Tensor, negative: torch.Tensor) -> torch.Tensor:
-        positive_similarity = torch.nn.functional.cosine_similarity(anchor, positive)
-        negative_similarity = torch.nn.functional.cosine_similarity(anchor, negative)
+        positive_similarity = F.cosine_similarity(anchor, positive)
+        negative_similarity = F.cosine_similarity(anchor, negative)
 
         loss_same = (1 - positive_similarity)/2
         loss_diff = negative_similarity.pow(2)
         
-        # Radomly select the target for the loss if same or different
+        # Randomly select the target for the loss if same or different
         target = torch.randint(0, 2, (anchor.size(0),), dtype=torch.float32, device=anchor.device)
         loss = torch.where(target == 1, loss_same, loss_diff)
        
