@@ -108,22 +108,86 @@ class SpeechCLRTrainerVanilla:
         self.val_loader = DataLoader(
             self.val_dataset, batch_size=args.batch_size, shuffle=True
         )
+        self.vis_loader = DataLoader(
+            self.vis_dataset, batch_size=args.batch_size, shuffle=True
+        )
 
         self.logger = Logger(log_dir=args.log_dir)
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model.to(self.device)
 
+
+        print(f"Training on device: {self.device}")
+        print(f"Loss function: {args.loss_fn}")
+        print(f"Training Samples : {len(self.train_dataset)}")
+        print(f"Validation Samples : {len(self.val_dataset)}")
+
+    def log_init(self):
+
+        print("Getting initial metrics.")
+
+        # Get loss on train set
+        self.model.eval()
+        train_losses = train_accs = []
+        with torch.no_grad():
+            for i, input in enumerate(self.train_loader):
+                input = {k: v.to(self.device) for k, v in input.items()}
+                output = self.model(input)
+                loss = self.criterion(output["anchor"], output["positive"], output["negative"], eval=True)
+                abx_acc = self.metrics_fn(
+                    output["anchor"], output["positive"], output["negative"]
+                )
+                train_losses.append(loss.item())
+                train_accs.append(abx_acc)
+        train_loss = np.mean(train_losses)
+        train_acc = np.mean(train_accs)
+
+        train_info = {
+            "train/loss": train_loss,
+            "train/abx_acc": train_acc,
+        }
+
+        if isinstance(self.criterion, AdaTriplet):
+            train_info["train/ada_triplet/eps"] = self.criterion.eps
+            train_info["train/ada_triplet/beta"] = self.criterion.beta
+
+        self.save_to_log(self.args.log_dir, self.logger, train_info, 0)
+
+        # Get loss on val set
+        self.model.eval()
+        val_losses = val_accs = []
+        with torch.no_grad():
+            for i, input in enumerate(self.val_loader):
+                input = {k: v.to(self.device) for k, v in input.items()}
+                output = self.model(input)
+                loss = self.criterion(output["anchor"], output["positive"], output["negative"], eval=True)
+                abx_acc = self.metrics_fn(
+                    output["anchor"], output["positive"], output["negative"]
+                )
+                val_losses.append(loss.item())
+                val_accs.append(abx_acc)
+        val_loss = np.mean(val_losses)
+        val_acc = np.mean(val_accs)
+
+        # Log the initial values
+        val_info = {
+            "val/loss": val_loss,
+            "val/abx_acc": val_acc,
+        }
+        self.save_to_log(self.args.log_dir, self.logger, val_info, 0)
+
     def train(self):
+        self.log_init()
         self.model.train()
         for epoch in range(self.args.epochs):
             epoch_info = self.train_epoch(epoch)
             epoch_info = {f"train/{k}": v for k, v in epoch_info.items()}
-            self.save_to_log(self.args.log_dir, self.logger, epoch_info, epoch)
+            self.save_to_log(self.args.log_dir, self.logger, epoch_info, epoch+1)
 
             val_info = self.validate()
             val_info = {f"val/{k}": v for k, v in val_info.items()}
-            self.save_to_log(self.args.log_dir, self.logger, val_info, epoch)
+            self.save_to_log(self.args.log_dir, self.logger, val_info, epoch+1)
 
     # @staticmethod
     def save_to_log(self, logdir, logger, info, epoch, w_summary=False, model=None):
@@ -146,35 +210,37 @@ class SpeechCLRTrainerVanilla:
                     )
 
     def train_epoch(self, epoch, verbose=True):
-        running_loss = 0.0
-        # if self.args.loss_fn == "ada_triplet":
-        #     self.criterion.reset()
+        self.model.train()
         losses = []
+        n_steps = len(self.train_loader)
         for i, input in enumerate(self.train_loader):
 
             input = {k: v.to(self.device) for k, v in input.items()}
             output = self.model(input)
 
             self.optimizer.zero_grad()
-            autograd.set_detect_anomaly(True)
-            with autograd.detect_anomaly():
-                loss = self.criterion(
-                    output["anchor"], output["positive"], output["negative"]
-                )
+            loss = self.criterion(
+                output["anchor"], output["positive"], output["negative"]
+            )
                 
-                loss.backward(retain_graph=self.args.loss_fn == "ada_triplet")
+            loss.backward(retain_graph=self.args.loss_fn == "ada_triplet")
             self.optimizer.step()
             self.optimizer.zero_grad()
-            running_loss = running_loss + loss.item()
             losses.append(loss.item())
             if i % 100 == 99 and verbose:
-                print(f"\r[{epoch + 1}, {i + 1}] loss: {running_loss / 100:.3f}", end="")
-                running_loss = 0.0
+                print(f"\rEpoch {epoch + 1} [{i + 1}/{n_steps}] loss: {np.mean(losses):.3f}    ", end="")
         print()
-        return {
+
+        info = {
             "loss": np.mean(losses),
             "lr": self.optimizer.param_groups[0]["lr"],
         }
+
+        if isinstance(self.criterion, AdaTriplet):
+            info["ada_triplet/eps"] = self.criterion.eps
+            info["ada_triplet/beta"] = self.criterion.beta
+
+        return info
 
     def validate(self, verbose=True):
         self.model.eval()
@@ -187,7 +253,7 @@ class SpeechCLRTrainerVanilla:
                 input = {k: v.to(self.device) for k, v in input.items()}
                 output = self.model(input)
                 loss = self.criterion(
-                    output["anchor"], output["positive"], output["negative"]
+                    output["anchor"], output["positive"], output["negative"], eval=True
                 )
                 abx_acc = self.metrics_fn(
                     output["anchor"], output["positive"], output["negative"]
@@ -197,18 +263,22 @@ class SpeechCLRTrainerVanilla:
                 accs.append(abx_acc)
                 if verbose:
                     print(
-                        f"\rValidation : {i+1}/{len(self.val_loader)}: loss: {loss.item():.3f}, abx_acc: {abx_acc:.3f}     ",
+                        f"\rValidation : {i+1}/{len(self.val_loader)}: loss: {np.mean(losses):.3f}, abx_acc: {np.mean(accs):.3f}     ",
                         end="",
                     )
         if verbose: print()
         return {"loss": np.mean(losses), "abx_acc": np.mean(accs)}
     
     def visualise_clusters(self, n_samples=4000):
-
         self.model.eval()
+        feats = []
+        labels = []
         with torch.no_grad():
-            for i, input in enumerate(self.val_loader):
+            for i, input in enumerate(self.vis_loader):
                 input = {k: v.to(self.device) for k, v in input.items()}
-                output = self.model(input)
+                batch_feats = self.model(input, mode='classification')
+                batch_labels = input['label']
+                feats.append(batch_feats)
+                labels.extend(batch_labels.flatten())
                 break
-        return output
+        pass

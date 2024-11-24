@@ -134,3 +134,4 @@ cython_debug/
 papers/
 runs/
 logs/
+std_out/

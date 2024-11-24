@@ -25,7 +25,7 @@ def split_dataset(dataset, train_authors, val_authors, max_samples={'train':-1, 
     return train_files, val_files, test_files
 
 
-def main():
+def get_args():
     parser = argparse.ArgumentParser(
         description="Split dataset into train, val, and test sets"
     )
@@ -76,6 +76,11 @@ def main():
     )
 
     args = parser.parse_args()
+    return args
+
+
+def main():  
+    args = get_args()
 
     max_samples = {
         'train': args.max_train_samples,

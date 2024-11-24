@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
+# ensure python version compatibility
 try:
     from StringIO import StringIO
 except:

@@ -31,8 +31,7 @@ def seed_everything(seed: int):
     """fix the seed for reproducibility."""
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
-    #  CUBLAS_WORKSPACE_CONFIG=:4096:8
-    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8' # 
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -42,6 +41,7 @@ def seed_everything(seed: int):
 
 if __name__ == "__main__":
     args = get_args()
+    print(f"Using GPU: {args.gpu_id}")
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
     seed_everything(args.seed)
