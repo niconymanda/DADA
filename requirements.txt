@@ -1,6 +1,9 @@
+peft
+tqdm
 cbor2 zmq
 sb3-contrib
 venv
+scipy
 numpy 
 scikit-learn
 matplotlib
@@ -22,5 +25,6 @@ librosa
 tensorflow
 pyctcdecode
 kenlm
+ray
 ray[data,train,tune,serve]
 optuna
