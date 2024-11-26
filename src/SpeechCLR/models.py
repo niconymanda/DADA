@@ -64,6 +64,7 @@ class SpeechEmbedder(nn.Module):
         F_out=256,
         bottleneck_dropout=0.5,
         head_dropout=0.5,
+        load_path = None,
         device="cuda",
     ):
         super(SpeechEmbedder, self).__init__()
@@ -77,6 +78,8 @@ class SpeechEmbedder(nn.Module):
             bottleneck_dropout=bottleneck_dropout,
             head_dropout=head_dropout,
         )
+        if load_path:
+            self.compression.load_state_dict(torch.load(load_path))
         self.feature_layers = feature_layers
         self.device = device
 
@@ -108,11 +111,16 @@ class SpeechEmbedder(nn.Module):
     def eval(self):
         self.compression.eval()
 
+    def save(self, path):
+        torch.save(self.compression.state_dict(), path)
+
     def forward(self, input, mode="triplet"):
 
         if mode=="classification":
             x = self.get_features(input['x'])
             x = self.compression(x)
+            x = rearrange(x, "n t f -> n f t")
+            x = x.mean(dim=-1)
             return x
         
         elif mode=="triplet":

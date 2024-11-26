@@ -180,9 +180,10 @@ class InTheWildDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         x = self.load_audio_tensor(idx)
         y = self.id_to_label[idx]
+        author = self.id_to_author[idx]
 
         if self.mode == "classification":
-            return {"x": x, "label": y}
+            return {"x": x, "label": y, "author": author}
 
         elif self.mode == "triplet":
             id_p, id_n = self.get_triplets_from_anchor(idx)
@@ -194,12 +195,12 @@ class InTheWildDataset(torch.utils.data.Dataset):
         
         elif self.mode == "pair":
             a = x
-            a_label = y
+            a_label = author
 
             # Choose another idx at random
             idx2 = np.random.choice(np.arange(len(self.df)))
             b = self.load_audio_tensor(idx2)
-            b_label = self.id_to_label[idx2]
+            b_label = self.id_to_author[idx2]
 
             return {"a": a, "b": b, "a_label": a_label, "b_label": b_label}
 

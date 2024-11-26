@@ -25,6 +25,7 @@ def get_args():
     parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
     parser.add_argument('--at_lambda', type=float, default=0.5, help='Lambda for AdaTriplet loss')
     parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility')
+    parser.add_argument('--save_visualisations', type=bool, default=True, help='Save visualizations of embeddings')
     return parser.parse_args()
 
 def seed_everything(seed: int):
@@ -43,6 +44,9 @@ if __name__ == "__main__":
     args = get_args()
     print(f"Using GPU: {args.gpu_id}")
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+
+    # Set huggingface cache
+    os.environ['HF_HOME'] = '/data/amathur-23/DADA/hf_cache'
 
     seed_everything(args.seed)
     # args.device = f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu"
