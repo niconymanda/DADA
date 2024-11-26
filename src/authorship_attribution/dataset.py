@@ -73,9 +73,9 @@ class AuthorTripletLossDataset(Dataset):
     
     def __init__(self, data, tokenizer_name, max_length=64, train=True):
         self.data = data
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        # self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-        self.max_length = max_length
+        # self.max_length = max_length
         self.train = train
         self.texts_by_author = data.groupby('label')['text'].apply(list).to_dict()
         self.labels = list(self.texts_by_author.keys())

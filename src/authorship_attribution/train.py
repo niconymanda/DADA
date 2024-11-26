@@ -74,6 +74,7 @@ class TrainerAuthorshipAttribution:
             self.loss_fn.to(self.device)
 
         self.model.to(self.device)
+        # print(self.model)
         self.distance_function = cfg.get_distance_function(args.distance_function)
         
         if self.report_to == 'tensorboard':
@@ -87,8 +88,6 @@ class TrainerAuthorshipAttribution:
         if self.early_stopping:
             self.early_stopping_model = EarlyStopping(patience=args.early_stopping_patience)
             self.early_stopping_classif = EarlyStopping(patience=self.args.early_stopping_patience)
-            
-            
         
     def train(self, classification_head=False):
         """

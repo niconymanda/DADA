@@ -22,8 +22,8 @@ def main(args):
     val_data, test_data = train_test_split(temp_data, test_size=0.5, stratify=temp_data['label'], random_state=args.seed)
     train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True)
     val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True)
-    test_dataset = AuthorTripletLossDataset(test_data, args.model_name, train=False)
-    spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=False)
+    test_dataset = AuthorTripletLossDataset(test_data, args.model_name, train=True)
+    spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=True)
     
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
@@ -51,7 +51,7 @@ def main(args):
                                            repository_id=repository_id,
                                            author_id_map=author_id_map,
                                            report_to='tensorboard',
-                                           early_stopping=False,
+                                           early_stopping=True,
                                            save_model=False,
                                            )
     model, classification_model = trainer.train(classification_head=True)

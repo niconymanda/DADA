@@ -1,5 +1,5 @@
 import torch.nn as nn
-from transformers import AutoModel
+from transformers import AutoModel, AutoTokenizer
 from torch.nn import functional as F
 import torch
 from sklearn.mixture import GaussianMixture
@@ -43,27 +43,15 @@ class AuthorshipClassificationLLM(nn.Module):
         return probs
     
 class AuthorshipLLM(nn.Module):
-    def __init__(self, model_name, dropout_rate=0.1):
+    def __init__(self, model_name, dropout_rate=0.2, out_features=256, max_length=64):
         super(AuthorshipLLM, self).__init__()
         self.model_name = model_name
         self.model = AutoModel.from_pretrained(model_name)
-        # print(self.model)
-        hidden_size = self.model.config.hidden_size
-        self.batch_norm = nn.BatchNorm1d(hidden_size)
-        self.layer_norm = nn.LayerNorm(hidden_size)
-        self.dropout = nn.Dropout(dropout_rate)  
-        # self.freeze_layers()
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    def freeze_layers(self, n_layers=5):
-        """
-        Freeze the first n_layers of the model.
-        """
-        for param in self.model.parameters():
-            param.requires_grad = False
-        for param in self.model.encoder.parameters():
-            param.requires_grad = True
-        for param in self.model.pooler.parameters():
-            param.requires_grad = True
+        hidden_size = self.model.config.hidden_size
+        self.linear = nn.Linear(hidden_size, out_features)   
+        self.dropout = nn.Dropout(dropout_rate)  
 
     def init_embeddings(self):
         """
@@ -75,9 +63,9 @@ class AuthorshipLLM(nn.Module):
     def forward(self, input_ids, attention_mask=None):
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs.last_hidden_state[:, 0, :] 
-        # pooled_output = F.normalize(pooled_output, p=2, dim=1)
-        # pooled_output = self.batch_norm(pooled_output)
-        pooled_output = self.layer_norm(pooled_output)
-        pooled_output = self.dropout(pooled_output)
+        outputs = self.linear(pooled_output) 
+        outputs = self.dropout(outputs)
+        
+        outputs = F.normalize(pooled_output, p=2, dim=1)
         
         return pooled_output
