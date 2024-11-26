@@ -55,9 +55,7 @@ class AuthorshipLLM(nn.Module):
         hidden_size = self.model.config.hidden_size
         self.linear = nn.Linear(hidden_size, out_features)   
         self.dropout = nn.Dropout(dropout_rate)  
-
         self.device = self.model.device
-        print(self.model.device)
 
     def init_embeddings(self):
         """

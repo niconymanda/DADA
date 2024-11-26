@@ -186,7 +186,7 @@ class TrainerAuthorshipAttribution:
 
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
             text = batch['anchor_example']
-            labels = batch['label']
+            labels = batch['label'].to(self.device)
 
             out_model = classification_model(text)
                         
@@ -237,7 +237,7 @@ class TrainerAuthorshipAttribution:
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
                 text = batch['anchor_example']
-                labels = batch['label']
+                labels = batch['label'].to(self.device)
 
                 outputs = classificaion_model(text)
                 loss_value = loss_fn_classification(outputs, labels)

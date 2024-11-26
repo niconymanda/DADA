@@ -24,6 +24,7 @@ def get_args():
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
     parser.add_argument('--weight_decay', type=float, default=1e-5  , help='weight_decay')
     parser.add_argument('--model_name', type=str, default='microsoft/deberta-v3-large', help='Model to use')
+    parser.add_argument('--gpu_id', type=str, default='0', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
     parser.add_argument('--early_stopping_patience', type=int, default=10, help='Patience for early stopping based on validation loss')
@@ -102,7 +103,7 @@ def init_env(args):
         torch.cuda.manual_seed_all(seed_val)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    os.environ["CUDA_VISIBLE_DEVICES"]="0"
+    os.environ["CUDA_VISIBLE_DEVICES"]=args.gpu_id
     os.environ['HF_HOME'] = '/data/iivanova-23/cache/'
 
 def get_device():
