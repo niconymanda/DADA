@@ -17,8 +17,8 @@ def get_args():
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--epochs', type=int, default=1, help='Number of epochs to train for')
+    parser.add_argument('--epochs_classification', type=int, default=1, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
@@ -28,7 +28,7 @@ def get_args():
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
     parser.add_argument('--early_stopping_patience', type=int, default=10, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
-    parser.add_argument('--min_quotes_per_author', type=int, default=350, help='Min number of quotes per author')
+    parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
     parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
@@ -102,7 +102,7 @@ def init_env(args):
         torch.cuda.manual_seed_all(seed_val)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    os.environ["CUDA_VISIBLE_DEVICES"]="1"
+    os.environ["CUDA_VISIBLE_DEVICES"]="0"
     os.environ['HF_HOME'] = '/data/iivanova-23/cache/'
 
 def get_device():

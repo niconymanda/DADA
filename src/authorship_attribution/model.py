@@ -10,6 +10,9 @@ class AuthorshipClassificationLLM(nn.Module):
         self.num_labels = num_labels
         self.class_weights = class_weights
         self.model = model
+        self.tokenizer = model.tokenizer
+        self.max_length = model.max_length
+
         hidden_size = self.model.model.config.hidden_size
         self.head_type = head_type
         if head_type == 'linear':
@@ -36,8 +39,8 @@ class AuthorshipClassificationLLM(nn.Module):
                 param.requires_grad = False
 
 
-    def forward(self, input_ids, attention_mask=None, labels=None):
-        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+    def forward(self, example):
+        outputs = self.model(example)
         logits = self.classifier(outputs)
         probs = self.softmax(logits)
         return probs
@@ -48,10 +51,13 @@ class AuthorshipLLM(nn.Module):
         self.model_name = model_name
         self.model = AutoModel.from_pretrained(model_name)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-
+        self.max_length = max_length
         hidden_size = self.model.config.hidden_size
         self.linear = nn.Linear(hidden_size, out_features)   
         self.dropout = nn.Dropout(dropout_rate)  
+
+        self.device = self.model.device
+        print(self.model.device)
 
     def init_embeddings(self):
         """
@@ -60,7 +66,17 @@ class AuthorshipLLM(nn.Module):
         for param in self.model.embeddings.parameters():
             nn.init.normal_(param, mean=0.0, std=1.0)
         
-    def forward(self, input_ids, attention_mask=None):
+    def forward(self, example):
+
+        tokens = self.tokenizer(example, 
+                                   padding=True, 
+                                   truncation=True, 
+                                   max_length=self.max_length, 
+                                   return_tensors="pt")
+    
+        input_ids = tokens["input_ids"].to(self.model.device)
+        attention_mask = tokens["attention_mask"].to(self.model.device)
+
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs.last_hidden_state[:, 0, :] 
         outputs = self.linear(pooled_output) 

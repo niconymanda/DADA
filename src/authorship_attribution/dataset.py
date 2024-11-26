@@ -84,9 +84,9 @@ class AuthorTripletLossDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        auchor_data = self.data.iloc[idx]
-        auchor_text = auchor_data['text']
-        anchor_label = auchor_data['label']
+        anchor_data = self.data.iloc[idx]
+        anchor_example = anchor_data['text']
+        anchor_label = anchor_data['label']
         
         positive_example = self._get_positive_example(anchor_label)
         
@@ -95,63 +95,21 @@ class AuthorTripletLossDataset(Dataset):
             
         else:
             negative_examples, negative_labels = self._get_negative_examples_all_authors(anchor_label)
-            
-        
-        anchor_inputs = self.tokenizer(
-            auchor_text,
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt"
-        )
-        # avg_token_length = sum(len(self.tokenizer.tokenize(text)) for text in self.texts_by_author[anchor_label]) / len(self.texts_by_author[anchor_label])
-        # print(f"Average token length for author {anchor_label}: {avg_token_length}")
-        
-        positive_inputs = self.tokenizer(
-            positive_example,
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt"
-        )
         if self.train:
-            negative_inputs = self.tokenizer(
-                negative_example,
-                max_length=self.max_length,
-                padding="max_length",
-                truncation=True,
-                return_tensors="pt"
-            )
-            return{
-                "anchor_input_ids": anchor_inputs["input_ids"].squeeze(),
-                "anchor_attention_mask": anchor_inputs["attention_mask"].squeeze(),
-                "positive_input_ids": positive_inputs["input_ids"].squeeze(),
-                "positive_attention_mask": positive_inputs["attention_mask"].squeeze(),
-                "negative_input_ids": negative_inputs["input_ids"].squeeze(),
-                "negative_attention_mask": negative_inputs["attention_mask"].squeeze(),
-                "label": anchor_label, 
+            return {
+                "anchor_example": anchor_example,
+                "positive_example": positive_example,
+                "negative_example": negative_example,
+                "label": anchor_label,
                 "negative_label": negative_label
             }
-        else:
-            negative_inputs = [self.tokenizer(
-                neg_example,
-                max_length=self.max_length,
-                padding="max_length",
-                truncation=True,
-                return_tensors="pt"
-            ) for neg_example in negative_examples]
-                
-            negative_input_ids = torch.stack([neg_inputs["input_ids"].squeeze() for neg_inputs in negative_inputs])
-            negative_attention_masks = torch.stack([neg_inputs["attention_mask"].squeeze() for neg_inputs in negative_inputs])
+        else:    
             return {
-                "anchor_input_ids": anchor_inputs["input_ids"].squeeze(),
-                "anchor_attention_mask": anchor_inputs["attention_mask"].squeeze(),
-                "positive_input_ids": positive_inputs["input_ids"].squeeze(),
-                "positive_attention_mask": positive_inputs["attention_mask"].squeeze(),
-                "negative_input_ids": negative_input_ids,
-                "negative_attention_mask": negative_attention_masks,
+                "anchor_example": anchor_example,
+                "positive_examples": positive_example,
+                "negative_examples": negative_examples,
                 "label": anchor_label,
-                "negative_labels": torch.stack([torch.tensor(neg_label) for neg_label in negative_labels])
+                "negative_labels": negative_labels
             }
 
     def _get_positive_example(self, label):

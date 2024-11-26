@@ -143,11 +143,10 @@ class TrainerAuthorshipAttribution:
         all_labels = []
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Extracting embeddings")):
-                input_ids = batch['anchor_input_ids'].to(self.device)
-                attention_mask = batch['anchor_attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
+                text = batch['anchor_example']
+                labels = batch['label']
 
-                embeddings = self.model(input_ids, attention_mask)
+                embeddings = self.model(text)
                 all_embeddings.append(embeddings)
                 all_labels.extend(labels.cpu().numpy())
 
@@ -186,12 +185,11 @@ class TrainerAuthorshipAttribution:
         all_labels = []
 
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
-            input_ids = batch['anchor_input_ids'].to(self.device)
-            attention_mask = batch['anchor_attention_mask'].to(self.device)
-            labels = batch['label'].to(self.device)
-            out_model = classification_model(input_ids, attention_mask)
-            
-            
+            text = batch['anchor_example']
+            labels = batch['label']
+
+            out_model = classification_model(text)
+                        
             optimizer_classification.zero_grad()
             loss_value = loss_fn_classification(out_model, labels)
             loss_value.backward()
@@ -238,11 +236,10 @@ class TrainerAuthorshipAttribution:
         total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
-                input_ids = batch['anchor_input_ids'].to(self.device)
-                attention_mask = batch['anchor_attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
+                text = batch['anchor_example']
+                labels = batch['label']
 
-                outputs = classificaion_model(input_ids, attention_mask)
+                outputs = classificaion_model(text)
                 loss_value = loss_fn_classification(outputs, labels)
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
@@ -284,17 +281,15 @@ class TrainerAuthorshipAttribution:
         correct_count = 0
         iters = len(train_dataloader)
         for i,batch in enumerate(tqdm(train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
-            anchor_input_ids = batch['anchor_input_ids'].to(device)
-            anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-            positive_input_ids = batch['positive_input_ids'].to(device)
-            positive_attention_mask = batch['positive_attention_mask'].to(device)
-            negative_input_ids = batch['negative_input_ids'].to(device)
-            negative_attention_mask = batch['negative_attention_mask'].to(device)
-
+            anchor_example = batch['anchor_example']
+            positive_example = batch['positive_example']
+            negative_example = batch['negative_example']
+            
             optimizer.zero_grad()
-            anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
-            positive_embeddings = model(positive_input_ids, positive_attention_mask)
-            negative_embeddings = model(negative_input_ids, negative_attention_mask)
+            anchor_embeddings = model(anchor_example)
+            positive_embeddings = model(positive_example)
+            negative_embeddings = model(negative_example)
+
             loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
             total_loss += loss_value.item()
             current_loss += loss_value.item()
@@ -342,16 +337,13 @@ class TrainerAuthorshipAttribution:
         total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
-                anchor_input_ids = batch['anchor_input_ids'].to(device)
-                anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-                positive_input_ids = batch['positive_input_ids'].to(device)
-                positive_attention_mask = batch['positive_attention_mask'].to(device)
-                negative_input_ids = batch['negative_input_ids'].to(device)
-                negative_attention_mask = batch['negative_attention_mask'].to(device)
+                anchor_example = batch['anchor_example']
+                positive_example = batch['positive_example']
+                negative_example = batch['negative_example']
 
-                anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
-                positive_embeddings = model(positive_input_ids, positive_attention_mask)
-                negative_embeddings = model(negative_input_ids, negative_attention_mask)
+                anchor_embeddings = model(anchor_example)
+                positive_embeddings = model(positive_example)
+                negative_embeddings = model(negative_example)
                 loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
@@ -360,7 +352,7 @@ class TrainerAuthorshipAttribution:
                 distance_positive = self.distance_function(anchor_embeddings, positive_embeddings)
                 distance_negative = self.distance_function(anchor_embeddings, negative_embeddings)
                 correct_count += torch.sum(distance_positive < distance_negative).item()
-                total += anchor_input_ids.size(0)
+                total += len(anchor_example)
 
                 if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
@@ -492,16 +484,15 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         model.train()
         total_loss = 0.0
         for batch in train_dataloader:
-            anchor_input_ids = batch['anchor_input_ids'].to(device)
-            anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-            positive_input_ids = batch['positive_input_ids'].to(device)
-            positive_attention_mask = batch['positive_attention_mask'].to(device)
-            negative_input_ids = batch['negative_input_ids'].to(device)
-            negative_attention_mask = batch['negative_attention_mask'].to(device)
+            anchor_example = batch['anchor_example']
+            positive_example = batch['positive_example']
+            negative_example = batch['negative_example']
+
             optimizer.zero_grad()
-            anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
-            positive_embeddings = model(positive_input_ids, positive_attention_mask)
-            negative_embeddings = model(negative_input_ids, negative_attention_mask)
+            anchor_embeddings = model(anchor_example)
+            positive_embeddings = model(positive_example)
+            negative_embeddings = model(negative_example)
+
             loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
             
             total_loss += loss_value.item()
@@ -516,15 +507,14 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         model.eval()
         with torch.no_grad():
             for batch in val_dataloader:
-                anchor_input_ids = batch['anchor_input_ids'].to(device)
-                anchor_attention_mask = batch['anchor_attention_mask'].to(device)
-                positive_input_ids = batch['positive_input_ids'].to(device)
-                positive_attention_mask = batch['positive_attention_mask'].to(device)
-                negative_input_ids = batch['negative_input_ids'].to(device)
-                negative_attention_mask = batch['negative_attention_mask'].to(device)
-                anchor_embeddings = model(anchor_input_ids, anchor_attention_mask)
-                positive_embeddings = model(positive_input_ids, positive_attention_mask)
-                negative_embeddings = model(negative_input_ids, negative_attention_mask)
+                anchor_example = batch['anchor_example']
+                positive_example = batch['positive_example']
+                negative_example = batch['negative_example']
+
+                anchor_embeddings = model(anchor_example)
+                positive_embeddings = model(positive_example)
+                negative_embeddings = model(negative_example)
+
                 loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
                 val_loss += loss_value.item()
 

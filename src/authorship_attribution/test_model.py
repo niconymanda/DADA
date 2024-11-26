@@ -132,15 +132,14 @@ class TesterAuthorshipAttribution:
 
         with torch.no_grad(): 
             for batch in tqdm(test_dataloader):
-                anchor_input_ids = batch['anchor_input_ids'].to(self.device)
-                anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
-                positive_input_ids = batch['positive_input_ids'].to(self.device)
-                positive_attention_mask = batch['positive_attention_mask'].to(self.device)
+                anchor_example = batch['anchor_example']
+                positive_example = batch['positive_example']
+                
                 anchor_labels = batch['label']
 
                 # Anchor-Postive distances
-                anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
-                positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
+                anchor_embeddings = self.model(anchor_example)
+                positive_embeddings = self.model(positive_example)
                 dist_ax = self.distance_function(anchor_embeddings, positive_embeddings)
                 
                 cosine_similarity_pos = F.cosine_similarity(anchor_embeddings, positive_embeddings)
@@ -150,21 +149,20 @@ class TesterAuthorshipAttribution:
                 # Anchor-Negative distances
                 if self.mode == 'min_negatives':
                     negative_labels = batch['negative_labels']
-                    negative_inputs_ids_list = batch['negative_input_ids']
-                    negative_attention_masks_list = batch['negative_attention_mask']
+                    negative_examples = batch['negative_examples']
+                    
 
                     for i in range(anchor_embeddings.size(0)):
                         min_dist = dist_ax[i]
                         pred_label = anchor_labels[i]
-                        negative_input_ids = negative_inputs_ids_list[i, 0].to(self.device)
-                        negative_attention_mask = negative_attention_masks_list[i, 0].to(self.device)
-                        negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
+                        negative_example = negative_examples[i][0]
+                        
+                        negative_embeddings = self.model(negative_example)
                         min_negative_embeddings = negative_embeddings
 
-                        for neg_idx in range(negative_inputs_ids_list.size(1)):
-                            negative_input_ids = negative_inputs_ids_list[i, neg_idx].to(self.device)
-                            negative_attention_mask = negative_attention_masks_list[i, neg_idx].to(self.device)
-                            negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
+                        for neg_idx in range(1, len(negative_examples[i])):
+                            negative_example = negative_examples[i][neg_idx]
+                            negative_embeddings = self.model(negative_example)
                             dist_bx = self.distance_function(anchor_embeddings[i].unsqueeze(0), negative_embeddings)
                             if dist_bx < min_dist:
                                 min_dist = dist_bx
@@ -181,9 +179,8 @@ class TesterAuthorshipAttribution:
                         total += 1
 
                 elif self.mode == 'random':
-                    negative_attention_mask = batch['negative_attention_mask'].to(self.device)
-                    negative_input_ids = batch['negative_input_ids'].to(self.device)
-                    negative_embeddings = self.model(negative_input_ids, negative_attention_mask)
+                    negative_example = batch['negative_example']
+                    negative_embeddings = self.model(negative_example)
                     dist_bx = self.distance_function(anchor_embeddings, negative_embeddings)
                     
                     cosine_similarity_neg = F.cosine_similarity(anchor_embeddings, negative_embeddings)
@@ -191,7 +188,7 @@ class TesterAuthorshipAttribution:
                     self.all_cosine_distances_negative.extend(cosine_distance_neg.cpu().numpy())
                     
                     correct += torch.sum(dist_ax < dist_bx).item()
-                    total += anchor_input_ids.size(0)
+                    total += anchor_embeddings.size(0)
                 else:
                     print("Mode not recognized. Please choose between 'min_negatives' and 'random'.")
                     return None
@@ -224,11 +221,10 @@ class TesterAuthorshipAttribution:
 
         with torch.no_grad():
             for batch in tqdm(test_dataloader):
-                input_ids = batch['anchor_input_ids'].to(self.device)
-                attention_mask = batch['anchor_attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
+                text = batch['anchor_example']
+                labels = batch['label']
 
-                outputs = self.classification_model(input_ids, attention_mask)
+                outputs = self.classification_model(text)
                 preds = outputs.argmax(dim=1)
 
                 all_preds.extend(preds.cpu().numpy())
@@ -286,11 +282,10 @@ class TesterAuthorshipAttribution:
         all_labels = []
         with torch.no_grad():
             for i,batch in enumerate(tqdm(dataloader, desc=f"Extracting embeddings")):
-                input_ids = batch['anchor_input_ids'].to(self.device)
-                attention_mask = batch['anchor_attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
+                text = batch['anchor_example']
+                labels = batch['label']
 
-                embeddings = self.model(input_ids, attention_mask)
+                embeddings = self.model(text)
                 all_embeddings.append(embeddings)
                 all_labels.extend(labels.cpu().numpy())
 
@@ -340,11 +335,10 @@ class TesterAuthorshipAttribution:
 
         with torch.no_grad():
             for batch in dataloader:
-                input_ids = batch['anchor_input_ids'].to(self.device)
-                attention_mask = batch['anchor_attention_mask'].to(self.device)
+                text = batch['anchor_example']
                 labels = batch['label'].cpu().numpy() 
 
-                embeddings = self.classification_model(input_ids, attention_mask).cpu().numpy()
+                embeddings = self.classification_model(text).cpu().numpy()
 
                 all_embeddings.append(embeddings)
                 all_labels.extend(labels)
