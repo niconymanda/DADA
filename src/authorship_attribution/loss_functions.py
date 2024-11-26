@@ -104,8 +104,9 @@ class SquaredCosineSimilarityLoss(nn.Module):
         loss_diff = negative_similarity.pow(2)
         
         # Randomly select the target for the loss if same or different
-        target = torch.randint(0, 2, (anchor.size(0),), dtype=torch.float32, device=anchor.device)
-        loss = torch.where(target == 1, loss_same, loss_diff)
+        # target = torch.randint(0, 2, (anchor.size(0),), dtype=torch.float32, device=anchor.device)
+        # loss = torch.where(target == 1, loss_same, loss_diff)
+        loss = loss_same + loss_diff
        
         if self.reduction == "sum":
             return loss.sum()

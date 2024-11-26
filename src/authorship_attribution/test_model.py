@@ -72,7 +72,7 @@ class TesterAuthorshipAttribution:
         acc = self.test_abx_accuracy(test_dataloader)
         results['abx_accuracy'] = acc
         print(f"Test ABX Accuracy : {acc:.4f}")
-        self.plot_tsne_for_authors(test_dataloader)
+       
         self.plot_cosine_distence_distribution('test')
 
         # Test results spoofed_dataloader
@@ -83,14 +83,23 @@ class TesterAuthorshipAttribution:
 
         #Test results on classification model
         if self.classification_model is not None:
-            classif_results = self.test_classification(test_dataloader)
+            if self.args.classification_head == 'gmm':
+                all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
+                classif_results = self.gmm_predict(self.classification_model, all_embeddings, all_labels)
+
+                all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
+                classif_results_spoofed = self.gmm_predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
+            else:  
+                classif_results = self.test_classification(test_dataloader)
+                classif_results_spoofed = self.test_classification(spoofed_dataloader)
+
             results.update(classif_results)
             config.write_results_to_file(results, './output/results.txt', self.args)
 
-            classif_results_spoofed = self.test_classification(spoofed_dataloader)
             results_spoofed.update(classif_results_spoofed)
             config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args)
 
+        self.plot_tsne_for_authors(test_dataloader)
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
 
 
@@ -250,6 +259,7 @@ class TesterAuthorshipAttribution:
         if self.classification_model is None:
             print("Classification model not provided for testing.")
             return None 
+
         self.classification_model.eval()
         all_preds = []
         all_labels = []
@@ -261,7 +271,6 @@ class TesterAuthorshipAttribution:
                 labels = batch['label'].to(self.device)
 
                 outputs = self.classification_model(input_ids, attention_mask)
-                # probs = torch.softmax(outputs, dim=1)  # Convert logits to probabilities
                 preds = outputs.argmax(dim=1)
 
                 all_preds.extend(preds.cpu().numpy())
@@ -269,6 +278,11 @@ class TesterAuthorshipAttribution:
 
         all_preds = np.array(all_preds)
         all_labels = np.array(all_labels)
+
+        results = self.get_results(all_preds, all_labels)
+
+        return results
+    def get_results(self, all_preds, all_labels):
 
         accuracy = accuracy_score(all_labels, all_preds)
         precision = precision_score(all_labels, all_preds, average='weighted')
@@ -299,6 +313,51 @@ class TesterAuthorshipAttribution:
 
         return results
 
+    def extract_embeddings(self, dataloader):
+        """
+        Extracts embeddings from the model using the provided dataloader.
+        Args:
+            dataloader (DataLoader): A PyTorch DataLoader containing batches of data. Each batch
+                                     should be a dictionary with keys 'anchor_input_ids', 
+                                     'anchor_attention_mask', and 'label'.
+        Returns:
+            np.ndarray: An array of embeddings extracted from the model.
+        """
+        self.model.eval()
+        all_embeddings = []
+        all_labels = []
+        with torch.no_grad():
+            for i,batch in enumerate(tqdm(dataloader, desc=f"Extracting embeddings")):
+                input_ids = batch['anchor_input_ids'].to(self.device)
+                attention_mask = batch['anchor_attention_mask'].to(self.device)
+                labels = batch['label'].to(self.device)
+
+                embeddings = self.model(input_ids, attention_mask)
+                all_embeddings.append(embeddings)
+                all_labels.extend(labels.cpu().numpy())
+
+        all_embeddings = torch.cat(all_embeddings, dim=0)
+        all_labels = np.array(all_labels)
+        return all_embeddings, all_labels
+    
+    def gmm_predict(self, gmm, embeddings, labels):
+        """
+        Predicts author labels using a Gaussian Mixture Model (GMM).
+        Args:
+            gmm (GaussianMixture): A trained GMM model.
+            embeddings (np.ndarray): An array of embeddings to predict labels for.
+            labels (np.ndarray): An array of true labels for the embeddings.
+        Returns:
+            tuple: A tuple containing:
+                - np.ndarray: An array of predicted probabilities for each class.
+                - np.ndarray: An array of predicted labels.
+        """
+        probabilities = gmm.predict_proba(embeddings)
+        predictions = np.argmax(probabilities, axis=1)
+        results = self.get_results(predictions, labels)
+        
+        return results
+
     def plot_tsne_for_authors(self, dataloader):
         """
         Plots a t-SNE visualization for author embeddings.
@@ -327,7 +386,7 @@ class TesterAuthorshipAttribution:
                 attention_mask = batch['anchor_attention_mask'].to(self.device)
                 labels = batch['label'].cpu().numpy() 
 
-                embeddings = self.model(input_ids, attention_mask).cpu().numpy()
+                embeddings = self.classification_model(input_ids, attention_mask).cpu().numpy()
 
                 all_embeddings.append(embeddings)
                 all_labels.extend(labels)

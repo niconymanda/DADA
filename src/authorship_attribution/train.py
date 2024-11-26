@@ -17,7 +17,9 @@ from model import AuthorshipClassificationLLM
 from torch.nn import functional as F
 from typing import Optional, Literal
 import wandb
+import numpy as np
 from transformers import get_linear_schedule_with_warmup
+from sklearn.mixture import GaussianMixture
 
 
 class TrainerAuthorshipAttribution:
@@ -61,6 +63,7 @@ class TrainerAuthorshipAttribution:
         self.repository_id = repository_id
         self.output_dir = f"{repository_id}/logs"
         self.author_id_map = author_id_map
+        self.num_labels = len(self.author_id_map.keys())
         self.early_stopping = early_stopping
         self.save_model = save_model
         self.device = cfg.get_device()
@@ -110,19 +113,17 @@ class TrainerAuthorshipAttribution:
         
         if classification_head:
             print("Training classification head!")
-            classification_model = AuthorshipClassificationLLM(self.model, num_labels=len(self.author_id_map.keys()))
-            # Freeze all layers except the classification head
-            for name, param in classification_model.named_parameters():
-                if 'classifier' in name:
-                    param.requires_grad = True
-                else:
-                    param.requires_grad = False
-                    
+            if self.args.classification_head == 'gmm':
+                embeddings, labels = self.extract_embeddings()
+                gmm = self.fit_gmm(embeddings)
+                cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
+                return self.model, gmm
+            
+            classification_model = AuthorshipClassificationLLM(self.model, num_labels=self.num_labels, head_type=self.args.classification_head)
             classification_loss = nn.CrossEntropyLoss()
             classification_model.to(self.device)
             classification_loss.to(self.device)
             classification_optimizer = optim.AdamW(classification_model.parameters(), lr=self.args.learning_rate_classification)
-            
             for epoch_n in range(self.args.epochs_classification):
                 train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
                 val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
@@ -134,7 +135,35 @@ class TrainerAuthorshipAttribution:
             cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
             return self.model, classification_model
         return self.model, None 
+    def extract_embeddings(self):
+        """
+        Extracts embeddings from the model and saves them to a file.
+        """
+        self.model.eval()
+        all_embeddings = []
+        all_labels = []
+        with torch.no_grad():
+            for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Extracting embeddings")):
+                input_ids = batch['anchor_input_ids'].to(self.device)
+                attention_mask = batch['anchor_attention_mask'].to(self.device)
+                labels = batch['label'].to(self.device)
+
+                embeddings = self.model(input_ids, attention_mask)
+                all_embeddings.append(embeddings)
+                all_labels.extend(labels.cpu().numpy())
+
+        all_embeddings = torch.cat(all_embeddings, dim=0)
+        all_labels = np.array(all_labels)
+        return all_embeddings, all_labels
     
+    def fit_gmm(self, embeddings):
+        """
+        Fit the GMM using the embeddings and their corresponding labels.
+        """
+        gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed)
+        gmm.fit(embeddings.cpu().numpy())
+        return gmm
+
     def train_classification(self, classification_model, loss_fn_classification, optimizer_classification, epoch_n):
         """
         Trains only the cassification head of the model for one epoch.
@@ -154,19 +183,23 @@ class TrainerAuthorshipAttribution:
         classification_model.train()
         total_loss = 0
         current_loss = 0.0
+        all_embeddings = []
+        all_labels = []
+
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
             input_ids = batch['anchor_input_ids'].to(self.device)
             attention_mask = batch['anchor_attention_mask'].to(self.device)
             labels = batch['label'].to(self.device)
-
-            self.optimizer.zero_grad()
             out_model = classification_model(input_ids, attention_mask)
+            
+            
+            optimizer_classification.zero_grad()
             loss_value = loss_fn_classification(out_model, labels)
             loss_value.backward()
             optimizer_classification.step()
             total_loss += loss_value.item()
-
             current_loss += loss_value.item()
+
             if i % self.args.logging_step == self.args.logging_step - 1:
                 metrics = {
                     "Loss": current_loss / self.args.logging_step,
@@ -175,7 +208,7 @@ class TrainerAuthorshipAttribution:
                 }
                 self._log_metrics(metrics, phase='Train_classificaion')
                 current_loss = 0.0  
-                         
+
         train_loss = total_loss / len(self.val_dataloader)
         metrics = {
             "Loss": train_loss,
@@ -394,6 +427,8 @@ class TrainerAuthorshipAttribution:
             return optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1, last_epoch=-1)
         elif self.args.lr_scheduler == 'cosine':
             return optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.epochs*len(self.train_dataloader), eta_min=1e-7, last_epoch=-1)
+        elif self.args.lr_scheduler == 'plateau':
+            return optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
         else:
             raise ValueError("Invalid lr_scheduler value. Must be 'linear_warmup', 'linear', or 'cosine'")
 

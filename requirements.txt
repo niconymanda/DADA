@@ -11,4 +11,4 @@ tqdm==4.66.5
 transformers
 wandb
 tensorboard
-
+peft

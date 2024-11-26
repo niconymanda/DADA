@@ -7,7 +7,7 @@ import config as cfg
 from dataset import AuthorTripletLossDataset
 from test_model import TesterAuthorshipAttribution
 from train import TrainerAuthorshipAttribution
-from model import AuthorshipLLM, AuthorshipClassificationLLM
+from model import AuthorshipLLM
 from peft import LoraConfig, get_peft_model
 import time
 
@@ -54,7 +54,7 @@ def main(args):
                                            early_stopping=False,
                                            save_model=False,
                                            )
-    model, classification_model = trainer.train(classification_head=False)
+    model, classification_model = trainer.train(classification_head=True)
     
     #Load model from checkpoint
     # repo = '/home/infres/iivanova-23/DADA/output/n_authors_3/FacebookAI/roberta-large_32_20'
