@@ -10,6 +10,13 @@ Metrics:
     
 Losses:
     - CrossEntropyLoss
+
+TODO @abhaydmathur
+1. Callbacks
+    - Early Stopping
+    - LR Schedule
+2. Metrics
+
 """
 
 
@@ -34,28 +41,30 @@ class MidFusionTrainer():
 
         self.train_dataset = InTheWildDataset(
             root_dir=args.data_path,
-            metadata_file="meta.csv",
-            include_spoofs=False,
+            metadata_file="wild_transcription_meta.json",
+            include_spoofs=True,
             bonafide_label="bona-fide",
             filename_col="file",
             sampling_rate=args.sampling_rate,
             max_duration=args.max_duration,
             split="train",
             config=args.dataset_config,
-            mode=self.loss_to_data_mode[args.loss_fn],
+            text_tokenizer_name = self.args.text_model_name,
+            mode='classification',
         )
 
         self.val_dataset = InTheWildDataset(
             root_dir=args.data_path,
-            metadata_file="meta.csv",
-            include_spoofs=False,
+            metadata_file="wild_transcription_meta.json",
+            include_spoofs=True,
             bonafide_label="bona-fide",
             filename_col="file",
             sampling_rate=args.sampling_rate,
             max_duration=args.max_duration,
             split="val",
             config=args.dataset_config,
-            mode=self.loss_to_data_mode[args.loss_fn],
+            text_tokenizer_name = self.args.text_model_name,
+            mode='classification',
         )
 
         print("Loaded Dataset - ")
@@ -68,9 +77,6 @@ class MidFusionTrainer():
         self.val_loader = DataLoader(
             self.val_dataset, batch_size=args.batch_size, shuffle=True
         )
-        self.vis_loader = DataLoader(
-            self.vis_dataset, batch_size=args.batch_size, shuffle=True
-        )
 
         self.logger = Logger(log_dir=args.log_dir)
         print(f"Logging to {args.log_dir}")
@@ -78,18 +84,18 @@ class MidFusionTrainer():
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(F"Using device: {self.device}")
 
-        self.audio_model = SpeechEmbedder()
+        self.speech_model = SpeechEmbedder()
         self.text_model = AuthorshipLLM(model_name = args.text_model_name)
         if args.text_model_path is not None:
             self.text_model.load_state_dict(torch.load(args.text_model_path)) # TODO @abhaydmathur : ensure this is how Ivi loads the model
             print(f"Loaded text model from {args.text_model_path}")
-        if args.audio_model_path is not None:
-            self.audio_model.load_(torch.load(args.audio_model_path))
-            print(f"Loaded audio model from {args.audio_model_path}")
+        if args.speech_model_path is not None:
+            self.speech_model.load_(torch.load(args.speech_model_path))
+            print(f"Loaded speech model from {args.speech_model_path}")
 
         self.model = MidFuse(
             text_model=self.text_model,
-            speech_model=self.audio_model,
+            speech_model=self.speech_model,
             text_features=1024,
             speech_features=256,
         )
@@ -98,11 +104,26 @@ class MidFusionTrainer():
             self.model.load_(self.args.load_checkpoint)
             print(f"Loaded mid-fusion model from {self.args.load_checkpoint}")
 
+
+        self.optimizer = optim.Adam(self.model.parameters(), lr=args.learning_rate)
+        self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=0.5, patience=3, verbose=True
+        ) # TODO @abhaydmathur : mod
+
+        self.criterion = nn.BCELoss()
         self.model.to(self.device)
+
+        # Ensure self.args.model_save_path exists
+        self.model_name = self.args.model_name
+        self.model_save_path = os.path.join(self.args.model_save_path, self.model_name, self.args.log_dir.split("/")[-1])    
+        os.makedirs(self.model_save_path, exist_ok=True)
 
         self.best_model_path = None
         self.latest_model_path = None
         self.best_loss = np.inf
+        self.best_epoch = 0
+
+        self.training_history = {}
 
         pass
 
@@ -129,6 +150,8 @@ class MidFusionTrainer():
         print("Getting Inital Metrics")
         train_info = self.validate(split="train", verbose=True)
         val_info = self.validate(split="val", verbose=True)
+
+        self.lr_scheduler.step(val_info["loss"])
 
         log_train_info = {f"train/{k}": v for k, v in train_info.items()}
         self.save_to_log(self.args.log_dir, self.logger, log_train_info, 0)
@@ -168,6 +191,7 @@ class MidFusionTrainer():
 
         info = {
             "loss": np.mean(losses),
+            "acc": np.mean(accs),
             "lr": self.optimizer.param_groups[0]["lr"],
         }
 
@@ -195,16 +219,17 @@ class MidFusionTrainer():
             # Save best and latest models
             if self.best_model_path is None or val_info["loss"] < self.best_loss: # TODO @abhaydmathur : best metrics??
                 self.best_loss = val_info["loss"]
-                self.best_model_path = os.path.join(self.args.model_save_path, "best_model.pth")
-                self.model.save(self.best_model_path)
+                self.best_model_path = os.path.join(self.model_save_path, "best_model.pth")
+                self.save(self.best_model_path)
+                self.best_epoch = epoch
             
             if self.latest_model_path is not None:
                 os.remove(self.latest_model_path)
-            self.latest_model_path = os.path.join(self.args.model_save_path, f"latest_model_{epoch+1}eps.pth")
-            self.model.save(self.latest_model_path)
+            self.latest_model_path = os.path.join(self.model_save_path, f"latest_model_{epoch+1}eps.pth")
+            self.save(self.latest_model_path)
 
-            self.execute_callbacks(epoch)
-        pass
+            if self.execute_callbacks(epoch):
+                break
 
     def validate(self, split = "val", verbose=True):
         self.model.eval()
@@ -226,13 +251,8 @@ class MidFusionTrainer():
                 text = {k: v.to('cuda') for k, v in text.items()}
                 batch['x'] = batch['x'].to('cuda')
 
-                self.optimizer.zero_grad()
-
                 output = self.model(text_input = text, speech_input = batch).squeeze()
                 loss = self.criterion(output, label)
-
-                loss.backward()
-                self.optimizer.step()
                 losses.append(loss.item())
                 
                 acc = (output.round() == label).float().mean().item()
@@ -240,7 +260,7 @@ class MidFusionTrainer():
 
                 if verbose:
                     print(
-                        f"\Evaluation on {split} : {i+1}/{len(self.val_loader)}: loss: {np.mean(losses):.3f}, abx_acc: {np.mean(accs):.3f}     ",
+                        f"\rEvaluation on {split} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}     ",
                         end="",
                     )
         if verbose: print()
@@ -249,5 +269,10 @@ class MidFusionTrainer():
     def save(self, path):
         self.model.save_(path)
 
-    def execute_callbacks(self):
-        pass
+    def execute_callbacks(self, epoch):
+        # Early Stopping
+        if self.args.early_stopping_patience is not None:
+            if epoch - self.best_epoch > self.args.early_stopping_patience:
+                print(f"Early Stopping after {epoch} epochs")
+                return True
+        return False

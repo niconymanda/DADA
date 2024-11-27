@@ -115,7 +115,7 @@ class SpeechEmbedder(nn.Module):
         torch.save(self.compression.state_dict(), path)
     
     def load_(self, path):
-        self.compression.load_state_dict(torch.load(path
+        self.compression.load_state_dict(torch.load(path))
 
     def forward(self, input, mode="triplet"):
 
