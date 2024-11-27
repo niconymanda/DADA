@@ -24,7 +24,7 @@ def get_args():
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
     parser.add_argument('--weight_decay', type=float, default=1e-5  , help='weight_decay')
     parser.add_argument('--model_name', type=str, default='microsoft/deberta-v3-large', help='Model to use')
-    parser.add_argument('--gpu_id', type=str, default='0', help='GPU id')
+    parser.add_argument('--gpu_id', type=str, default='2', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
     parser.add_argument('--early_stopping_patience', type=int, default=10, help='Patience for early stopping based on validation loss')
@@ -34,7 +34,7 @@ def get_args():
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
     parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
     parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
-    parser.add_argument('--classification_head', type=str, default='linear', help='Classification head type[linear, mlp, gmm]')
+    parser.add_argument('--classification_head', type=str, default='gmm', help='Classification head type[linear, mlp, gmm]')
     # 350 quotes=5 authors, 450 quotes=3 authors,
     return parser.parse_args()
 

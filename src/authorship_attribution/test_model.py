@@ -85,8 +85,9 @@ class TesterAuthorshipAttribution:
 
         #Test results on classification model
         if self.classification_model is not None:
+            all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
+
             if self.args.classification_head == 'gmm':
-                all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
                 classif_results = self.gmm_predict(self.classification_model, all_embeddings, all_labels)
 
                 all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
@@ -101,7 +102,7 @@ class TesterAuthorshipAttribution:
             results_spoofed.update(classif_results_spoofed)
             config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args)
 
-        self.plot_tsne_for_authors(test_dataloader)
+        self.plot_tsne_for_authors(all_embeddings, all_labels)
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
 
 
@@ -277,7 +278,13 @@ class TesterAuthorshipAttribution:
         Returns:
             np.ndarray: An array of embeddings extracted from the model.
         """
-        self.model.eval()
+        if self.args.classification_head == 'gmm':
+            model = self.model
+            self.model.eval()
+        else:
+            model = self.classification_model
+            self.classification_model.eval()
+            
         all_embeddings = []
         all_labels = []
         with torch.no_grad():
@@ -285,11 +292,11 @@ class TesterAuthorshipAttribution:
                 text = batch['anchor_example']
                 labels = batch['label']
 
-                embeddings = self.model(text)
+                embeddings = model(text).detach().cpu().numpy()
                 all_embeddings.append(embeddings)
                 all_labels.extend(labels.cpu().numpy())
 
-        all_embeddings = torch.cat(all_embeddings, dim=0)
+        all_embeddings = np.concatenate(all_embeddings, axis=0)
         all_labels = np.array(all_labels)
         return all_embeddings, all_labels
     
@@ -311,7 +318,7 @@ class TesterAuthorshipAttribution:
         
         return results
 
-    def plot_tsne_for_authors(self, dataloader):
+    def plot_tsne_for_authors(self, all_embeddings, all_labels):
         """
         Plots a t-SNE visualization for author embeddings.
         This function takes a dataloader containing batches of data, extracts embeddings
@@ -329,21 +336,6 @@ class TesterAuthorshipAttribution:
             - The t-SNE plot is saved in the directory specified by `self.repository_id`.
         """
         
-        self.model.eval()
-        all_embeddings = []
-        all_labels = []
-
-        with torch.no_grad():
-            for batch in dataloader:
-                text = batch['anchor_example']
-                labels = batch['label'].cpu().numpy() 
-
-                embeddings = self.classification_model(text).cpu().numpy()
-
-                all_embeddings.append(embeddings)
-                all_labels.extend(labels)
-
-        all_embeddings = np.concatenate(all_embeddings, axis=0)
         num_classes = len(set(all_labels))
         print(f"Number of classes: {num_classes}")
         tsne = TSNE(n_components=num_classes, perplexity=80, max_iter=3000, method='exact')

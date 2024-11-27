@@ -113,7 +113,7 @@ class TrainerAuthorshipAttribution:
         if classification_head:
             print("Training classification head!")
             if self.args.classification_head == 'gmm':
-                embeddings, labels = self.extract_embeddings()
+                embeddings = self.extract_embeddings()
                 gmm = self.fit_gmm(embeddings)
                 cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
                 return self.model, gmm
@@ -131,7 +131,7 @@ class TrainerAuthorshipAttribution:
                         print("Early stopping triggered")
                         break 
                     
-            cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
+            cfg.save_checkpoint(classification_model, classification_optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
             return self.model, classification_model
         return self.model, None 
     def extract_embeddings(self):
@@ -140,26 +140,23 @@ class TrainerAuthorshipAttribution:
         """
         self.model.eval()
         all_embeddings = []
-        all_labels = []
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Extracting embeddings")):
                 text = batch['anchor_example']
-                labels = batch['label']
 
-                embeddings = self.model(text)
+                embeddings = self.model(text).detach().cpu().numpy()
                 all_embeddings.append(embeddings)
-                all_labels.extend(labels.cpu().numpy())
 
-        all_embeddings = torch.cat(all_embeddings, dim=0)
-        all_labels = np.array(all_labels)
-        return all_embeddings, all_labels
+        all_embeddings = np.concatenate(all_embeddings, axis=0)
+        # print(all_embeddings)
+        return all_embeddings
     
     def fit_gmm(self, embeddings):
         """
         Fit the GMM using the embeddings and their corresponding labels.
         """
         gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed)
-        gmm.fit(embeddings.cpu().numpy())
+        gmm.fit(embeddings)
         return gmm
 
     def train_classification(self, classification_model, loss_fn_classification, optimizer_classification, epoch_n):
