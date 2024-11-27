@@ -16,6 +16,7 @@ spacy
 gdown
 tensorboard
 torchvision
+gdown
 MinkowskiEngine
 huggingface_hub
 datasets
