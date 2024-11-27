@@ -23,8 +23,19 @@ class MidFuse(nn.Module):
         self.speech_model.eval()
         self.classifier.train()
 
+    def eval(self):
+        self.text_model.eval()
+        self.speech_model.eval()
+        self.classifier.eval()
+
     def trainable_parameters(self):
         return self.classifier.parameters()
+    
+    def load_(self, path):
+        self.classifier.load_state_dict(torch.load(path))
+
+    def save_(self, path):
+        torch.save(self.classifier.state_dict(), path)
     
     def eval(self):
         self.text_model.eval()

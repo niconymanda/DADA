@@ -4,8 +4,8 @@
 
 **Note : Ensure you are in this folder's parent directory (`src`)**
 
-```bash
-usage: python3 -m mid_fusion.main [-h] [--batch_size BATCH_SIZE] [--epochs EPOCHS]
+```txt
+$ python3 -m mid_fusion.main [-h] [--batch_size BATCH_SIZE] [--epochs EPOCHS]
                [--learning_rate LEARNING_RATE] [--data_path DATA_PATH]
                [--model_save_path MODEL_SAVE_PATH]
                [--log_interval LOG_INTERVAL] [--dataset_config DATASET_CONFIG]

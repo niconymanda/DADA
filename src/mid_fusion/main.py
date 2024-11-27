@@ -29,8 +29,8 @@ def get_args():
     parser.add_argument('--save_visualisations', type=bool, default=True, help='Save visualizations of embeddings')
     parser.add_argument('--text_model_name', type=str, default='facebook/bart-large', help='Name of the text model to use')
     parser.add_argument('--text_model_path', type=str, default=None, help='Path to the text model')
-    parser.add_argument('--audio_model_name', type=str, default='facebook/wav2vec2-base-960h', help='Name of the audio model to use')
-    parser.add_argument('--audio_model_path', type=str, default=None, help='Path to the audio model')
+    parser.add_argument('--speech_model_name', type=str, default=None, help='Name of the speech model to use')
+    parser.add_argument('--speech_model_path', type=str, default=None, help='Path to the speech model')
     parser.add_argument('--load_checkpoint', type=str, default=None, help='Path to the checkpoint to load')
     return parser.parse_args()
 
