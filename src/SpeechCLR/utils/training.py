@@ -105,13 +105,13 @@ class SpeechCLRTrainerVanilla:
         )
 
         self.train_loader = DataLoader(
-            self.train_dataset[:128], batch_size=args.batch_size, shuffle=True
+            self.train_dataset, batch_size=args.batch_size, shuffle=True
         )
         self.val_loader = DataLoader(
-            self.val_dataset[:64], batch_size=args.batch_size, shuffle=True
+            self.val_dataset, batch_size=args.batch_size, shuffle=True
         )
         self.vis_loader = DataLoader(
-            self.vis_dataset[:64], batch_size=args.batch_size, shuffle=True
+            self.vis_dataset, batch_size=args.batch_size, shuffle=True
         )
 
         self.logger = Logger(log_dir=args.log_dir)
