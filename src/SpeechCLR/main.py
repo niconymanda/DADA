@@ -109,13 +109,6 @@ def get_args():
         choices=["loss", "accuracy"],
     )
     parser.add_argument(
-        "--early_stopping_patience",
-        type=int,
-        default=3,
-        help="Number of epochs to wait before early stopping",
-    )
-
-    parser.add_argument(
         '--load_checkpoint',
         type=str,
         default=None,
