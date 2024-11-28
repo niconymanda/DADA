@@ -14,6 +14,7 @@ import numpy as np
 import os
 from tqdm import tqdm
 from torch import autograd
+import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -171,7 +172,7 @@ class SpeechCLRTrainerVanilla:
 
         print("Getting initial metrics.")
         
-        train_info = self.validate(split="train", verbose=True)
+        train_info = self.validate(split="train", verbose=True, limit_samples=True)
 
         if isinstance(self.criterion, AdaTriplet):
             train_info["train/ada_triplet/eps"] = self.criterion.eps
@@ -180,7 +181,7 @@ class SpeechCLRTrainerVanilla:
         log_train_info = {f"train/{k}": v for k, v in train_info.items()}
         self.save_to_log(self.args.log_dir, self.logger, log_train_info, 0)
 
-        val_info = self.validate(split="val", verbose=True)
+        val_info = self.validate(split="val", verbose=True, limit_samples=True)
 
         log_val_info = {f"val/{k}": v for k, v in val_info.items()} 
         self.save_to_log(self.args.log_dir, self.logger, log_val_info, 0)
@@ -275,8 +276,7 @@ class SpeechCLRTrainerVanilla:
                 self.lr_scheduler.step(epoch + i / n_steps)
 
             losses.append(loss.item())
-            if i % 100 == 99 and verbose:
-                print(f"\rEpoch {epoch + 1} [{i + 1}/{n_steps}] loss: {np.mean(losses):.3f}    ", end="")
+            print(f"\rEpoch {epoch + 1} [{i + 1}/{n_steps}] loss: {np.mean(losses):.3f}    ", end="")
         print()
 
         info = {
@@ -290,7 +290,7 @@ class SpeechCLRTrainerVanilla:
 
         return info
 
-    def validate(self, split="val", verbose=True):
+    def validate(self, split="val", verbose=True, limit_samples = False):
         self.model.eval()
         losses = []
         accs = []
@@ -301,6 +301,10 @@ class SpeechCLRTrainerVanilla:
             loader = self.val_loader
         else:
             raise ValueError("Invalid split")
+        n_batches = len(loader)
+        if limit_samples:
+            n_samples = 1000
+            n_batches = n_samples // loader.batch_size
         
         with torch.no_grad():
             for i, input in enumerate(loader):
@@ -317,9 +321,11 @@ class SpeechCLRTrainerVanilla:
                 accs.append(abx_acc)
                 if verbose:
                     print(
-                        f"\rEvaluation on {split} [{i+1}/{len(loader)}]: loss: {np.mean(losses):.3f}, abx_acc: {np.mean(accs):.3f}     ",
+                        f"\rEvaluation on {split} [{i+1}/{n_batches}]: loss: {np.mean(losses):.3f}, abx_acc: {np.mean(accs):.3f}     ",
                         end="",
                     )
+                if limit_samples and (i+1) >= n_batches:
+                    break
         if verbose: print()
         return {"loss": np.mean(losses), "abx_acc": np.mean(accs)}
     
@@ -329,23 +335,26 @@ class SpeechCLRTrainerVanilla:
         labels = []
         n_batches = n_samples // self.vis_loader.batch_size
         with torch.no_grad():
-            for i, input in enumerate(self.vis_loader[:n_batches]):
-                input = {k: v.to(self.device) for k, v in input.items()}
+            for i, input in enumerate(self.vis_loader):
+                input['x'] = input['x'].to(self.device)
                 batch_feats = self.model(input, mode='classification')
-                batch_labels = input['label']
+                batch_labels = input['author']
                 feats.append(batch_feats)
-                labels.extend(batch_labels.flatten())
-                break
+                labels.extend(batch_labels)
+                print(f"\rGetting embeddings for {split} [{i+1}/{n_batches}]", end="")
+                if i > n_batches:
+                    break
+        print()
         feats = torch.cat(feats, dim=0).cpu().numpy()
         labels = np.array(labels)
 
-        img = get_tsne_img(feats, labels, f"Epoch {epoch} {split} set")
-        self.logger.image_summary(f"{split}/tsne", img, epoch)
-        pass
+        print(f"Getting t-SNE plot for {split} set")
+        fig = get_tsne_fig(feats, labels, f"Epoch {epoch} {split} set")
+        plt.savefig(f"{self.args.log_dir}/tsne_{split}_{epoch}.png")
+        self.logger.figure_summary(f"{split}/tsne", fig, epoch)
 
     def save(self, path):
         self.model.save_(path)
-
 
     def execute_callbacks(self, epoch):
         # Early Stopping

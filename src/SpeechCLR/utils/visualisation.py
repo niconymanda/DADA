@@ -33,7 +33,6 @@ def get_tsne_fig(feats, labels, title):
     handles, _ = scatter.legend_elements()
     labels_unique = [authors[i] for i in np.unique(label_ids)]
     plt.legend(handles, labels_unique, title="Labels")
-    plt.close()
     return plt.gcf()
 
 
