@@ -1,5 +1,4 @@
 # DADA
-<<<<<<< HEAD
 
 The increasing use of generative AI models to create realistic deepfakes poses significant challenges to information security, particularly in the realm of audio manipulation. This work addresses the pressing need for improved detection of audio deepfakes by proposing a novel approach that incorporates context awareness. 
 
@@ -11,7 +10,6 @@ The increasing use of generative AI models to create realistic deepfakes poses s
 | AASIST []  | ASVSpoof21 | _     | ...      | ...      | ... |
 | RawNet2 [] | ASVSpoof21 | _     | ...      | ...      | ... |
 | SLIM []    | ASVSpoof21 | _     | ...      | ...      | ... |
-=======
 The increasing use of generative AI models to create realistic deepfakes poses significant challenges to information security, particularly in the realm of audio manipulation. This code addresses the pressing need for improved detection of audio deepfakes by proposing a novel approach that incorporates context awareness. 
 
 ## Authorship authentication model 
@@ -84,4 +82,3 @@ This project fine-tunes a BERT-like model to perform authorship classification, 
 | RoBERTa large | ...  | ...  | ...  | ...  | ... |
 | T5 | ...  | ...  | ...  | ...  | ... |
 ...
->>>>>>> 16651a65aa03684ba33a0b99d096177ef782a0a2

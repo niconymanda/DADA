@@ -1,22 +1,15 @@
 """
 Training Module for Context Aware Audio Spoof Detection with Mid-Fusion
 
-Metrics:
-    - EER
-    - F1
-    - Accuracy ?
-    - t-DCF
-
-    
-Losses:
-    - CrossEntropyLoss
-
 TODO @abhaydmathur
 1. Callbacks
     - Early Stopping
     - LR Schedule
 2. Metrics
-
+    - EER
+    - F1
+    - Accuracy
+    - t-DCF
 """
 
 
