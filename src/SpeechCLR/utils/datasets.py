@@ -192,7 +192,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
             x_n = self.load_audio_tensor(id_n)
 
             return {"anchor": x, "positive": x_p, "negative": x_n}
-        
+
         elif self.mode == "pair":
             a = x
             a_label = author
