@@ -2,7 +2,7 @@
 ... 
 
 TODO @abhaydmathur ; 
- - debug adatriplet
+ - Add interpretable losses when training on ada_triplet OR make ada_triplet interpretable across varying margins???
  - generalise computation and logging for arbitrary metrics
 """
 
@@ -67,7 +67,7 @@ class SpeechCLRTrainerVanilla:
         elif args.loss_fn == "triplet_cosine":
             self.criterion = TripletMarginCosineLoss(margin=self.args.margin)
         elif args.loss_fn == "ada_triplet":
-            self.criterion = AdaTriplet(lambda_=self.args.at_lambda)
+            self.criterion = AdaTriplet(lambda_=self.args.at_lambda, eps = self.args.margin)
         elif args.loss_fn == "squared_similarity":
             self.criterion = SquaredSimilarity()
         else:
@@ -349,9 +349,10 @@ class SpeechCLRTrainerVanilla:
         labels = np.array(labels)
 
         print(f"Getting t-SNE plot for {split} set")
-        fig = get_tsne_fig(feats, labels, f"Epoch {epoch} {split} set")
+        fig = get_tsne_fig(feats, labels, f"t-SNE visualisation : Epoch {epoch}:{split}")
         plt.savefig(f"{self.args.log_dir}/tsne_{split}_{epoch}.png")
         self.logger.figure_summary(f"{split}/tsne", fig, epoch)
+        plt.close()
 
     def save(self, path):
         self.model.save_(path)

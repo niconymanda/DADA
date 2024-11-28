@@ -25,7 +25,7 @@ def get_tsne_fig(feats, labels, title):
     author_id_map = dict(zip(authors, author_ids))
     label_ids = np.array([author_id_map[author] for author in labels])
 
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(5, 5))
     scatter = plt.scatter(
         x_embedded[:, 0], x_embedded[:, 1], c=label_ids, cmap="viridis"
     )

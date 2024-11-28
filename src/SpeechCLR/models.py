@@ -52,6 +52,9 @@ class CompressionModule(nn.Module):
         x_bottle = self.bottleneck(x_pool)
         x_head = self.head(x_bottle + x_pool)
         x_norm = nn.functional.normalize(x_head, p=2, dim=-1)
+        x_norm = rearrange(x_norm, "n t f -> n f t")
+        x_norm = x_norm.mean(dim=-1)
+        x_norm = nn.functional.normalize(x_norm, p=2, dim=-1)
         return x_norm
 
 
@@ -122,8 +125,6 @@ class SpeechEmbedder(nn.Module):
         if mode == "classification":
             x = self.get_features(input["x"])
             x = self.compression(x)
-            x = rearrange(x, "n t f -> n f t")
-            x = x.mean(dim=-1)
             return x
 
         elif mode == "triplet":
@@ -140,18 +141,6 @@ class SpeechEmbedder(nn.Module):
                 self.compression(x_n),
             )
 
-            x_a, x_p, x_n = (
-                rearrange(x_a, "n t f -> n f t"),
-                rearrange(x_p, "n t f -> n f t"),
-                rearrange(x_n, "n t f -> n f t"),
-            )
-
-            x_a, x_p, x_n = (
-                x_a.mean(dim=-1),
-                x_p.mean(dim=-1),
-                x_n.mean(dim=-1),
-            )
-
             return {
                 "anchor": x_a,
                 "positive": x_p,
@@ -163,16 +152,6 @@ class SpeechEmbedder(nn.Module):
             x_a, x_b = self.get_features(a), self.get_features(b)
 
             x_a, x_b = self.compression(x_a), self.compression(x_b)
-
-            x_a, x_b = (
-                rearrange(x_a, "n t f -> n f t"),
-                rearrange(x_b, "n t f -> n f t"),
-            )
-
-            x_a, x_b = (
-                x_a.mean(dim=-1),
-                x_b.mean(dim=-1),
-            )
 
             return {
                 "a": x_a,
