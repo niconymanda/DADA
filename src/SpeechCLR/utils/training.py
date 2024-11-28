@@ -67,7 +67,7 @@ class SpeechCLRTrainerVanilla:
         elif args.loss_fn == "triplet_cosine":
             self.criterion = TripletMarginCosineLoss(margin=self.args.margin)
         elif args.loss_fn == "ada_triplet":
-            self.criterion = AdaTriplet(lambda_=self.args.at_lambda, eps = self.args.margin)
+            self.criterion = AdaTriplet(lambda_=self.args.at_lambda)
         elif args.loss_fn == "squared_similarity":
             self.criterion = SquaredSimilarity()
         else:
