@@ -34,6 +34,33 @@ class SquaredSimilarity(nn.Module):
             return loss.sum()
 
         return loss
+    
+class TripletSquaredSimilarity(nn.Module):
+    """
+    Squared Similarity Loss from
+    G. Synnaeve, T. Schatz and E. Dupoux, 'Phonetics embedding learning with side information'
+    """
+
+    def __init__(self, reduction="mean"):
+        super(TripletSquaredSimilarity, self).__init__()
+        self.reduction = reduction
+        self.sq_cos = lambda x, y: F.cosine_similarity(x, y) ** 2
+
+    def forward(self, anchor, positive, negative, **kwargs):
+        pos_dist = self.sq_cos(anchor, positive)
+        neg_dist = self.sq_cos(anchor, negative)
+
+        loss_same = pos_dist
+        loss_diff = 1 - neg_dist
+
+        loss = (loss_same + loss_diff)/2
+
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+
+        return loss
 
 
 class NormalisedEuclideanDistance(nn.Module):  # Doesn't work, may not need to implement

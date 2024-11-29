@@ -32,6 +32,7 @@ from torch.optim.lr_scheduler import (  # TODO @abhaydmathur : Add more schedule
 from utils.losses import (
     TripletMarginCosineLoss,
     CosineDistance,
+    TripletSquaredSimilarity,
     AdaTriplet,
     SquaredSimilarity,
 )
@@ -59,7 +60,7 @@ class SpeechCLRTrainerVanilla:
             "triplet_cosine": "triplet",
             "ada_triplet": "triplet",
             "cross_entropy": "classification",
-            "squared_similarity": "pair",
+            "squared_similarity": "triplet",
         }
 
         if args.loss_fn == "triplet":
@@ -69,11 +70,13 @@ class SpeechCLRTrainerVanilla:
         elif args.loss_fn == "ada_triplet":
             self.criterion = AdaTriplet(lambda_=self.args.at_lambda)
         elif args.loss_fn == "squared_similarity":
-            self.criterion = SquaredSimilarity()
+            self.criterion = TripletSquaredSimilarity()
         else:
             raise NotImplementedError(f"Loss function {args.loss_fn} not implemented")
 
         self.metrics_fn = ABXAccuracy()
+
+        self.data_mode = self.loss_to_data_mode[args.loss_fn]
 
         self.train_dataset = InTheWildDataset(
             root_dir=args.data_path,
@@ -85,7 +88,7 @@ class SpeechCLRTrainerVanilla:
             max_duration=args.max_duration,
             split="train",
             config=args.dataset_config,
-            mode=self.loss_to_data_mode[args.loss_fn],
+            mode=self.data_mode,
         )
 
         self.val_dataset = InTheWildDataset(
@@ -98,7 +101,20 @@ class SpeechCLRTrainerVanilla:
             max_duration=args.max_duration,
             split="val",
             config=args.dataset_config,
-            mode=self.loss_to_data_mode[args.loss_fn],
+            mode=self.data_mode,
+        )
+
+        self.train_vis_dataset = InTheWildDataset(
+            root_dir=args.data_path,
+            metadata_file="meta.csv",
+            include_spoofs=False,
+            bonafide_label="bona-fide",
+            filename_col="file",
+            sampling_rate=args.sampling_rate,
+            max_duration=args.max_duration,
+            split="train",
+            config=args.dataset_config,
+            mode="classification",
         )
 
         self.vis_dataset = InTheWildDataset(
@@ -120,9 +136,13 @@ class SpeechCLRTrainerVanilla:
         self.val_loader = DataLoader(
             self.val_dataset, batch_size=args.batch_size, shuffle=True
         )
+        self.train_vis_loader = DataLoader(
+            self.train_vis_dataset, batch_size=args.batch_size, shuffle=True
+        )
         self.vis_loader = DataLoader(
             self.vis_dataset, batch_size=args.batch_size, shuffle=True
         )
+
 
         self.logger = Logger(log_dir=args.log_dir)
 
@@ -193,6 +213,7 @@ class SpeechCLRTrainerVanilla:
 
         if self.args.save_visualisations:
             self.log_cluster_visualisation(0, split='val', n_samples=1000)
+            self.log_cluster_visualisation(0, split='train', n_samples=1000)
 
     def train(self):
         self.log_init()
@@ -211,7 +232,7 @@ class SpeechCLRTrainerVanilla:
             elif self.args.lr_scheduler == "step":
                 self.lr_scheduler.step()
 
-            self.training_history[epoch] = {
+            self.training_history[epoch+1] = {
                 "train": epoch_info,
                 "val": val_info,
             }
@@ -232,7 +253,8 @@ class SpeechCLRTrainerVanilla:
                 break
 
             if self.args.save_visualisations:
-                self.log_cluster_visualisation(epoch, split='val', n_samples=1000)
+                self.log_cluster_visualisation(epoch+1, split='train', n_samples=1000)
+                self.log_cluster_visualisation(epoch+1, split='val', n_samples=1000)
 
     # @staticmethod
     def save_to_log(self, logdir, logger, info, epoch, w_summary=False, model=None):
@@ -308,7 +330,14 @@ class SpeechCLRTrainerVanilla:
         
         with torch.no_grad():
             for i, input in enumerate(loader):
-                input = {k: v.to(self.device) for k, v in input.items()}
+                if self.data_mode == "triplet":
+                    input = {k: v.to(self.device) for k, v in input.items()}
+                elif self.data_mode == "classification":
+                    input['x'] = input['x'].to(self.device)
+                    input['label'] = input['label'].to(self.device)
+                elif self.data_mode == "pair":
+                    input['a'] = input['a'].to(self.device)
+                    input['b'] = input['b'].to(self.device)
                 output = self.model(input)
                 loss = self.criterion(
                     output["anchor"], output["positive"], output["negative"], eval=True
@@ -333,9 +362,13 @@ class SpeechCLRTrainerVanilla:
         self.model.eval()
         feats = []
         labels = []
-        n_batches = n_samples // self.vis_loader.batch_size
+        if split == 'train':
+            loader = self.train_vis_loader
+        elif split == 'val':
+            loader = self.vis_loader
+        n_batches = n_samples // loader.batch_size
         with torch.no_grad():
-            for i, input in enumerate(self.vis_loader):
+            for i, input in enumerate(loader):
                 input['x'] = input['x'].to(self.device)
                 batch_feats = self.model(input, mode='classification')
                 batch_labels = input['author']
@@ -349,7 +382,7 @@ class SpeechCLRTrainerVanilla:
         labels = np.array(labels)
 
         print(f"Getting t-SNE plot for {split} set")
-        fig = get_tsne_fig(feats, labels, f"t-SNE visualisation : Epoch {epoch}:{split}")
+        fig = get_tsne_fig(feats, labels, f"t-SNE on {split} : Epoch {epoch}")
         plt.savefig(f"{self.args.log_dir}/tsne_{split}_{epoch}.png")
         self.logger.figure_summary(f"{split}/tsne", fig, epoch)
         plt.close()

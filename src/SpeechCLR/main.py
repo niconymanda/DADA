@@ -76,7 +76,7 @@ def get_args():
         type=str,
         default="triplet_cosine",
         help="Loss function to use for training",
-        choices=["triplet", "triplet_cosine", "ada_triplet"],
+        choices=["triplet", "triplet_cosine", "ada_triplet", "squared_similarity"],
     )
     parser.add_argument(
         "--gpu_id", type=int, default=0, help="ID of the GPU to use for training"
