@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from PIL import Image
 from io import BytesIO
+import seaborn as sns
 
 
 def fig2img(fig):

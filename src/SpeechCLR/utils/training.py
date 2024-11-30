@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 import os
+import glob
 from tqdm import tqdm
 from torch import autograd
 import matplotlib.pyplot as plt
@@ -51,9 +52,20 @@ class SpeechCLRTrainerVanilla:
             self.model.parameters(), lr=args.learning_rate, weight_decay=0.01
         )
 
-        if self.args.load_checkpoint is not None:
-            print(f"Loading {self.args.model_name} weights from {self.args.load_checkpoint}")
-            self.model.load_(self.args.load_checkpoint)
+        if self.args.load_path is not None:
+            print(f"Loading {self.args.model_name} weights from {self.args.load_path}")
+            if self.args.load_checkpoint == 'best':
+                load_ckpt = os.path.join(self.args.load_path, 'best_model.pth')
+            elif self.args.load_checkpoint == 'latest':
+                if self.args.load_path[-1] == '/':
+                    self.args.load_path = self.args.load_path[:-1]
+                load_ckpts = glob.glob(f'{self.args.load_path}/latest_model_*.pth')
+                if len(load_ckpts) == 0:
+                    raise FileNotFoundError(f"No checkpoints found in {self.args.load_path}")
+                load_ckpt = load_ckpts[0]
+            else:
+                raise NotImplementedError(f"Checkpoint {self.args.load_checkpoint} not implemented")
+            self.model.load_(load_ckpt)
         
         self.loss_to_data_mode = {
             "triplet": "triplet",
@@ -195,8 +207,8 @@ class SpeechCLRTrainerVanilla:
         train_info = self.validate(split="train", verbose=True, limit_samples=True)
 
         if isinstance(self.criterion, AdaTriplet):
-            train_info["train/ada_triplet/eps"] = self.criterion.eps
-            train_info["train/ada_triplet/beta"] = self.criterion.beta
+            train_info["ada_triplet/eps"] = self.criterion.eps
+            train_info["ada_triplet/beta"] = self.criterion.beta
 
         log_train_info = {f"train/{k}": v for k, v in train_info.items()}
         self.save_to_log(self.args.log_dir, self.logger, log_train_info, 0)
@@ -245,7 +257,8 @@ class SpeechCLRTrainerVanilla:
                 self.best_epoch = epoch
             
             if self.latest_model_path is not None:
-                os.remove(self.latest_model_path)
+                try: os.remove(self.latest_model_path)
+                except Exception as e: print(e)
             self.latest_model_path = os.path.join(self.model_save_path, f"latest_model_{epoch+1}eps.pth")
             self.save(self.latest_model_path)
 

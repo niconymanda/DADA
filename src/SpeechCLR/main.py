@@ -109,11 +109,19 @@ def get_args():
         choices=["loss", "accuracy"],
     )
     parser.add_argument(
-        '--load_checkpoint',
+        '--load_path',
         type=str,
         default=None,
         help="Path to the checkpoint to load"
     )
+    parser.add_argument(
+        '--load_checkpoint',
+        type=str,
+        default='best',
+        choices=['best', 'latest'],
+        help="Checkpoint to load"
+    )
+
     return parser.parse_args()
 
 
