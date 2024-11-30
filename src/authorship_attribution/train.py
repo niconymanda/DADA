@@ -27,7 +27,7 @@ class TrainerAuthorshipAttribution:
     TrainerAuthorshipAttribution is a class designed to handle the training and validation of a model for authorship attribution tasks. It supports early stopping, logging to TensorBoard, and optional training of a classification head.
     Attributes:
         model (torch.nn.Module): The model to be trained.
-        loss_fn (callable): The loss function to be used (e.g. TripletLoss).
+        criterion (callable): The loss function to be used (e.g. TripletLoss).
         optimizer (torch.optim.Optimizer): The optimizer for updating model parameters.
         train_dataloader (torch.utils.data.DataLoader): DataLoader for the training data.
         val_dataloader (torch.utils.data.DataLoader): DataLoader for the validation data.
@@ -47,7 +47,7 @@ class TrainerAuthorshipAttribution:
                  args, 
                  repository_id,
                  author_id_map,
-                 loss_fn=None, 
+                 criterion=None, 
                  optimizer=None, 
                  lr_scheduler=None,
                  project_name = 'authorship_attribution',
@@ -70,10 +70,10 @@ class TrainerAuthorshipAttribution:
         self.model_weights = model_weights
         self.device = cfg.get_device()
         if not tune:
-            self.loss_fn = self.get_loss_fn() if loss_fn is None else loss_fn   
+            self.criterion = self.get_criterion() if criterion is None else criterion   
             self.optimizer = self.get_optimizer() if optimizer is None else optimizer
             self.lr_scheduler = self.get_lr_scheduler(self.optimizer) if lr_scheduler is None  else lr_scheduler
-            self.loss_fn.to(self.device)
+            self.criterion.to(self.device)
 
         self.model.to(self.device)
         # print(self.model)
@@ -107,8 +107,8 @@ class TrainerAuthorshipAttribution:
             for epoch_n in range(self.args.epochs):
                 # train_loss = self.train_model(epoch_n)
                 # val_loss = self.validate(epoch_n)
-                train_loss = self.train_model(epoch_n, self.train_dataloader, self.optimizer, self.loss_fn, self.lr_scheduler, self.model, self.device)
-                val_loss, accuracy = self.validate(epoch_n, self.val_dataloader, self.loss_fn, self.model, self.device)
+                train_loss = self.train_model(epoch_n, self.train_dataloader, self.optimizer, self.criterion, self.lr_scheduler, self.model, self.device)
+                val_loss, accuracy = self.validate(epoch_n, self.val_dataloader, self.criterion, self.model, self.device)
                 
                 if self.early_stopping:
                     if self.early_stopping_model.step(val_loss):
@@ -164,12 +164,12 @@ class TrainerAuthorshipAttribution:
         gmm.fit(embeddings)
         return gmm
 
-    def train_classification(self, classification_model, loss_fn_classification, optimizer_classification, epoch_n):
+    def train_classification(self, classification_model, criterion_classification, optimizer_classification, epoch_n):
         """
         Trains only the cassification head of the model for one epoch.
         Args:
             model (torch.nn.Module): The classification head model to be trained.
-            loss_fn (callable): The loss function.
+            criterion (callable): The loss function.
             train_dataloader (torch.utils.data.DataLoader): DataLoader for the training data.
             optimizer (torch.optim.Optimizer): The optimizer for updating model parameters.
             device (torch.device): The device to run the model on (e.g., 'cpu' or 'cuda').
@@ -193,7 +193,7 @@ class TrainerAuthorshipAttribution:
             out_model = classification_model(text)
                         
             optimizer_classification.zero_grad()
-            loss_value = loss_fn_classification(out_model, labels)
+            loss_value = criterion_classification(out_model, labels)
             loss_value.backward()
             optimizer_classification.step()
             total_loss += loss_value.item()
@@ -216,12 +216,12 @@ class TrainerAuthorshipAttribution:
         self._log_metrics(metrics, phase='Train_classificaion_epochs')
         return total_loss / len(self.train_dataloader)
     
-    def validate_classification(self, classificaion_model, loss_fn_classification, epoch_n):
+    def validate_classification(self, classificaion_model, criterion_classification, epoch_n):
         """
         Validates the performance of a classification head on a validation dataset.
         Args:
             model (torch.nn.Module): The model to be validated.
-            loss_fn (callable): The loss function used to compute the loss.
+            criterion (callable): The loss function used to compute the loss.
             val_dataloader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
             device (torch.device): The device (CPU or GPU) on which the model and data are loaded.
             writer (torch.utils.tensorboard.SummaryWriter): TensorBoard writer for logging validation loss.
@@ -242,7 +242,7 @@ class TrainerAuthorshipAttribution:
                 labels = batch['label'].to(self.device)
 
                 outputs = classificaion_model(text)
-                loss_value = loss_fn_classification(outputs, labels)
+                loss_value = criterion_classification(outputs, labels)
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
                 preds = outputs.argmax(dim=1)
@@ -268,7 +268,7 @@ class TrainerAuthorshipAttribution:
         self._log_metrics(metrics, phase='Val_classificaion_epochs')
         return val_loss
 
-    def train_model(self, epoch_n, train_dataloader, optimizer, loss_fn, lr_scheduler, model, device):
+    def train_model(self, epoch_n):
         """
         Trains only the the given LLM model using the provided training data.
         Args:
@@ -277,32 +277,30 @@ class TrainerAuthorshipAttribution:
             float: The average loss over the training data.
         """
         
-        model.train()
+        self.model.train()
         total_loss = 0
         current_loss = 0.0
         correct_count = 0
-        iters = len(train_dataloader)
-        for i,batch in enumerate(tqdm(train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
-            anchor_example = batch['anchor_example']
-            positive_example = batch['positive_example']
-            negative_example = batch['negative_example']
+        iters = len(self.train_dataloader)
+        for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
             
-            optimizer.zero_grad()
-            anchor_embeddings = model(anchor_example)
-            positive_embeddings = model(positive_example)
-            negative_embeddings = model(negative_example)
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            embeddings = self.model(batch)
+            self.optimizer.zero_grad()
 
-            loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+            loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
+            loss_value.backward()
+
             total_loss += loss_value.item()
             current_loss += loss_value.item()
             
-            loss_value.backward()
-            optimizer.step()
-            lr_scheduler.step()
             
+            self.optimizer.step()
+            self.lr_scheduler.step()
+            self.optimizer.zero_grad()
             # Accuracy calculation
-            distance_positive = self.distance_function(anchor_embeddings, positive_embeddings)
-            distance_negative = self.distance_function(anchor_embeddings, negative_embeddings)
+            distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
+            distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
             correct_count += torch.sum(distance_positive < distance_negative).item()
             
             if i % self.args.logging_step == self.args.logging_step - 1:
@@ -314,16 +312,16 @@ class TrainerAuthorshipAttribution:
                     self._log_metrics(metrics, phase='Train')
                     current_loss = 0.0
                 
-        train_loss = total_loss / len(train_dataloader)
+        train_loss = total_loss / len(self.train_dataloader)
         metrics = {
             "Loss": train_loss,
-            "Accuracy": correct_count / len(train_dataloader.dataset),
+            "Accuracy": correct_count / len(self.train_dataloader.dataset),
             "epoch": epoch_n,
         }
         self._log_metrics(metrics, phase='Train_epoch')
-        return total_loss / len(train_dataloader)
+        return total_loss / len(self.train_dataloader)
 
-    def validate(self, epoch_n, val_dataloader, loss_fn, model, device):
+    def validate(self, epoch_n):
         """
         Validates the model on the validation dataset.
         Args:
@@ -332,29 +330,25 @@ class TrainerAuthorshipAttribution:
             float: The average validation loss over the entire validation dataset.
         """
         
-        model.eval()
+        self.model.eval()
         total_loss = 0
         current_loss = 0.0
         correct_count = 0
         total = 0
         with torch.no_grad():
-            for i,batch in enumerate(tqdm(val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
-                anchor_example = batch['anchor_example']
-                positive_example = batch['positive_example']
-                negative_example = batch['negative_example']
-
-                anchor_embeddings = model(anchor_example)
-                positive_embeddings = model(positive_example)
-                negative_embeddings = model(negative_example)
-                loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+            for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
+                batch = {k: v.to(self.device) for k, v in batch.items()}
+                embeddings = self.model(batch)
+                
+                loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
                 
                 # Accuracy calculation
-                distance_positive = self.distance_function(anchor_embeddings, positive_embeddings)
-                distance_negative = self.distance_function(anchor_embeddings, negative_embeddings)
+                distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
+                distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
                 correct_count += torch.sum(distance_positive < distance_negative).item()
-                total += len(anchor_example)
+                total += len(batch['anchor_example'])
 
                 if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
@@ -391,7 +385,7 @@ class TrainerAuthorshipAttribution:
                 else:
                     print("Invalid phase")
 
-    def get_loss_fn(self, margin=None):
+    def get_criterion(self, margin=None):
         margin = self.args.margin if margin is None else margin
         if self.args.loss_function == 'triplet':
             return TripletLoss(margin=margin, distance_function=self.args.distance_function)
@@ -403,7 +397,7 @@ class TrainerAuthorshipAttribution:
             raise ValueError("Invalid loss_function value. Must be 'triplet', 'contrastive', or 'cos2'")
     
     def get_optimizer(self):
-        return optim.AdamW(self.model.parameters(), lr=self.args.learning_rate)
+        return optim.AdamW(self.model.parameters(), lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
     
     def get_lr_scheduler(self, optimizer=None, num_training_steps=None):
         
@@ -459,8 +453,8 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
     #         model = nn.DataParallel(model)
     device = cfg.get_device()
     model.to(device)
-    loss_fn = TripletLoss(margin=margin)
-    loss_fn = loss_fn.to(device)
+    criterion = TripletLoss(margin=margin)
+    criterion = criterion.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
     checkpoint = get_checkpoint()
 
@@ -486,21 +480,15 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         model.train()
         total_loss = 0.0
         for batch in train_dataloader:
-            anchor_example = batch['anchor_example']
-            positive_example = batch['positive_example']
-            negative_example = batch['negative_example']
-
+            batch = {k: v.to(device) for k, v in batch.items()}
+            embeddings = model(batch)
             optimizer.zero_grad()
-            anchor_embeddings = model(anchor_example)
-            positive_embeddings = model(positive_example)
-            negative_embeddings = model(negative_example)
-
-            loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+            loss = criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
             
-            total_loss += loss_value.item()
-            loss_value.backward()
+            loss.backward()
             optimizer.step()
             lr_scheduler.step()
+            total_loss += loss_value.item()
             
         # Validate the model
         val_loss = 0.0
@@ -509,19 +497,13 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         model.eval()
         with torch.no_grad():
             for batch in val_dataloader:
-                anchor_example = batch['anchor_example']
-                positive_example = batch['positive_example']
-                negative_example = batch['negative_example']
-
-                anchor_embeddings = model(anchor_example)
-                positive_embeddings = model(positive_example)
-                negative_embeddings = model(negative_example)
-
-                loss_value = loss_fn(anchor_embeddings, positive_embeddings, negative_embeddings)
+                batch = {k: v.to(device) for k, v in batch.items()}
+                embeddings = model(batch)
+                loss_value = criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
                 val_loss += loss_value.item()
 
-                distance_positive = distance_function(anchor_embeddings, positive_embeddings)
-                distance_negative = distance_function(anchor_embeddings, negative_embeddings)
+                distance_positive = distance_function(embeddings['anchor'], embeddings['positive'])
+                distance_negative = distance_function(embeddings['anchor'], embeddings['negative'])
                 correct_count += torch.sum(distance_positive < distance_negative).item()
 
         avg_val_loss = val_loss / len(val_dataloader)
