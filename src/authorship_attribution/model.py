@@ -1,5 +1,5 @@
 import torch.nn as nn
-from transformers import AutoModel
+from transformers import AutoModel, AutoTokenizer
 from torch.nn import functional as F
 import torch
 from sklearn.mixture import GaussianMixture
@@ -10,6 +10,9 @@ class AuthorshipClassificationLLM(nn.Module):
         self.num_labels = num_labels
         self.class_weights = class_weights
         self.model = model
+        self.tokenizer = model.tokenizer
+        self.max_length = model.max_length
+
         hidden_size = self.model.model.config.hidden_size
         self.head_type = head_type
         if head_type == 'linear':
@@ -36,34 +39,48 @@ class AuthorshipClassificationLLM(nn.Module):
                 param.requires_grad = False
 
 
-    def forward(self, input_ids, attention_mask=None, labels=None):
-        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+    def forward(self, example):
+        outputs = self.model(example)
         logits = self.classifier(outputs)
         probs = self.softmax(logits)
         return probs
     
+class MeanPooling(nn.Module):
+    def __init__(self):
+        super(MeanPooling, self).__init__()
+        
+    def forward(self, last_hidden_state, attention_mask):
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+        sum_embeddings = torch.sum(last_hidden_state * input_mask_expanded, 1)
+        sum_mask = input_mask_expanded.sum(1)
+        sum_mask = torch.clamp(sum_mask, min=1e-9)
+        mean_embeddings = sum_embeddings / sum_mask
+        return mean_embeddings
+    
 class AuthorshipLLM(nn.Module):
-    def __init__(self, model_name, dropout_rate=0.1):
+    def __init__(self, model_name, 
+                 bottleneck_dropout=0.5,
+                 dropout_rate=0.2, 
+                 out_features=256, 
+                 max_length=64, 
+                 device='cuda', 
+                 freeze_encoder=False):
         super(AuthorshipLLM, self).__init__()
         self.model_name = model_name
         self.model = AutoModel.from_pretrained(model_name)
-        # print(self.model)
-        hidden_size = self.model.config.hidden_size
-        self.batch_norm = nn.BatchNorm1d(hidden_size)
-        self.layer_norm = nn.LayerNorm(hidden_size)
-        self.dropout = nn.Dropout(dropout_rate)  
-        # self.freeze_layers()
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.max_length = max_length
 
-    def freeze_layers(self, n_layers=5):
-        """
-        Freeze the first n_layers of the model.
-        """
-        for param in self.model.parameters():
+        self.freeze_params() if freeze_encoder else None
+
+        self.pooler = MeanPooling()
+        self.dropout = nn.Dropout(dropout_rate)
+        self.fc1 = nn.Linear(in_features=self.model.config.hidden_size,out_features=256)
+
+        self.device = device
+    def freeze_params(self):
+        for param in self.model.base_model.parameters():
             param.requires_grad = False
-        for param in self.model.encoder.parameters():
-            param.requires_grad = True
-        for param in self.model.pooler.parameters():
-            param.requires_grad = True
 
     def init_embeddings(self):
         """
@@ -71,13 +88,51 @@ class AuthorshipLLM(nn.Module):
         """
         for param in self.model.embeddings.parameters():
             nn.init.normal_(param, mean=0.0, std=1.0)
+
+    def get_features(self, input):
+        with torch.no_grad():
+            tokens = self.tokenizer(input, 
+                                       padding=True, 
+                                       truncation=True, 
+                                       max_length=self.max_length, 
+                                       return_tensors="pt")
+
+            input_ids = tokens["input_ids"].to(self.device)
+            token_type_ids = tokens["token_type_ids"].to(self.device)
+            attention_mask = tokens["attention_mask"].to(self.device)
+            inputs = {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "attention_mask": attention_mask,
+            }
+        return inputs
+
+    def forward(self, input, mode='triplet'):
+   
+        a, p, n = input["anchor"], input["positive"], input["negative"]
+        x_a, x_p, x_n = self.get_features(a), self.get_features(p), self.get_features(n)
+
+        x_a_output, x_p_output, x_n_output = (
+            self.model(**x_a, return_dict=True),
+            self.model(**x_p, return_dict=True),
+            self.model(**x_n, return_dict=True))
         
-    def forward(self, input_ids, attention_mask=None):
-        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs.last_hidden_state[:, 0, :] 
-        # pooled_output = F.normalize(pooled_output, p=2, dim=1)
-        # pooled_output = self.batch_norm(pooled_output)
-        pooled_output = self.layer_norm(pooled_output)
-        pooled_output = self.dropout(pooled_output)
+        x_a_output, x_p_output, x_n_output = (
+            self.pooler(x_a_output['last_hidden_state'], x_a['attention_mask']),
+            self.pooler(x_p_output['last_hidden_state'], x_p['attention_mask']),
+            self.pooler(x_n_output['last_hidden_state'], x_n['attention_mask']))
+        x_a_output, x_p_output, x_n_output = (
+            self.fc1(x_a_output),
+            self.fc1(x_p_output),
+            self.fc1(x_n_output))
+        x_a_output, x_p_output, x_n_output = (
+            F.normalize(x_a_output, p=2, dim=-1),
+            F.normalize(x_p_output, p=2, dim=-1),
+            F.normalize(x_n_output, p=2, dim=-1))   
+
+        return {
+            "anchor": x_a_output,
+            "positive": x_p_output,
+            "negative": x_n_output,
+        }
         
-        return pooled_output

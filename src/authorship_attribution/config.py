@@ -17,13 +17,14 @@ def get_args():
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=15, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--epochs', type=int, default=10, help='Number of epochs to train for')
+    parser.add_argument('--epochs_classification', type=int, default=1, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
-    parser.add_argument('--weight_decay', type=float, default=1e-5  , help='weight_decay')
+    parser.add_argument('--weight_decay', type=float, default=0.001  , help='weight_decay')
     parser.add_argument('--model_name', type=str, default='microsoft/deberta-v3-large', help='Model to use')
+    parser.add_argument('--gpu_id', type=str, default='2', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
     parser.add_argument('--early_stopping_patience', type=int, default=10, help='Patience for early stopping based on validation loss')
@@ -31,9 +32,9 @@ def get_args():
     parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
-    parser.add_argument('--margin', type=float, default=1.0, help='Margin for triplet loss')
+    parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
     parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
-    parser.add_argument('--classification_head', type=str, default='linear', help='Classification head type[linear, mlp, gmm]')
+    parser.add_argument('--classification_head', type=str, default='gmm', help='Classification head type[linear, mlp, gmm]')
     # 350 quotes=5 authors, 450 quotes=3 authors,
     return parser.parse_args()
 
@@ -71,7 +72,7 @@ def load_data(args):
     # Split spoofed data
     spoofed_data = data[data['type'] == 'spoof']
     data = data[data['type'] != 'spoof'] 
-    return data[:500], spoofed_data, author_id_map
+    return data, spoofed_data, author_id_map
 
 def write_results_to_file(results, file_path, args):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -80,8 +81,6 @@ def write_results_to_file(results, file_path, args):
         f.write(f"Model: {args.model_name}, epochs {args.epochs}, batch_size {args. batch_size}, learning rate {args.learning_rate}\n")
         f.write("ABX accuracy, Accuracy, Precision, Recall, F1, AUC \n")
         f.write(f"{results['abx_accuracy']:.4f}, {results['accuracy']:.4f}, {results['precision']:.4f}, {results['recall']:.4f}, {results['f1_score']:.4f}, {results['auc']:.4f}\n")
-
-
 
 def init_env(args):
     """
@@ -104,12 +103,11 @@ def init_env(args):
         torch.cuda.manual_seed_all(seed_val)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    os.environ["CUDA_VISIBLE_DEVICES"]="1"
+    os.environ["CUDA_VISIBLE_DEVICES"]=args.gpu_id
     os.environ['HF_HOME'] = '/data/iivanova-23/cache/'
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 def save_checkpoint(model, optimizer, epoch, path):
     checkpoint = {
@@ -122,7 +120,7 @@ def save_checkpoint(model, optimizer, epoch, path):
     print(f"Model saved to {path}")
     
 def load_checkpoint(model, optimizer, path):
-    checkpoint = torch.load(path)
+    checkpoint = torch.load(path, map_location=torch.device('cpu'), weights_only=True)
     print(f"Loading model from {path}")
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
