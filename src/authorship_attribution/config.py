@@ -23,7 +23,7 @@ def get_args():
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
     parser.add_argument('--weight_decay', type=float, default=0.001  , help='weight_decay')
-    parser.add_argument('--model_name', type=str, default='microsoft/deberta-v3-small', help='Model to use')
+    parser.add_argument('--model_name', type=str, default='microsoft/deberta-v3-large', help='Model to use')
     parser.add_argument('--gpu_id', type=str, default='2', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')

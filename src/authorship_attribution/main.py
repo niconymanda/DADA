@@ -53,10 +53,9 @@ def main(args):
                                            report_to='tensorboard',
                                            early_stopping=True,
                                            save_model=True,
-                                           model_weights='output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth'
+                                        #    model_weights='output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth'
                                            )
     model, classification_model = trainer.train(classification_head=True)
-    loaded_model = AuthorshipLLM(args.model_name)
     # loaded_model.load_state_dict(torch.load("output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth"))
 
     tester = TesterAuthorshipAttribution(model=model, 

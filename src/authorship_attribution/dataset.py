@@ -97,17 +97,17 @@ class AuthorTripletLossDataset(Dataset):
             negative_examples, negative_labels = self._get_negative_examples_all_authors(anchor_label)
         if self.train:
             return {
-                "anchor_example": anchor_example,
-                "positive_example": positive_example,
-                "negative_example": negative_example,
+                "anchor": anchor_example,
+                "positive": positive_example,
+                "negative": negative_example,
                 "label": anchor_label,
                 "negative_label": negative_label
             }
         else:    
             return {
-                "anchor_example": anchor_example,
-                "positive_examples": positive_example,
-                "negative_examples": negative_examples,
+                "anchor": anchor_example,
+                "positive": positive_example,
+                "negatives": negative_examples,
                 "label": anchor_label,
                 "negative_labels": negative_labels
             }

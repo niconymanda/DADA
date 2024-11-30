@@ -107,8 +107,8 @@ class TrainerAuthorshipAttribution:
             for epoch_n in range(self.args.epochs):
                 # train_loss = self.train_model(epoch_n)
                 # val_loss = self.validate(epoch_n)
-                train_loss = self.train_model(epoch_n, self.train_dataloader, self.optimizer, self.criterion, self.lr_scheduler, self.model, self.device)
-                val_loss, accuracy = self.validate(epoch_n, self.val_dataloader, self.criterion, self.model, self.device)
+                train_loss = self.train_model(epoch_n)
+                val_loss, accuracy = self.validate(epoch_n)
                 
                 if self.early_stopping:
                     if self.early_stopping_model.step(val_loss):
@@ -146,14 +146,12 @@ class TrainerAuthorshipAttribution:
         self.model.eval()
         all_embeddings = []
         with torch.no_grad():
-            for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Extracting embeddings")):
-                text = batch['anchor_example']
+            for batch in tqdm(self.train_dataloader, desc="Extracting embeddings"):
+                embeddings = self.model(batch)
+                anchor_embeddings = embeddings['anchor'].cpu().numpy()
+                all_embeddings.append(anchor_embeddings)
 
-                embeddings = self.model(text).detach().cpu().numpy()
-                all_embeddings.append(embeddings)
-
-        all_embeddings = np.concatenate(all_embeddings, axis=0)
-        # print(all_embeddings)
+        all_embeddings = np.vstack(all_embeddings)
         return all_embeddings
     
     def fit_gmm(self, embeddings):
@@ -187,7 +185,7 @@ class TrainerAuthorshipAttribution:
         all_labels = []
 
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
-            text = batch['anchor_example']
+            text = batch['anchor']
             labels = batch['label'].to(self.device)
 
             out_model = classification_model(text)
@@ -216,6 +214,7 @@ class TrainerAuthorshipAttribution:
         self._log_metrics(metrics, phase='Train_classificaion_epochs')
         return total_loss / len(self.train_dataloader)
     
+    @torch.no_grad()
     def validate_classification(self, classificaion_model, criterion_classification, epoch_n):
         """
         Validates the performance of a classification head on a validation dataset.
@@ -238,7 +237,7 @@ class TrainerAuthorshipAttribution:
         total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
-                text = batch['anchor_example']
+                text = batch['anchor']
                 labels = batch['label'].to(self.device)
 
                 outputs = classificaion_model(text)
@@ -284,7 +283,7 @@ class TrainerAuthorshipAttribution:
         iters = len(self.train_dataloader)
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
             
-            batch = {k: v.to(self.device) for k, v in batch.items()}
+            # batch = {k: v.to(self.device) for k, v in batch.items()}
             embeddings = self.model(batch)
             self.optimizer.zero_grad()
 
@@ -296,7 +295,7 @@ class TrainerAuthorshipAttribution:
             
             
             self.optimizer.step()
-            self.lr_scheduler.step()
+            self.lr_scheduler.step(epoch_n - 1 + i / len(self.train_dataloader))
             self.optimizer.zero_grad()
             # Accuracy calculation
             distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
@@ -320,7 +319,8 @@ class TrainerAuthorshipAttribution:
         }
         self._log_metrics(metrics, phase='Train_epoch')
         return total_loss / len(self.train_dataloader)
-
+    
+    @torch.no_grad()
     def validate(self, epoch_n):
         """
         Validates the model on the validation dataset.
@@ -337,7 +337,7 @@ class TrainerAuthorshipAttribution:
         total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
-                batch = {k: v.to(self.device) for k, v in batch.items()}
+                # batch = {k: v.to(self.device) for k, v in batch.items()}
                 embeddings = self.model(batch)
                 
                 loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
@@ -348,7 +348,7 @@ class TrainerAuthorshipAttribution:
                 distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
                 distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
                 correct_count += torch.sum(distance_positive < distance_negative).item()
-                total += len(batch['anchor_example'])
+                total += len(batch['anchor'])
 
                 if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
@@ -480,7 +480,7 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         model.train()
         total_loss = 0.0
         for batch in train_dataloader:
-            batch = {k: v.to(device) for k, v in batch.items()}
+            # batch = {k: v.to(device) for k, v in batch.items()}
             embeddings = model(batch)
             optimizer.zero_grad()
             loss = criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
@@ -497,7 +497,7 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
         model.eval()
         with torch.no_grad():
             for batch in val_dataloader:
-                batch = {k: v.to(device) for k, v in batch.items()}
+                # batch = {k: v.to(device) for k, v in batch.items()}
                 embeddings = model(batch)
                 loss_value = criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
                 val_loss += loss_value.item()

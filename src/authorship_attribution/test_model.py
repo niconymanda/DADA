@@ -134,45 +134,42 @@ class TesterAuthorshipAttribution:
 
         with torch.no_grad(): 
             for batch in tqdm(test_dataloader):
-                anchor_example = batch['anchor_example']
-                positive_example = batch['positive_example']
-                
                 anchor_labels = batch['label']
 
                 # Anchor-Postive distances
-                anchor_embeddings = self.model(anchor_example)
-                positive_embeddings = self.model(positive_example)
-                dist_ax = self.distance_function(anchor_embeddings, positive_embeddings)
+                embeddings = self.model(batch)
                 
-                cosine_similarity_pos = F.cosine_similarity(anchor_embeddings, positive_embeddings)
+                dist_ax = self.distance_function(embeddings['anchor'], embeddings['positive'])
+                
+                cosine_similarity_pos = F.cosine_similarity(embeddings['anchor'], embeddings['positive'])
                 cosine_distance_pos = 1 - cosine_similarity_pos
                 self.all_cosine_distances_positive.extend(cosine_distance_pos.cpu().numpy())
 
                 # Anchor-Negative distances
                 if self.mode == 'min_negatives':
+                                       
+                    negative_examples = batch['negatives']
                     negative_labels = batch['negative_labels']
-                    negative_examples = batch['negative_examples']
-                    
 
-                    for i in range(anchor_embeddings.size(0)):
+                    for i in range(embeddings['positive'].size(0)):
                         min_dist = dist_ax[i]
                         pred_label = anchor_labels[i]
                         negative_example = negative_examples[i][0]
                         
-                        negative_embeddings = self.model(negative_example)
-                        min_negative_embeddings = negative_embeddings
+                        embeddings = self.model(batch)
+                        min_negative_embeddings = embeddings['negative'][0]
 
                         for neg_idx in range(1, len(negative_examples[i])):
                             negative_example = negative_examples[i][neg_idx]
-                            negative_embeddings = self.model(negative_example)
-                            dist_bx = self.distance_function(anchor_embeddings[i].unsqueeze(0), negative_embeddings)
+                            negative_embeddings = self.model(negative_example)['negative']
+                            dist_bx = self.distance_function(embeddings['positive'][i].unsqueeze(0), negative_embeddings)
                             if dist_bx < min_dist:
                                 min_dist = dist_bx
                                 pred_label = negative_labels[i][neg_idx]
                                 min_negative_embeddings = negative_embeddings
                                 print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
                                 # print(f"Min dist: {min_dist}, possible label: {correct_label}")
-                        cosine_similarity_neg = F.cosine_similarity(anchor_embeddings[i], min_negative_embeddings)
+                        cosine_similarity_neg = F.cosine_similarity(embeddings['anchor'][i], min_negative_embeddings)
                         cosine_distance_neg = 1 - cosine_similarity_neg
                         self.all_cosine_distances_negative.extend(cosine_distance_neg.cpu().numpy())
 
@@ -181,16 +178,15 @@ class TesterAuthorshipAttribution:
                         total += 1
 
                 elif self.mode == 'random':
-                    negative_example = batch['negative_example']
-                    negative_embeddings = self.model(negative_example)
-                    dist_bx = self.distance_function(anchor_embeddings, negative_embeddings)
                     
-                    cosine_similarity_neg = F.cosine_similarity(anchor_embeddings, negative_embeddings)
+                    dist_bx = self.distance_function(embeddings['anchor'], embeddings['negative'])
+                    
+                    cosine_similarity_neg = F.cosine_similarity(embeddings['anchor'], embeddings['negative'])
                     cosine_distance_neg = 1 - cosine_similarity_neg
                     self.all_cosine_distances_negative.extend(cosine_distance_neg.cpu().numpy())
                     
                     correct += torch.sum(dist_ax < dist_bx).item()
-                    total += anchor_embeddings.size(0)
+                    total += dist_ax.size(0)
                 else:
                     print("Mode not recognized. Please choose between 'min_negatives' and 'random'.")
                     return None
@@ -290,10 +286,10 @@ class TesterAuthorshipAttribution:
         all_labels = []
         with torch.no_grad():
             for i,batch in enumerate(tqdm(dataloader, desc=f"Extracting embeddings")):
-                text = batch['anchor_example']
+                
                 labels = batch['label']
 
-                embeddings = model(text).detach().cpu().numpy()
+                embeddings = model(batch)['anchor'].detach().cpu().numpy()
                 all_embeddings.append(embeddings)
                 all_labels.extend(labels.cpu().numpy())
 
