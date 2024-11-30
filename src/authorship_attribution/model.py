@@ -46,6 +46,7 @@ class AuthorshipClassificationLLM(nn.Module):
         return probs
     
 class MeanPooling(nn.Module):
+
     def __init__(self):
         super(MeanPooling, self).__init__()
         
@@ -59,8 +60,7 @@ class MeanPooling(nn.Module):
     
 class AuthorshipLLM(nn.Module):
     def __init__(self, model_name, 
-                 bottleneck_dropout=0.5,
-                 dropout_rate=0.2, 
+                 dropout_rate=0.5, 
                  out_features=256, 
                  max_length=64, 
                  device='cuda', 
@@ -75,9 +75,10 @@ class AuthorshipLLM(nn.Module):
 
         self.pooler = MeanPooling()
         self.dropout = nn.Dropout(dropout_rate)
-        self.fc1 = nn.Linear(in_features=self.model.config.hidden_size,out_features=256)
+        self.fc1 = nn.Linear(in_features=self.model.config.hidden_size,out_features=out_features)
 
         self.device = device
+
     def freeze_params(self):
         for param in self.model.base_model.parameters():
             param.requires_grad = False
@@ -116,20 +117,25 @@ class AuthorshipLLM(nn.Module):
             self.model(**x_a, return_dict=True),
             self.model(**x_p, return_dict=True),
             self.model(**x_n, return_dict=True))
-        
+        # print(x_a_output['last_hidden_state'].shape)
+
         x_a_output, x_p_output, x_n_output = (
             self.pooler(x_a_output['last_hidden_state'], x_a['attention_mask']),
             self.pooler(x_p_output['last_hidden_state'], x_p['attention_mask']),
             self.pooler(x_n_output['last_hidden_state'], x_n['attention_mask']))
+        # print(x_a_output.shape)
+        
         x_a_output, x_p_output, x_n_output = (
             self.fc1(x_a_output),
             self.fc1(x_p_output),
             self.fc1(x_n_output))
+        # print(x_a_output.shape)
+        
         x_a_output, x_p_output, x_n_output = (
             F.normalize(x_a_output, p=2, dim=-1),
             F.normalize(x_p_output, p=2, dim=-1),
             F.normalize(x_n_output, p=2, dim=-1))   
-
+        # print(x_a_output.shape)
         return {
             "anchor": x_a_output,
             "positive": x_p_output,

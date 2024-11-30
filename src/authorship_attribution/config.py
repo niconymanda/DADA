@@ -29,11 +29,11 @@ def get_args():
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
     parser.add_argument('--early_stopping_patience', type=int, default=10, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
-    parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
+    parser.add_argument('--min_quotes_per_author', type=int, default=150, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
     parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
-    parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
+    parser.add_argument('--lr_scheduler', type=str, default='cosine_warmup', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
     parser.add_argument('--classification_head', type=str, default='gmm', help='Classification head type[linear, mlp, gmm]')
     # 350 quotes=5 authors, 450 quotes=3 authors,
     return parser.parse_args()

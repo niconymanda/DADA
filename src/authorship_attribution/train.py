@@ -292,10 +292,16 @@ class TrainerAuthorshipAttribution:
 
             total_loss += loss_value.item()
             current_loss += loss_value.item()
-            
-            
+            total_norm = 0
+            for p in self.model.parameters():
+                param_norm = p.grad.detach().data.norm(2)
+                total_norm += param_norm.item() ** 2
+            total_norm = total_norm ** (1. / 2)
+            # metrics = { "Gradient Norm": total_norm, 'step':i }
+            # self._log_metrics(metrics, phase='Train_norm')
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 50)
             self.optimizer.step()
-            self.lr_scheduler.step(epoch_n - 1 + i / len(self.train_dataloader))
+            self.lr_scheduler.step(epoch_n + i / iters)
             self.optimizer.zero_grad()
             # Accuracy calculation
             distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
@@ -304,6 +310,7 @@ class TrainerAuthorshipAttribution:
             
             if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
+                        "norm": total_norm,
                         "Loss": current_loss / self.args.logging_step,
                         "epoch": epoch_n,
                         "step": i
@@ -382,6 +389,8 @@ class TrainerAuthorshipAttribution:
                     self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.train_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
                 elif 'Val' in phase:
                     self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.val_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
+                elif 'Train_norm' in phase:
+                    self.writer.add_scalar(f"{phase}/{key}", value) 
                 else:
                     print("Invalid phase")
 
@@ -414,6 +423,8 @@ class TrainerAuthorshipAttribution:
             return optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1, last_epoch=-1)
         elif self.args.lr_scheduler == 'cosine':
             return optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.args.epochs*len(self.train_dataloader), eta_min=1e-7, last_epoch=-1)
+        elif self.args.lr_scheduler == 'cosine_warmup':
+            return optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=30, T_mult=2, eta_min=1e-7, last_epoch=-1)
         elif self.args.lr_scheduler == 'plateau':
             return optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
         else:
