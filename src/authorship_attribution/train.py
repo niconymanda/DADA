@@ -54,7 +54,8 @@ class TrainerAuthorshipAttribution:
                  report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
                  early_stopping=True,
                  save_model=False, 
-                 tune=False):
+                 tune=False,
+                 model_weights=None):
         self.model = model
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
@@ -66,6 +67,7 @@ class TrainerAuthorshipAttribution:
         self.num_labels = len(self.author_id_map.keys())
         self.early_stopping = early_stopping
         self.save_model = save_model
+        self.model_weights = model_weights
         self.device = cfg.get_device()
         if not tune:
             self.loss_fn = self.get_loss_fn() if loss_fn is None else loss_fn   
@@ -98,24 +100,27 @@ class TrainerAuthorshipAttribution:
             model: The trained model.
             classification_model (optional): The trained classification model if `classification_head` is True.
         """
-        
-        for epoch_n in range(self.args.epochs):
-            # train_loss = self.train_model(epoch_n)
-            # val_loss = self.validate(epoch_n)
-            train_loss = self.train_model(epoch_n, self.train_dataloader, self.optimizer, self.loss_fn, self.lr_scheduler, self.model, self.device)
-            val_loss, accuracy = self.validate(epoch_n, self.val_dataloader, self.loss_fn, self.model, self.device)
-            if self.early_stopping:
-                if self.early_stopping_model.step(val_loss):
-                    print("Early stopping triggered")
-                    break 
-        cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
+        if self.model_weights:
+            print("Loading model weights!...")
+            self.model, self.optimizer, epoch_n = cfg.load_checkpoint(self.model, self.optimizer, self.model_weights)
+        else:
+            for epoch_n in range(self.args.epochs):
+                # train_loss = self.train_model(epoch_n)
+                # val_loss = self.validate(epoch_n)
+                train_loss = self.train_model(epoch_n, self.train_dataloader, self.optimizer, self.loss_fn, self.lr_scheduler, self.model, self.device)
+                val_loss, accuracy = self.validate(epoch_n, self.val_dataloader, self.loss_fn, self.model, self.device)
+                
+                if self.early_stopping:
+                    if self.early_stopping_model.step(val_loss):
+                        print("Early stopping triggered")
+                        break 
+            cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
         
         if classification_head:
             print("Training classification head!")
             if self.args.classification_head == 'gmm':
                 embeddings = self.extract_embeddings()
                 gmm = self.fit_gmm(embeddings)
-                cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
                 return self.model, gmm
             
             classification_model = AuthorshipClassificationLLM(self.model, num_labels=self.num_labels, head_type=self.args.classification_head)
@@ -155,7 +160,7 @@ class TrainerAuthorshipAttribution:
         """
         Fit the GMM using the embeddings and their corresponding labels.
         """
-        gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed)
+        gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed, max_iter=3000, n_init=10)
         gmm.fit(embeddings)
         return gmm
 

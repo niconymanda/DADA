@@ -15,24 +15,24 @@ def main(args):
     cfg.init_env(args)
     data, spoofed_data, author_id_map = cfg.load_data(args)
     current_time = time.strftime("%Y%m%d-%H%M%S")
-    repository_id = f"/data/iivanova-23/output_data/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
+    repository_id = f"output/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
     os.makedirs(repository_id, exist_ok=True)
     
-    train_data, temp_data = train_test_split(data, test_size=0.3, stratify=data['label'], random_state=args.seed)
-    val_data, test_data = train_test_split(temp_data, test_size=0.5, stratify=temp_data['label'], random_state=args.seed)
+    train_data, val_data = train_test_split(data, test_size=0.2, stratify=data['label'], random_state=args.seed)
+    # val_data, test_data = train_test_split(temp_data, test_size=0.5, stratify=temp_data['label'], random_state=args.seed)
     train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True)
     val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True)
-    test_dataset = AuthorTripletLossDataset(test_data, args.model_name, train=True)
+    # test_dataset = AuthorTripletLossDataset(test_data, args.model_name, train=True)
     spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=True)
     
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
-    print(f"Test dataset size: {len(test_dataset)}")
+    # print(f"Test dataset size: {len(test_dataset)}")
             
     num_workers = 0
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
+    # test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
     spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
     
     # lora_config = LoraConfig(
@@ -52,19 +52,12 @@ def main(args):
                                            author_id_map=author_id_map,
                                            report_to='tensorboard',
                                            early_stopping=True,
-                                           save_model=False,
+                                           save_model=True,
+                                           model_weights='output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth'
                                            )
     model, classification_model = trainer.train(classification_head=True)
-    
-    #Load model from checkpoint
-    # repo = '/home/infres/iivanova-23/DADA/output/n_authors_3/FacebookAI/roberta-large_32_20'
-    # model = AuthorshipLLM(args.model_name)
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
-    # config.load_checkpoint(model, optimizer, f'{repo}/final.pth')
-    # classification_model = AuthorshipClassificationLLM(model, num_labels=len(author_id_map.keys()))
-    # classification_optimizer = torch.optim.Adam(classification_model.parameters(), lr=args.learning_rate)
-    # config.load_checkpoint(classification_model, classification_optimizer, f'{repo}/classification_final.pth')
-    
+    loaded_model = AuthorshipLLM(args.model_name)
+    # loaded_model.load_state_dict(torch.load("output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth"))
 
     tester = TesterAuthorshipAttribution(model=model, 
                     classification_model=classification_model,
@@ -72,7 +65,7 @@ def main(args):
                     author_id_map=author_id_map,
                     args=args)
     
-    tester.test(test_dataloader, spoofed_data_loader)
+    tester.test(val_dataloader, spoofed_data_loader)
 
 
 if __name__ == "__main__":
