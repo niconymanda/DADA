@@ -18,7 +18,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes_train.csv', help='Path to the input data file')
     parser.add_argument('--epochs', type=int, default=14, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--epochs_classification', type=int, default=1, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-6, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')

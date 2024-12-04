@@ -223,10 +223,10 @@ class TesterAuthorshipAttribution:
 
         with torch.no_grad():
             for batch in tqdm(test_dataloader):
-                text = batch['anchor_example']
+                
                 labels = batch['label']
 
-                outputs = self.classification_model(text)
+                outputs = self.classification_model(batch)
                 preds = outputs.argmax(dim=1)
 
                 all_preds.extend(preds.cpu().numpy())
@@ -294,7 +294,8 @@ class TesterAuthorshipAttribution:
                 
                 labels = batch['label']
 
-                embeddings = model(batch)['anchor'].detach().cpu().numpy()
+                embeddings = model(batch).detach().cpu().numpy()
+                # embeddings = embeddings['anchor'].detach().cpu().numpy()
                 all_embeddings.append(embeddings)
                 all_labels.extend(labels.cpu().numpy())
 

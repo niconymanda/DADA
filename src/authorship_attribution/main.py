@@ -46,6 +46,7 @@ def main(args):
                           freeze_encoder=False, 
                           use_layers=[-1, -2, -3])
     # model = get_peft_model(model, lora_config)
+    path = '/home/infres/iivanova-23/DADA/output/n_authors_3/microsoft/deberta-v3-large_16_14_20241204-171443/final.pth'
     trainer = TrainerAuthorshipAttribution(model=model,
                                            train_dataloader=train_dataloader,
                                            val_dataloader=val_dataloader,
@@ -55,7 +56,7 @@ def main(args):
                                            report_to='tensorboard',
                                            early_stopping=True,
                                            save_model=True,
-                                        #    model_weights='/home/infres/iivanova-23/DADA/output/n_authors_3/microsoft/deberta-v3-large_16_14_20241204-110801/final.pth'
+                                           model_weights=path
                                            )
     model, classification_model = trainer.train(classification_head=True)
     # loaded_model.load_state_dict(torch.load("output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth"))

@@ -40,8 +40,8 @@ class AuthorshipClassificationLLM(nn.Module):
                 param.requires_grad = False
 
 
-    def forward(self, example):
-        outputs = self.model(example)
+    def forward(self, input):
+        outputs = self.model(input)['anchor']
         logits = self.classifier(outputs)
         probs = self.softmax(logits)
         return probs
@@ -124,7 +124,6 @@ class MLP(nn.Module):
         self.layers.append(torch.nn.Linear(in_dim, out_features))
         self.layers.append(torch.nn.Dropout(dropout_rate))
         self.mlp = nn.Sequential(*self.layers)
-        print(self.mlp)
         
     def forward(self, x):
         return self.mlp(x)

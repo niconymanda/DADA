@@ -181,14 +181,13 @@ class TrainerAuthorshipAttribution:
         classification_model.train()
         total_loss = 0
         current_loss = 0.0
-        all_embeddings = []
-        all_labels = []
-
+        correct = 0
+        total = 0
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
-            text = batch['anchor']
+            # text = batch['anchor']
             labels = batch['label'].to(self.device)
 
-            out_model = classification_model(text)
+            out_model = classification_model(batch)
                         
             optimizer_classification.zero_grad()
             loss_value = criterion_classification(out_model, labels)
@@ -196,6 +195,9 @@ class TrainerAuthorshipAttribution:
             optimizer_classification.step()
             total_loss += loss_value.item()
             current_loss += loss_value.item()
+            preds = out_model.argmax(dim=1)
+            total += labels.size(0)
+            correct += (preds == labels).sum().item()
 
             if i % self.args.logging_step == self.args.logging_step - 1:
                 metrics = {
@@ -209,7 +211,8 @@ class TrainerAuthorshipAttribution:
         train_loss = total_loss / len(self.val_dataloader)
         metrics = {
             "Loss": train_loss,
-            "epoch": epoch_n
+            "epoch": epoch_n, 
+            "Accuracy": correct / total
         }
         self._log_metrics(metrics, phase='Train_classificaion_epochs')
         return total_loss / len(self.train_dataloader)
@@ -237,10 +240,10 @@ class TrainerAuthorshipAttribution:
         total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
-                text = batch['anchor']
+                # text = batch['anchor']
                 labels = batch['label'].to(self.device)
 
-                outputs = classificaion_model(text)
+                outputs = classificaion_model(batch)
                 loss_value = criterion_classification(outputs, labels)
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
