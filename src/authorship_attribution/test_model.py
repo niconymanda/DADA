@@ -71,31 +71,35 @@ class TesterAuthorshipAttribution:
         results_spoofed = {}
 
         # Test results test_dataloader
-        acc = self.test_abx_accuracy(test_dataloader)
+        acc = self.test_abx_accuracy(test_dataloader, self.model)
         results['abx_accuracy'] = acc
         print(f"Test ABX Accuracy : {acc:.4f}")
        
         self.plot_cosine_distence_distribution('test')
 
         # Test results spoofed_dataloader
-        acc_sp = self.test_abx_accuracy(spoofed_dataloader)
+        acc_sp = self.test_abx_accuracy(spoofed_dataloader, self.model)
         print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
         # results_spoofed['abx_accuracy'] = acc_sp
-        # self.plot_cosine_distence_distribution('spoofed')
+        self.plot_cosine_distence_distribution('spoofed')
+
+        all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
 
         #Test results on classification model
         if self.classification_model is not None:
-            all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
 
-            if self.args.classification_head == 'gmm':
-                predictions, classif_results = self.gmm_predict(self.classification_model, all_embeddings, all_labels)
-                self.plot_tsne_for_authors(all_embeddings, predictions, 't-SNE_gmm')
-
+            if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
+                predictions, classif_results = self.predict(self.classification_model, all_embeddings, all_labels)
+                abx_classif = self.test_abx_accuracy(test_dataloader, self.classification_model)
+                print(f"ABX Accuracy for classification model: {abx_classif:.4f}")
                 # all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
                 # _, classif_results_spoofed = self.gmm_predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
             else:   
                 classif_results = self.test_classification(test_dataloader)
                 classif_results_spoofed = self.test_classification(spoofed_dataloader)
+
+            name = f't-SNE_{self.args.classification_head}'
+            self.plot_tsne_for_authors(all_embeddings, predictions, name)
 
             results.update(classif_results)
             config.write_results_to_file(results, './output/results.txt', self.args)
@@ -107,7 +111,7 @@ class TesterAuthorshipAttribution:
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
 
 
-    def test_abx_accuracy(self, test_dataloader):
+    def test_abx_accuracy(self, test_dataloader, model):
         """
         Evaluate the ABX accuracy of the model using the provided test dataloader (can be bona-fide and spoofed).
         Test the model by comparing the distance between the anchor and positive examples with the distance between the anchor and minimum of negative examples.
@@ -125,7 +129,7 @@ class TesterAuthorshipAttribution:
             float: The accuracy of the model on the test set.
         """
         
-        self.model.eval() 
+        model.eval() 
         correct = 0
         total = 0
 
@@ -137,7 +141,7 @@ class TesterAuthorshipAttribution:
                 anchor_labels = batch['label']
 
                 # Anchor-Postive distances
-                embeddings = self.model(batch)
+                embeddings = model(batch)
                 
                 dist_ax = self.distance_function(embeddings['anchor'], embeddings['positive'])
                 
@@ -156,12 +160,12 @@ class TesterAuthorshipAttribution:
                         pred_label = anchor_labels[i]
                         negative_example = negative_examples[i][0]
                         
-                        embeddings = self.model(batch)
+                        embeddings = model(batch)
                         min_negative_embeddings = embeddings['negative'][0]
 
                         for neg_idx in range(1, len(negative_examples[i])):
                             negative_example = negative_examples[i][neg_idx]
-                            negative_embeddings = self.model(negative_example)['negative']
+                            negative_embeddings = model(negative_example)['negative']
                             dist_bx = self.distance_function(embeddings['positive'][i].unsqueeze(0), negative_embeddings)
                             if dist_bx < min_dist:
                                 min_dist = dist_bx
@@ -275,7 +279,8 @@ class TesterAuthorshipAttribution:
         Returns:
             np.ndarray: An array of embeddings extracted from the model.
         """
-        if self.args.classification_head == 'gmm':
+
+        if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn' or self.classification_model is None:
             model = self.model
             self.model.eval()
         else:
@@ -296,12 +301,13 @@ class TesterAuthorshipAttribution:
         all_embeddings = np.concatenate(all_embeddings, axis=0)
         all_labels = np.array(all_labels)
         return all_embeddings, all_labels
+
     
-    def gmm_predict(self, gmm, embeddings, labels):
+    def predict(self, classifier, embeddings, labels):
         """
-        Predicts author labels using a Gaussian Mixture Model (GMM).
+        Predicts author labels using a classifier.
         Args:
-            gmm (GaussianMixture): A trained GMM model.
+            classifier (object): A classifier object with a `predict` method, can be GMM, K-NN.
             embeddings (np.ndarray): An array of embeddings to predict labels for.
             labels (np.ndarray): An array of true labels for the embeddings.
         Returns:
@@ -309,7 +315,7 @@ class TesterAuthorshipAttribution:
                 - np.ndarray: An array of predicted probabilities for each class.
                 - np.ndarray: An array of predicted labels.
         """
-        probabilities = gmm.predict_proba(embeddings)
+        probabilities = classifier.predict_proba(embeddings)
         predictions = np.argmax(probabilities, axis=1)
         print(f"Predictions: {predictions}")
         print(f"Labels: {labels}")

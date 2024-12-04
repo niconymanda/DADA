@@ -20,6 +20,7 @@ import wandb
 import numpy as np
 from transformers import get_linear_schedule_with_warmup
 from sklearn.mixture import GaussianMixture
+from sklearn.neighbors import KNeighborsClassifier
 
 
 class TrainerAuthorshipAttribution:
@@ -120,24 +121,30 @@ class TrainerAuthorshipAttribution:
             print("Training classification head!")
             if self.args.classification_head == 'gmm':
                 embeddings = self.extract_embeddings()
-                gmm = self.fit_gmm(embeddings)
+                gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed, max_iter=3000, n_init=10)
+                gmm.fit(embeddings)
                 return self.model, gmm
-            
-            classification_model = AuthorshipClassificationLLM(self.model, num_labels=self.num_labels, head_type=self.args.classification_head)
-            classification_loss = nn.CrossEntropyLoss()
-            classification_model.to(self.device)
-            classification_loss.to(self.device)
-            classification_optimizer = optim.AdamW(classification_model.parameters(), lr=self.args.learning_rate_classification)
-            for epoch_n in range(self.args.epochs_classification):
-                train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
-                val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
-                if self.early_stopping:
-                    if self.early_stopping_classif.step(val_loss):
-                        print("Early stopping triggered")
-                        break 
-                    
-            cfg.save_checkpoint(classification_model, classification_optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
-            return self.model, classification_model
+            elif self.args.classification_head == 'knn':
+                embeddings = self.extract_embeddings()
+                knn = KNeighborsClassifier(n_neighbors=5)
+                knn.fit(embeddings, self.train_dataset.labels)
+                return self.model, knn
+            elif self.args.classification_head == 'linear' or self.args.classification_head == 'mlp':
+                classification_model = AuthorshipClassificationLLM(self.model, num_labels=self.num_labels, head_type=self.args.classification_head)
+                classification_loss = nn.CrossEntropyLoss()
+                classification_model.to(self.device)
+                classification_loss.to(self.device)
+                classification_optimizer = optim.AdamW(classification_model.parameters(), lr=self.args.learning_rate_classification)
+                for epoch_n in range(self.args.epochs_classification):
+                    train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
+                    val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
+                    if self.early_stopping:
+                        if self.early_stopping_classif.step(val_loss):
+                            print("Early stopping triggered")
+                            break 
+                        
+                cfg.save_checkpoint(classification_model, classification_optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
+                return self.model, classification_model
         return self.model, None 
     def extract_embeddings(self):
         """
@@ -154,13 +161,6 @@ class TrainerAuthorshipAttribution:
         all_embeddings = np.vstack(all_embeddings)
         return all_embeddings
     
-    def fit_gmm(self, embeddings):
-        """
-        Fit the GMM using the embeddings and their corresponding labels.
-        """
-        gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed, max_iter=3000, n_init=10)
-        gmm.fit(embeddings)
-        return gmm
 
     def train_classification(self, classification_model, criterion_classification, optimizer_classification, epoch_n):
         """
@@ -292,14 +292,14 @@ class TrainerAuthorshipAttribution:
 
             total_loss += loss_value.item()
             current_loss += loss_value.item()
-            total_norm = 0
-            for p in self.model.parameters():
-                param_norm = p.grad.detach().data.norm(2)
-                total_norm += param_norm.item() ** 2
-            total_norm = total_norm ** (1. / 2)
+            # total_norm = 0
+            # for p in self.model.parameters():
+            #     param_norm = p.grad.detach().data.norm(2)
+            #     total_norm += param_norm.item() ** 2
+            # total_norm = total_norm ** (1. / 2)
             # metrics = { "Gradient Norm": total_norm, 'step':i }
             # self._log_metrics(metrics, phase='Train_norm')
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 50)
+            # torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.clip_grad)
             self.optimizer.step()
             self.lr_scheduler.step(epoch_n + i / iters)
             self.optimizer.zero_grad()
@@ -310,7 +310,7 @@ class TrainerAuthorshipAttribution:
             
             if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
-                        "norm": total_norm,
+                        # "norm": total_norm,
                         "Loss": current_loss / self.args.logging_step,
                         "epoch": epoch_n,
                         "step": i
@@ -389,8 +389,6 @@ class TrainerAuthorshipAttribution:
                     self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.train_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
                 elif 'Val' in phase:
                     self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.val_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
-                elif 'Train_norm' in phase:
-                    self.writer.add_scalar(f"{phase}/{key}", value) 
                 else:
                     print("Invalid phase")
 

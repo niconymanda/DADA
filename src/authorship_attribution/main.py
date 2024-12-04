@@ -19,30 +19,32 @@ def main(args):
     os.makedirs(repository_id, exist_ok=True)
     
     train_data, val_data = train_test_split(data, test_size=0.2, stratify=data['label'], random_state=args.seed)
-    # val_data, test_data = train_test_split(temp_data, test_size=0.5, stratify=temp_data['label'], random_state=args.seed)
     train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True)
     val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True)
-    # test_dataset = AuthorTripletLossDataset(test_data, args.model_name, train=True)
     spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=True)
     
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
-    # print(f"Test dataset size: {len(test_dataset)}")
             
     num_workers = 0
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
-    # test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
     spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
     
     # lora_config = LoraConfig(
     #     r=4,  
     #     lora_alpha=16,  
     #     lora_dropout=0.1,
-    #     target_modules=["query", "value"]
+    #     target_modules=['query_proj', 'value_proj'],
     # )
 
-    model = AuthorshipLLM(args.model_name)
+    model = AuthorshipLLM(args.model_name, 
+                          dropout_rate=0.1, 
+                          out_features=1024, 
+                          max_length=64, 
+                          num_layers=2, 
+                          freeze_encoder=False, 
+                          use_layers=[-1, -2, -3])
     # model = get_peft_model(model, lora_config)
     trainer = TrainerAuthorshipAttribution(model=model,
                                            train_dataloader=train_dataloader,
@@ -53,7 +55,7 @@ def main(args):
                                            report_to='tensorboard',
                                            early_stopping=True,
                                            save_model=True,
-                                        #    model_weights='output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth'
+                                        #    model_weights='/home/infres/iivanova-23/DADA/output/n_authors_3/microsoft/deberta-v3-large_16_14_20241204-110801/final.pth'
                                            )
     model, classification_model = trainer.train(classification_head=True)
     # loaded_model.load_state_dict(torch.load("output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth"))
