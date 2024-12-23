@@ -23,7 +23,7 @@ def get_args():
     parser.add_argument('--early_stopping_patience', type=int, default=3, help='Number of epochs to wait before early stopping')
     parser.add_argument('--early_stopping_threshold', type=float, default=0.01, help='Threshold for early stopping')
     # parser.add_argument('--loss_fn', type=str, default='triplet_cosine', help='Loss function to use for training', choices=['triplet', 'triplet_cosine', 'ada_triplet'])
-    parser.add_argument('--gpu_id', type=int, default=0, help='ID of the GPU to use for training')
+    parser.add_argument('--gpu_id', type=int, required=True, help='ID of the GPU to use for training')
     # parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
     # parser.add_argument('--at_lambda', type=float, default=0.5, help='Lambda for AdaTriplet loss')
     parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility')
