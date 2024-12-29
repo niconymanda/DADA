@@ -180,3 +180,11 @@ authorship_attribution/
 
 #out files
 out*.txt
+
+
+# Latex aux files
+*.aux
+*.bbl
+*.blg
+*.idx
+*.out

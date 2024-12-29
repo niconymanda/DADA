@@ -1,0 +1,534 @@
+@article{Davis80-COP,
+	Author = {Steven B. Davis and Paul Mermelstein},
+	Journal = {IEEE Transactions on Acoustics, Speech and Signal Processing},
+	Number = {4},
+	Pages = {357--366},
+	Title = {Comparison of Parametric Representations for Monosyllabic Word Recognition in Continuously Spoken Sentences},
+	Volume = {28},
+  Month = aug,
+	Year = {1980}}
+
+@article{Rabiner89-ATO,
+	Author = {Lawrence R. Rabiner},
+	Journal = {Proceedings of the IEEE},
+	Number = {2},
+	Pages = {257--286},
+	Title = {A Tutorial on Hidden {Markov} Models and Selected Applications in Speech Recognition},
+	Volume = {77},
+  Month = feb,
+	Year = {1989}}
+
+@book{Hastie09-TEO,
+	Address = {New York},
+	Author = {Trevor Hastie and Robert Tibshirani and Jerome Friedman},
+	Publisher = {Springer},
+	Title = {The Elements of Statistical Learning -- Data Mining, Inference, and Prediction},
+	Year = {2009}}
+
+@inproceedings{Smith22-XXX,
+	Author = {Jane Smith and Firstname2 Lastname2 and Firstname3 Lastname3},
+	Pages = {100--104},
+	Title = {A really good paper about {D}ynamic {T}ime {W}arping},
+ 	Booktitle = {Proc. {INTERSPEECH} 2022 -- 23\textsuperscript{rd} Annual Conference of the International Speech Communication Association},
+    Address = {{Incheon, Korea}},
+    Month = {{Sep.}},
+	Year = {2022}}
+
+ % use the Crossref field to copy any unspecified fields (such as booktitle) from another entry, 
+@inproceedings{Jones22-XXX,
+	Author = {Robert Jones and Firstname2 Lastname2 and Firstname3 Lastname3},
+	Crossref = {Smith22-XXX},
+	Pages = {105--109},
+	Title = {An excellent paper introducing the {ABC} toolkit}}
+
+@inproceedings{moore19_interspeech,
+  author={Roger K. Moore and Lucy Skidmore},
+  title={On the Use/Misuse of the Term {`Phoneme'}},
+    Address = {{Graz, Austria}},
+    Month = {{Sep.}},
+  year=2019,
+ 	Booktitle = {Proc. {INTERSPEECH} 2019 -- 20\textsuperscript{th} Annual Conference of the International Speech Communication Association},
+  pages={2340--2344},
+  doi={10.21437/Interspeech.2019-2711}
+}
+
+@article{does_audio_deepfake_generalize,
+   abstract = {Current text-to-speech algorithms produce realistic fakes of human voices, making deepfake detection a much-needed area of research. While researchers have presented various deep learning models for audio spoofs detection, it is often unclear exactly why these architectures are successful: Preprocessing steps, hy-perparameter settings, and the degree of fine-tuning are not consistent across related work. Which factors contribute to success, and which are accidental? In this work, we address this problem: We systematize audio spoofing detection by re-implementing and uniformly evaluating twelve architectures from related work. We identify over-arching features for successful audio deepfake detection, such as using cqtspec or logspec features instead of melspec features, which improves performance by 37% EER on average, all other factors constant. Additionally, we evaluate generalization capabilities: We collect and publish a new dataset consisting of 37.9 hours of found audio recordings of celebrities and politicians, of which 17.2 hours are deepfakes. We find that related work performs poorly on such real-world data (performance degradation of up to one thousand percent). This could suggest that the community has tailored its solutions too closely to the prevailing ASVspoof benchmark and that deepfakes are much harder to detect outside the lab than previously thought.},
+   author = {Nicolas M Müller and Pavel Czempin and Franziska Dieckmann and Adam Froghyar and Konstantin Böttinger},
+   title = {Does Audio Deepfake Detection Generalize?},
+   url = {https://deepfake-demo.aisec.fraunhofer.de/in},
+}
+
+@article{multimodal_df_detection,
+   abstract = {The widespread use of deep learning techniques for creating realistic synthetic media, commonly known as deepfakes, poses a significant threat to individuals, organizations, and society. As the malicious use of these data could lead to unpleasant situations, it is becoming crucial to distinguish between authentic and fake media. Nonetheless, though deepfake generation systems can create convincing images and audio, they may struggle to maintain consistency across different data modalities, such as producing a realistic video sequence where both visual frames and speech are fake and consistent one with the other. Moreover, these systems may not accurately reproduce semantic and timely accurate aspects. All these elements can be exploited to perform a robust detection of fake content. In this paper, we propose a novel approach for detecting deepfake video sequences by leveraging data multimodality. Our method extracts audio-visual features from the input video over time and analyzes them using time-aware neural networks. We exploit both the video and audio modalities to leverage the inconsistencies between and within them, enhancing the final detection performance. The peculiarity of the proposed method is that we never train on multimodal deepfake data, but on disjoint monomodal datasets which contain visual-only or audio-only deepfakes. This frees us from leveraging multimodal datasets during training, which is desirable given their lack in the literature. Moreover, at test time, it allows to evaluate the robustness of our proposed detector on unseen multimodal deepfakes. We test different fusion techniques between data modalities and investigate which one leads to more robust predictions by the developed detectors. Our results indicate that a multimodal approach is more effective than a monomodal one, even if trained on disjoint monomodal datasets.},
+   author = {Davide Salvi and Honggu Liu and Sara Mandelli and Paolo Bestagini and Wenbo Zhou and Weiming Zhang and Stefano Tubaro},
+   doi = {10.3390/JIMAGING9060122},
+   issn = {2313-433X},
+   issue = {6},
+   journal = {Journal of Imaging 2023, Vol. 9, Page 122},
+   keywords = {audio forensics,deepfake detection,multimodality,video forensics},
+   month = {6},
+   pages = {122},
+   publisher = {Multidisciplinary Digital Publishing Institute},
+   title = {A Robust Approach to Multimodal Deepfake Detection},
+   volume = {9},
+   url = {https://www.mdpi.com/2313-433X/9/6/122/htm https://www.mdpi.com/2313-433X/9/6/122},
+   year = {2023},
+}
+
+@article{semantic_approach,
+   abstract = {In recent years, audio and video deepfake technology has advanced relentlessly, severely impacting people's reputation and reliability. Several factors have facilitated the growing deepfake threat. On the one hand, the hyper-connected society of social and mass media enables the spread of multimedia content worldwide in real-time, facilitating the dissemination of counterfeit material. On the other hand, neural network-based techniques have made deepfakes easier to produce and difficult to detect, showing that the analysis of low-level features is no longer sufficient for the task. This situation makes it crucial to design systems that allow detecting deepfakes at both video and audio levels. In this paper, we propose a new audio spoof-ing detection system leveraging emotional features. The rationale behind the proposed method is that audio deepfake techniques cannot correctly synthesize natural emotional behavior. Therefore, we feed our deepfake detector with high-level features obtained from a state-of-the-art Speech Emotion Recognition (SER) system. As the used descriptors capture semantic audio information, the proposed system proves robust in cross-dataset scenarios outperforming the considered baseline on multiple datasets.},
+   author = {Emanuele Conti and Davide Salvi and Clara Borrelli and Brian Hosler and Paolo Bestagini and Fabio Antonacci and Augusto Sarti and Matthew C Stamm and Stefano Tubaro},
+   doi = {10.1109/ICASSP43922.2022.9747186},
+   isbn = {9781665405409},
+   keywords = {Index Terms-deepfake,audio forensics,deep learning},
+   title = {DEEPFAKE SPEECH DETECTION THROUGH EMOTION RECOGNITION: A SEMANTIC APPROACH},
+}
+@article{survey_detection,
+   abstract = {Audio deepfake detection is an emerging active topic. A growing number of literatures have aimed to study deepfake detection algorithms and achieved effective performance, the problem of which is far from being solved. Although there are some review literatures, there has been no comprehensive survey that provides researchers with a systematic overview of these developments with a unified evaluation. Accordingly, in this survey paper, we first highlight the key differences across various types of deepfake audio, then outline and analyse competitions, datasets, features, classifications, and evaluation of state-of-the-art approaches. For each aspect, the basic techniques, advanced developments and major challenges are discussed. In addition, we perform a unified comparison of representative features and classifiers on ASVspoof 2021, ADD 2023 and In-the-Wild datasets for audio deepfake detection, respectively. The survey shows that future research should address the lack of large scale datasets in the wild, poor generalization of existing detection methods to unknown fake attacks, as well as interpretability of detection results etc.},
+   author = {Jiangyan Yi and Chenglong Wang and Jianhua Tao and Senior Member and Xiaohui Zhang and Chu Yuan Zhang and Yan Zhao},
+   isbn = {2308.14970v1},
+   keywords = {Index Terms-Audio,classifiers ✦,deepfake detection,features,survey},
+   note = {},
+   title = {Audio Deepfake Detection: A Survey},
+   url = {http://addchallenge.cn},
+}
+@article{ASVspoof_21,
+   abstract = {Benchmarking initiatives support the meaningful comparison of competing solutions to prominent problems in speech and language processing. Successive benchmarking evaluations typically reflect a progressive evolution from ideal lab conditions towards to those encountered in the wild. ASVspoof, the spoofing and deepfake detection initiative and challenge series, has followed the same trend. This article provides a summary of the ASVspoof 2021 challenge and the results of 54 participating teams that submitted to the evaluation phase. For the logical access (LA) task, results indicate that countermeasures are robust to newly introduced encoding and transmission effects. Results for the physical access (PA) task indicate the potential to detect replay attacks in real, as opposed to simulated physical spaces, but a lack of robustness to variations between simulated and real acoustic environments. The Deepfake (DF) task, new to the 2021 edition, targets solutions to the detection of manipulated, compressed speech data posted online. While detection solutions offer some resilience to compression effects, they lack generalization across different source datasets. In addition to a summary of the top-performing systems for each task, new analyses of influential data factors and results for hidden data subsets, the article includes a review of post-challenge results, an outline of the principal challenge limitations and a road-map for the future of ASVspoof.},
+   author = {Xuechen Liu and Xin Wang and Md Sahidullah and Jose Patino and Hector Delgado and Tomi Kinnunen and Massimiliano Todisco and Junichi Yamagishi and Nicholas Evans and Andreas Nautsch and Kong Aik Lee},
+   doi = {10.1109/TASLP.2023.3285283},
+   issn = {23299304},
+   journal = {IEEE/ACM Transactions on Audio Speech and Language Processing},
+   keywords = {ASVspoof,countermeasures,deepfakes,presentation attack detection,spoofing},
+   note = {},
+   pages = {2507-2522},
+   publisher = {Institute of Electrical and Electronics Engineers Inc.},
+   title = {ASVspoof 2021: Towards Spoofed and Deepfake Speech Detection in the Wild},
+   volume = {31},
+   year = {2023},
+}
+
+@article{contextual_confidence,
+   abstract = {Generative AI models perturb the foundations of effective human communication. They present new challenges to contextual confidence, disrupting participants' ability to identify the authentic context of communication and their ability to protect communication from reuse and recombination outside its intended context. In this paper, we describe strategies-tools, technologies and policies-that aim to stabilize communication in the face of these challenges. The strategies we discuss fall into two broad categories. Containment strategies aim to reassert context in environments where it is currently threatened-a reaction to the context-free expectations and norms established by the internet. Mobilization strategies, by contrast, view the rise of generative AI as an opportunity to proactively set new and higher expectations around privacy and authenticity in mediated communication.},
+   author = {Shrey Jain and Zoë Hitzig and Pamela Mishkin},
+   title = {Contextual Confidence and Generative AI *},
+   year = {2023},
+}
+
+@article{xai_detection,
+   abstract = {Fake media, generated by methods such as deepfakes, have become indistinguishable from real media, but their detection has not improved at the same pace. Furthermore, the absence of interpretability on deepfake detection models makes their reliability questionable. In this paper, we present a human perception level of interpretability for deepfake audio detection. Based on their characteristics, we implement several explainable artificial intelligence (XAI) methods used for image classification on an audio-related task. In addition, by examining the human cognitive process of XAI on image classification, we suggest the use of a corresponding data format for providing interpretability. Using this novel concept, a fresh interpretation using attribution scores can be provided.},
+   author = {Suk Young Lim and Dong Kyu Chae and Sang Chul Lee},
+   doi = {10.3390/APP12083926},
+   issn = {2076-3417},
+   issue = {8},
+   journal = {Applied Sciences 2022, Vol. 12, Page 3926},
+   keywords = {centered artificial intelligence,deepfake detection,explainable artificial intelligence (XAI),human},
+   month = {4},
+   pages = {3926},
+   publisher = {Multidisciplinary Digital Publishing Institute},
+   title = {Detecting Deepfake Voice Using Explainable Deep Learning Techniques},
+   volume = {12},
+   url = {https://www.mdpi.com/2076-3417/12/8/3926/htm https://www.mdpi.com/2076-3417/12/8/3926},
+   year = {2022},
+}
+
+@article{hm_conformer,
+   abstract = {Audio deepfake detection (ADD) is the task of detecting spoofing attacks generated by text-to-speech or voice conversion systems. Spoofing evidence, which helps to distinguish between spoofed and bona-fide utterances, might exist either locally or globally in the input features. To capture these, the Conformer, which consists of Transformers and CNN, possesses a suitable structure. However , since the Conformer was designed for sequence-to-sequence tasks, its direct application to ADD tasks may be sub-optimal. To tackle this limitation, we propose HM-Conformer by adopting two components: (1) Hierarchical pooling method progressively reducing the sequence length to eliminate duplicated information (2) Multi-level classification token aggregation method utilizing classification tokens to gather information from different blocks. Owing to these components, HM-Conformer can efficiently detect spoofing evidence by processing various sequence lengths and aggregating them. In experimental results on the ASVspoof 2021 Deepfake dataset, HM-Conformer achieved a 15.71% EER, showing competitive performance compared to recent systems.},
+   author = {Hyun-Seo Shin and Jungwoo Heo and Ju-Ho Kim and Chan-Yeong Lim and Wonbin Kim and Ha-Jin Yu},
+   keywords = {Anti-spoofing,Con-former,Hierarchical pooling,Index Terms-Audio deepfake detection,Multi-level classification token aggre-gation},
+   title = {HM-CONFORMER: A CONFORMER-BASED AUDIO DEEPFAKE DETECTION SYSTEM WITH HIERARCHICAL POOLING AND MULTI-LEVEL CLASSIFICATION TOKEN AGGREGATION METHODS},
+}
+
+
+@article{review_mmodern_add_2022,
+   abstract = {A number of AI-generated tools are used today to clone human voices, leading to a new technology known as Audio Deepfakes (ADs). Despite being introduced to enhance human lives as audiobooks, ADs have been used to disrupt public safety. ADs have thus recently come to the attention of researchers, with Machine Learning (ML) and Deep Learning (DL) methods being developed to detect them. In this article, a review of existing AD detection methods was conducted, along with a comparative description of the available faked audio datasets. The article introduces types of AD attacks and then outlines and analyzes the detection methods and datasets for imitation- and synthetic-based Deepfakes. To the best of the authors’ knowledge, this is the first review targeting imitated and synthetically generated audio detection methods. The similarities and differences of AD detection methods are summarized by providing a quantitative comparison that finds that the method type affects the performance more than the audio features themselves, in which a substantial tradeoff between the accuracy and scalability exists. Moreover, at the end of this article, the potential research directions and challenges of Deepfake detection methods are discussed to discover that, even though AD detection is an active area of research, further research is still needed to address the existing gaps. This article can be a starting point for researchers to understand the current state of the AD literature and investigate more robust detection models that can detect fakeness even if the target audio contains accented voices or real-world noises.},
+   author = {Zaynab Almutairi and Hebah Elgibreen},
+   doi = {10.3390/A15050155},
+   issn = {1999-4893},
+   issue = {5},
+   journal = {Algorithms 2022, Vol. 15, Page 155},
+   keywords = {Audio Deepfakes (ADs),Deep Learning (DL),Machine Learning (ML),imitated audio},
+   month = {5},
+   pages = {155},
+   publisher = {Multidisciplinary Digital Publishing Institute},
+   title = {A Review of Modern Audio Deepfake Detection Methods: Challenges and Future Directions},
+   volume = {15},
+   url = {https://www.mdpi.com/1999-4893/15/5/155/htm https://www.mdpi.com/1999-4893/15/5/155},
+   year = {2022},
+}
+
+
+@article{adversarial,
+   abstract = {Audio DeepFakes (DF) are artificially generated utterances created using deep learning, with the primary aim of fooling the listeners in a highly convincing manner. Their quality is sufficient to pose a severe threat in terms of security and privacy , including the reliability of news or defamation. Multiple neural network-based methods to detect generated speech have been proposed to prevent the threats. In this work, we cover the topic of adversarial attacks, which decrease the performance of detectors by adding superficial (difficult to spot by a human) changes to input data. Our contribution contains evaluating the robustness of 3 detection architectures against adversarial attacks in two scenarios (white-box and using transferability) and enhancing it later by using adversarial training performed by our novel adaptive training. Moreover, one of the investigated architectures is RawNet3, which, to the best of our knowledge, we adapted for the first time to DeepFake detection.},
+   author = {Piotr Kawa and Marcin Plata and Piotr Syga},
+   keywords = {DeepFake detection,Index Terms: audio DeepFakes,adversar-ial attacks,adversarial training},
+   title = {Defense Against Adversarial Attacks on Audio DeepFake Detection},
+}
+
+@misc{verification_siamese,
+      title={Speaker Verification using Convolutional Neural Networks}, 
+      author={Hossein Salehghaffari},
+      year={2018},
+      eprint={1803.05427},
+      archivePrefix={arXiv},
+      primaryClass={eess.AS}
+}
+
+@misc{radford2022whisper,
+  doi = {10.48550/ARXIV.2212.04356},
+  url = {https://arxiv.org/abs/2212.04356},
+  author = {Radford, Alec and Kim, Jong Wook and Xu, Tao and Brockman, Greg and McLeavey, Christine and Sutskever, Ilya},
+  title = {Robust Speech Recognition via Large-Scale Weak Supervision},
+  publisher = {arXiv},
+  year = {2022},
+  copyright = {arXiv.org perpetual, non-exclusive license}
+}
+
+@article{review_audio_deepfake_issues,
+author = {Dixit, Abhishek and Kaur, Nirmal and Kingra, Staffy},
+year = {2023},
+month = {04},
+pages = {},
+title = {Review of audio deepfake detection techniques: Issues and prospects},
+volume = {40},
+journal = {Expert Systems},
+doi = {10.1111/exsy.13322}
+}
+
+@article{DBLP:journals/corr/abs-1810-04805,
+  author    = {Jacob Devlin and
+               Ming{-}Wei Chang and
+               Kenton Lee and
+               Kristina Toutanova},
+  title     = {{BERT:} Pre-training of Deep Bidirectional Transformers for Language
+               Understanding},
+  journal   = {CoRR},
+  volume    = {abs/1810.04805},
+  year      = {2018},
+  url       = {http://arxiv.org/abs/1810.04805},
+  archivePrefix = {arXiv},
+  eprint    = {1810.04805},
+  timestamp = {Tue, 30 Oct 2018 20:39:56 +0100},
+  biburl    = {https://dblp.org/rec/journals/corr/abs-1810-04805.bib},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+
+@misc{ren2022fastspeech,
+      title={FastSpeech 2: Fast and High-Quality End-to-End Text to Speech}, 
+      author={Yi Ren and Chenxu Hu and Xu Tan and Tao Qin and Sheng Zhao and Zhou Zhao and Tie-Yan Liu},
+      year={2022},
+      eprint={2006.04558},
+      archivePrefix={arXiv},
+      primaryClass={eess.AS}
+}
+
+@article{stuanescuinformational,
+  title={Informational War: Analyzing False News in the Israel Conflict},
+  author={ST{\u{A}}NESCU, Georgiana}
+}
+
+@misc{mirsky2022dfcaptcha,
+      title={DF-Captcha: A Deepfake Captcha for Preventing Fake Calls}, 
+      author={Yisroel Mirsky},
+      year={2022},
+      eprint={2208.08524},
+      archivePrefix={arXiv},
+      primaryClass={cs.CR}
+}
+
+@misc{ping2018deep,
+      title={Deep Voice 3: Scaling Text-to-Speech with Convolutional Sequence Learning}, 
+      author={Wei Ping and Kainan Peng and Andrew Gibiansky and Sercan O. Arik and Ajay Kannan and Sharan Narang and Jonathan Raiman and John Miller},
+      year={2018},
+      eprint={1710.07654},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD}
+}
+@misc{zhao2023emofake,
+      title={EmoFake: An Initial Dataset for Emotion Fake Audio Detection}, 
+      author={Yan Zhao and Jiangyan Yi and Jianhua Tao and Chenglong Wang and Xiaohui Zhang and Yongfeng Dong},
+      year={2023},
+      eprint={2211.05363},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD}
+}
+
+@misc{yi2022scenefake,
+      title={SceneFake: An Initial Dataset and Benchmarks for Scene Fake Audio Detection}, 
+      author={Jiangyan Yi and Chenglong Wang and Jianhua Tao and Zhengkun Tian and Cunhang Fan and Haoxin Ma and Ruibo Fu},
+      year={2022},
+      eprint={2211.06073},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD}
+}
+
+@misc{yi2023halftruth,
+      title={Half-Truth: A Partially Fake Audio Detection Dataset}, 
+      author={Jiangyan Yi and Ye Bai and Jianhua Tao and Haoxin Ma and Zhengkun Tian and Chenglong Wang and Tao Wang and Ruibo Fu},
+      year={2023},
+      eprint={2104.03617},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD}
+}
+
+@inproceedings{yi2022add,
+  title={Add 2022: the first audio deep synthesis detection challenge},
+  author={Yi, Jiangyan and Fu, Ruibo and Tao, Jianhua and Nie, Shuai and Ma, Haoxin and Wang, Chenglong and Wang, Tao and Tian, Zhengkun and Bai, Ye and Fan, Cunhang and others},
+  booktitle={ICASSP 2022-2022 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  pages={9216--9220},
+  year={2022},
+  organization={IEEE}
+}
+
+@inproceedings{zeng2023deepfake,
+  title={Deepfake Algorithm Recognition System with Augmented Data for ADD 2023 Challenge},
+  author={Zeng, Xiao-Min and Zhang, Jiang-Tao and Li, Kang and Liu, Zhuo-Li and Xie, Wei-Lin and Song, Yan},
+  booktitle={Proceedings of IJCAI 2023 Workshop on Deepfake Audio Detection and Analysis},
+  year={2023}
+}
+
+@article{jung2022sasv,
+  title={Sasv challenge 2022: A spoofing aware speaker verification challenge evaluation plan},
+  author={Jung, Jee-weon and Tak, Hemlata and Shim, Hye-jin and Heo, Hee-Soo and Lee, Bong-Jin and Chung, Soo-Whan and Kang, Hong-Goo and Yu, Ha-Jin and Evans, Nicholas and Kinnunen, Tomi},
+  journal={arXiv preprint arXiv:2201.10283},
+  year={2022}
+}
+@inproceedings{conti2022deepfake,
+  title={Deepfake speech detection through emotion recognition: a semantic approach},
+  author={Conti, Emanuele and Salvi, Davide and Borrelli, Clara and Hosler, Brian and Bestagini, Paolo and Antonacci, Fabio and Sarti, Augusto and Stamm, Matthew C and Tubaro, Stefano},
+  booktitle={ICASSP 2022-2022 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  pages={8962--8966},
+  year={2022},
+  organization={IEEE}
+}
+
+@InProceedings{10.1007/978-3-030-61702-8_1,
+author="Rodr{\'i}guez-Ortega, Yohanna
+and Ballesteros, Dora Mar{\'i}a
+and Renza, Diego",
+editor="Florez, Hector
+and Misra, Sanjay",
+title="A Machine Learning Model to Detect Fake Voice",
+booktitle="Applied Informatics",
+year="2020",
+publisher="Springer International Publishing",
+address="Cham",
+pages="3--13",
+abstract="Nowadays, there are different digital tools that permit the editing of digital content as audio files and they are easily accessed in mobile devices and personal computers. Audio forgery detection has been one of the main topics in the forensics field, as it is necessary to have reliable evidence in court. These audio recordings that are used as digital evidence may be forged and methods that are able to detect if they have been forged are required as new ways of generation of fake content continue growing. One method to generate fake content is imitation, in which a speaker can imitate another, using signal processing techniques. In this work, a passive forgery detection approach is proposed by manually extracting the entropy features of original and forged audios created using an imitation method and then using a machine learning model with logistic regression to classify the audio recordings. The results showed an accuracy of 0.98 where all forged audios were successfully detected.",
+isbn="978-3-030-61702-8"
+}
+
+@inproceedings{ji2017ensemble,
+  title={Ensemble Learning for Countermeasure of Audio Replay Spoofing Attack in ASVspoof2017.},
+  author={Ji, Zhe and Li, Zhi-Yi and Li, Peng and An, Maobo and Gao, Shengxiang and Wu, Dan and Zhao, Faru},
+  booktitle={Interspeech},
+  pages={87--91},
+  year={2017}
+}
+@misc{goodfellow2015explaining,
+      title={Explaining and Harnessing Adversarial Examples}, 
+      author={Ian J. Goodfellow and Jonathon Shlens and Christian Szegedy},
+      year={2015},
+      eprint={1412.6572},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML}
+}
+
+@inproceedings{croce2020minimally,
+  title={Minimally distorted adversarial examples with a fast adaptive boundary attack},
+  author={Croce, Francesco and Hein, Matthias},
+  booktitle={International Conference on Machine Learning},
+  pages={2196--2205},
+  year={2020},
+  organization={PMLR}
+}
+
+@article{madry2017towards,
+  title={Towards deep learning models resistant to adversarial attacks},
+  author={Madry, Aleksander and Makelov, Aleksandar and Schmidt, Ludwig and Tsipras, Dimitris and Vladu, Adrian},
+  journal={arXiv preprint arXiv:1706.06083},
+  year={2017}
+}
+
+@article{wu2018light,
+  title={A light CNN for deep face representation with noisy labels},
+  author={Wu, Xiang and He, Ran and Sun, Zhenan and Tan, Tieniu},
+  journal={IEEE Transactions on Information Forensics and Security},
+  volume={13},
+  number={11},
+  pages={2884--2896},
+  year={2018},
+  publisher={IEEE}
+}
+
+@inproceedings{kawa2022specrnet,
+  title={Specrnet: Towards faster and more accessible audio deepfake detection},
+  author={Kawa, Piotr and Plata, Marcin and Syga, Piotr},
+  booktitle={2022 IEEE International Conference on Trust, Security and Privacy in Computing and Communications (TrustCom)},
+  pages={792--799},
+  year={2022},
+  organization={IEEE}
+}
+
+@article{jung2022pushing,
+  title={Pushing the limits of raw waveform speaker recognition},
+  author={Jung, Jee-weon and Kim, You Jin and Heo, Hee-Soo and Lee, Bong-Jin and Kwon, Youngki and Chung, Joon Son},
+  journal={arXiv preprint arXiv:2203.08488},
+  year={2022}
+}
+
+
+
+
+@article{specrnet,
+   abstract = {Audio DeepFakes are utterances generated with the use of deep neural networks. They are highly misleading and pose a threat due to use in fake news, impersonation, or extortion. In this work, we focus on increasing accessibility to the audio DeepFake detection methods by providing SpecRNet, a neural network architecture characterized by a quick inference time and low computational requirements. Our benchmark shows that SpecRNet, requiring up to about 40% less time to process an audio sample, provides performance comparable to LCNN architecture-one of the best audio DeepFake detection models. Such a method can not only be used by online multimedia services to verify a large bulk of content uploaded daily but also, thanks to its low requirements, by average citizens to evaluate materials on their devices. In addition, we provide benchmarks in three unique settings that confirm the correctness of our model. They reflect scenarios of low-resource datasets, detection on short utterances and limited attacks benchmark in which we take a closer look at the influence of particular attacks on given architectures.},
+   author = {Piotr Kawa and Marcin Plata and Piotr Syga},
+   keywords = {Deep Learning,Index Terms-DeepFake Detection,Neural Networks,Speech Processing},
+   title = {SpecRNet: Towards Faster and More Accessible Audio DeepFake Detection},
+   url = {https://github.com/piotrkawa/specrnet.},
+}
+
+@article{rawnet2,
+   abstract = {Spoofing countermeasures aim to protect automatic speaker verification systems from attempts to manipulate their reliability with the use of spoofed speech signals. While results from the most recent ASVspoof 2019 evaluation show great potential to detect most forms of attack, some continue to evade detection. This paper reports the first application of RawNet2 to anti-spoofing. RawNet2 ingests raw audio and has potential to learn cues that are not detectable using more traditional countermeasure solutions. We describe modifications made to the original RawNet2 architecture so that it can be applied to anti-spoofing. For A17 attacks, our RawNet2 systems results are the second-best reported, while the fusion of RawNet2 and baseline countermeasures gives the second-best results reported for the full ASVspoof 2019 logical access condition. Our results are reproducible with open source software.},
+   author = {Hemlata Tak and Jose Patino and Massimiliano Todisco and Andreas Nautsch and Nicholas Evans and Anthony Larcher},
+   keywords = {Index Terms-anti-spoofing,automatic speaker verification,countermeasures,presen-tation attack detection},
+   title = {END-TO-END ANTI-SPOOFING WITH RAWNET2},
+   year = {2021},
+}
+
+
+@article{rawgat,
+   abstract = {Artefacts that serve to distinguish bona fide speech from spoofed or deepfake speech are known to reside in specific sub-bands and temporal segments. Various approaches can be used to capture and model such artefacts, however, none works well across a spectrum of diverse spoofing attacks. Reliable detection then often depends upon the fusion of multiple detection systems, each tuned to detect different forms of attack. In this paper we show that better performance can be achieved when the fusion is performed within the model itself and when the representation is learned automatically from raw waveform inputs. The principal contribution is a spectro-temporal graph attention network (GAT) which learns the relationship between cues spanning different sub-bands and temporal intervals. Using a model-level graph fusion of spectral (S) and temporal (T) sub-graphs and a graph pooling strategy to improve discrimination , the proposed RawGAT-ST model achieves an equal error rate of 1.06% for the ASVspoof 2019 logical access database. This is one of the best results reported to date and is reproducible using an open source implementation.},
+   author = {Hemlata Tak and Jee-Weon Jung and Jose Patino and Madhu Kamble and Massimiliano Todisco and Nicholas Evans},
+   title = {End-to-End Spectro-Temporal Graph Attention Networks for Speaker Verification Anti-Spoofing and Speech Deepfake Detection},
+}
+
+@article{lfcc_lcnn,
+   abstract = {A great deal of recent research effort on speech spoofing countermeasures has been invested into back-end neural networks and training criteria. We contribute to this effort with a comparative perspective in this study. Our comparison of countermeasure models on the ASVspoof 2019 logical access task takes into account recently proposed margin-based training criteria, widely used front ends, and common strategies to deal with varied-length input trials. We also measured intra-model differences through multiple training-evaluation rounds with random initialization. Our statistical analysis demonstrates that the performance of the same model may be significantly different when just changing the random initial seed. Thus, we recommend similar analysis or multiple training-evaluation rounds for further research on the database. Despite the intra-model differences, we observed a few promising techniques such as the average pooling to process varied-length inputs and a new hyper-parameter-free loss function. The two techniques led to the best single model in our experiment, which achieved an equal error rate of 1.92% and was significantly different in statistical sense from most of the other experimental models.},
+   author = {Xin Wang and Junich Yamagishi},
+   keywords = {ASVspoof 2019,Index Terms: anti-spoofing,countermeasure,deep learning,logical access,significance test},
+   title = {A Comparative Study on Recent Neural Spoofing Countermeasures for Synthetic Speech Detection},
+   url = {https://arxiv.org/abs/2103.11326},
+}
+
+
+@misc{vctk,
+   authors = {Yamagishi, Junichi and Veaux, Christophe and MacDonald, Kirsten},
+   title = {{CSTR VCTK Corpus: English Multi-speaker Corpus for CSTR Voice Cloning Toolkit (version 0.92)}},
+   url = {https://datashare.ed.ac.uk/handle/10283/3443},
+}
+
+
+@misc{tdcf,
+      title={t-DCF: a Detection Cost Function for the Tandem Assessment of Spoofing Countermeasures and Automatic Speaker Verification}, 
+      author={Tomi Kinnunen and Kong Aik Lee and Hector Delgado and Nicholas Evans and Massimiliano Todisco and Md Sahidullah and Junichi Yamagishi and Douglas A. Reynolds},
+      year={2019},
+      eprint={1804.09618},
+      archivePrefix={arXiv},
+      primaryClass={eess.AS}
+}
+
+@misc{waffles_model,
+    abstract = {},
+    title        = {{waffless/8\_lr1e\-05\_me5}},
+    author       = {Ivanina Ivanova and Nicoline Nymand-Andersen and Abhay Mathur},
+    year         = 2024,
+    url = {https://huggingface.co/waffless/8_lr1e-05_me5},
+}
+
+@MISC{eu_moderation,
+    author = {{European Parliament}},
+    title = {The integration of automated filtering and human moderation},
+    year = {2020},
+    url = {https://www.europarl.europa.eu/RegData/etudes/STUD/2020/657101/IPOL_STU(2020)657101_EN.pdf}
+}
+
+@MISC{softmax_ref,
+    author = {{github}},
+    title = {NOTES ON STATISTICS, PROBABILITY and MATHEMATICS},
+    url = {https://rinterested.github.io/statistics/softmax.html}
+}
+
+
+@inproceedings{tian2016spoofing,
+  title={Spoofing detection from a feature representation perspective},
+  author={Tian, Xiaohai and Wu, Zhizheng and Xiao, Xiong and Chng, Eng Siong and Li, Haizhou},
+  booktitle={2016 IEEE International conference on acoustics, speech and signal processing (ICASSP)},
+  pages={2119--2123},
+  year={2016},
+  organization={IEEE}
+}
+
+@article{kinnunen2010overview,
+  title={An overview of text-independent speaker recognition: From features to supervectors},
+  author={Kinnunen, Tomi and Li, Haizhou},
+  journal={Speech communication},
+  volume={52},
+  number={1},
+  pages={12--40},
+  year={2010},
+  publisher={Elsevier}
+}
+
+@article{yu2017dnn,
+  title={DNN filter bank cepstral coefficients for spoofing detection},
+  author={Yu, Hong and Tan, Zheng-Hua and Zhang, Yiming and Ma, Zhanyu and Guo, Jun},
+  journal={Ieee Access},
+  volume={5},
+  pages={4779--4787},
+  year={2017},
+  publisher={IEEE}
+}
+
+
+@article{av_multimodal,
+   abstract = {Deepfakes are AI-generated media in which an image or video has been digitally modified. The advancements made in deepfake technology have led to privacy and security issues. Most deepfake detection techniques rely on the detection of a single modality. Existing methods for audiovisual detection do not always surpass that of the analysis based on single modalities. Therefore, this paper proposes an audiovisual based method for deepfake detection, which integrates fine-grained deepfake identification with binary classification. We categorize the samples into four types by combining labels specific to each single modality. This method enhances the detection under intra-domain and cross-domain testing.},
+   author = {Sneha Muppalla and Shan Jia and Siwei Lyu},
+   isbn = {9798350309652},
+   keywords = {Audio-visual feature learning,Index Terms-Deepfake detection,Multi-modality deepfakes},
+   title = {INTEGRATING AUDIO-VISUAL FEATURES FOR MULTIMODAL DEEPFAKE DETECTION},
+   url = {https://gizmodo.com/bank-robbers-in-the-middle-east-reportedly-},
+}
+
+@article{multitask_sr,
+   abstract = {We propose a multitask training method for attention-based end-to-end speech recognition models. We regularize the de-coder in a listen, attend, and spell model by multitask training it on both audio-text and text-only data. Trained on the 100-hour subset of LibriSpeech, the proposed method, without requiring an additional language model, leads to an 11% relative performance improvement over the baseline and approaches the performance of language model shallow fusion on the test-clean evaluation set. We observe a similar trend on the whole 960-hour LibriSpeech training set. Analyses of different types of errors and sample output sentences demonstrate that the proposed method can incorporate language level information, suggesting its effectiveness in real-world applications.},
+   author = {Peidong Wang and Tara N Sainath and Ron J Weiss},
+   keywords = {Index Terms: multitask,attention,end-to-end,text-only},
+   title = {Multitask Training with Text Data for End-to-End Speech Recognition},
+   year = {2021},
+}
+
+@article{modality_agnostic,
+   abstract = {As AI-generated content (AIGC) thrives, deepfakes have expanded from single-modality falsification to cross-modal fake content creation, where either audio or visual components can be manipulated. While using two unimodal detectors can detect audiovisual deepfakes, cross-modal forgery clues could be overlooked. Existing multimodal deepfake detection methods typically establish correspondence between the audio and visual modalities for binary real/fake classification, and require the co-occurrence of both modalities. However, in real-world multi-modal applications, missing modality scenarios may occur where either modality is unavailable. In such cases, audiovisual detection methods are less practical than two independent unimodal methods. Consequently, the detector can not always obtain the number or type of manipulated modalities beforehand, necessitating a fake-modality-agnostic audiovisual detector. In this work, we introduce a comprehensive framework that is agnostic to fake modalities, which facilitates the identification of multimodal deepfakes and handles situations with missing modalities , regardless of the manipulations embedded in audio, video, or even cross-modal forms. To enhance the modeling of cross-modal forgery clues, we employ audiovisual speech recognition (AVSR) as a preliminary task. This efficiently extracts speech correlations across modalities, a feature challenging for deepfakes to replicate. Additionally, we propose a dual-label detection approach that follows the structure of AVSR to support the independent detection of each modality. Extensive experiments on three audiovisual datasets show that our scheme outperforms state-of-the-art detection methods with promising performance on modality-agnostic audio/video deepfakes.},
+   author = {Cai Yu and Peng Chen and Jiahe Tian and Jin Liu and Jiao Dai and Xi Wang and Yesheng Chai and Shan Jia and Siwei Lyu and Jizhong Han},
+   keywords = {Index Terms-Multimedia forensics,Multimodal learning,Video Forgery detection},
+   title = {A Unified Framework for Modality-Agnostic Deepfakes Detection},
+   url = {https://www.youtube.com/shorts/j0v4UMnHn1M},
+}
+
+@inproceedings{ge2023can,
+  title={Can spoofing countermeasure and speaker verification systems be jointly optimised?},
+  author={Ge, Wanying and Tak, Hemlata and Todisco, Massimiliano and Evans, Nicholas},
+  booktitle={ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)},
+  pages={1--5},
+  year={2023},
+  organization={IEEE}
+}
+
+@article{France24,
+ author  = {Emerald Maxwell},
+ date    = {2024-15-02},
+ title   = {FRANCE 24 journalist impersonated in new deepfake video},
+ journal = {FRANCE 24},
+ url     = {https://www.france24.com/en/tv-shows/truth-or-fake/20240215-france-24-journalist-impersonated-in-new-deepfake-video},
+ urldate = {2024-26-02}
+}
+
+@misc{yi2023add,
+      title={ADD 2023: the Second Audio Deepfake Detection Challenge}, 
+      author={Jiangyan Yi and Jianhua Tao and Ruibo Fu and Xinrui Yan and Chenglong Wang and Tao Wang and Chu Yuan Zhang and Xiaohui Zhang and Yan Zhao and Yong Ren and Le Xu and Junzuo Zhou and Hao Gu and Zhengqi Wen and Shan Liang and Zheng Lian and Shuai Nie and Haizhou Li},
+      year={2023},
+      eprint={2305.13774},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD}
+}
