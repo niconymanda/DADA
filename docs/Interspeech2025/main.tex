@@ -45,19 +45,19 @@
 
 % the order of authors here must exactly match the order entered into the paper submission system
 % note that the COMPLETE list of authors MUST be entered into the paper submission system at the outset, including when submitting your manuscript for double-blind review
-\author[affiliation={1}]{Nicoline}{Nymand-Andersen}
-\author[affiliation={1}]{Ivanina}{Ivanova}
-\author[affiliation={1}]{Abhay}{Dayal Mathur}
+\author[affiliation={1, 2*}]{Nicoline}{Nymand-Andersen}
+\author[affiliation={1*}]{Ivanina}{Ivanova}
+\author[affiliation={1*}]{Abhay}{Dayal Mathur}
 \author[affiliation={1}]{Nils}{Holzenberger}
 
 
 %The maximum number of authors in the author list is 20. If the number of contributing authors is more than this, they should be listed in a footnote or the acknowledgement section.
 
 % if you have too many addresses to fit within the available space, try removing the "\\" newlines
-\affiliation{First Department}{First Affiliation}{First Country}
-\affiliation{Second Department}{Second Affiliation}{Second Country}
-\affiliation{}{Just Institute}{And Country}
-\email{first@university.edu, second@companyA.com, third@companyB.ai}
+\affiliation{Telecom Paris}{Institut Polytechnique de Paris}{France}
+\affiliation{Department of Computer Science}{Technische Universität München}{Germany}
+% \affiliation{}{Just Institute}{And Country}
+\email{nnymand-23@ip-paris.fr, ivanina.ivanova@ip-paris.fr, abhay.mathur@ip-paris.fr, nils.holzenberger@telecom-paris.fr}
 \keywords{audio deepfake detection}
 
 \newcommand{\blue}[1]{\textcolor{blue}{#1}}
@@ -156,11 +156,11 @@ method. Features are categorised into short-term spectral, long-term spectral,
 prosodic, and deep features, each with unique characteristics and extraction
 methods.
 
-\textit{Short-term spectral features}, derived through digital signal processing techniques like the Short-Time Fourier Transform (STFT), focus on the immediate magnitude and phase spectrum being computed at each time step \cite{tian2016spoofing} but fall short in capturing temporal dynamics. Long-term spectral features, on the other hand, aim to grasp extended information across speech signals, using different transform methods such as STFT, Constant-Q Transform, Hilbert Transform, and Wavelet Transform to enhance detection accuracy by covering a broader temporal scope.
+\textit{Short-term spectral features}, derived through digital signal processing techniques like the Short-Time Fourier Transform (STFT), focus on the immediate magnitude and phase spectrum being computed at each time step~\cite{tian2016spoofing} but fall short in capturing temporal dynamics. Long-term spectral features, on the other hand, aim to grasp extended information across speech signals, using different transform methods such as STFT, Constant-Q Transform, Hilbert Transform, and Wavelet Transform to enhance detection accuracy by covering a broader temporal scope.
 
-\textit{Prosodic features} include elements like fundamental frequency, duration, and energy distribution, which leverage the rhythmic and intonation patterns of the speech, offering a complementary detection dimension by exploiting the nuances of natural language that are often poorly replicated in synthetic speech. In contrast to the short-term features, prosodic ones are extracted from longer speeches such as phone calls and audio recordings. \cite{kinnunen2010overview}.
+\textit{Prosodic features} include elements like fundamental frequency, duration, and energy distribution, which leverage the rhythmic and intonation patterns of the speech, offering a complementary detection dimension by exploiting the nuances of natural language that are often poorly replicated in synthetic speech. In contrast to the short-term features, prosodic ones are extracted from longer speeches such as phone calls and audio recordings.~\cite{kinnunen2010overview}.
 
-\textit{Deep features}, extracted through neural network models, represent a significant advancement in feature extraction by learning directly from data, thus potentially overcoming the biases inherent in hand-crafted features. These deep features can be divided into partially and fully learnable spectral features, supervised embedding features, which can be one of the four different types: spoof, emotion, speaker, and pronunciation embeddings and self-supervised embedding features, which do not require the costly annotated audio data \cite{yu2017dnn}. Some pre-trained self-supervised speech models are publicly available, such as Wav2vec, LS-R and HuBERT.
+\textit{Deep features}, extracted through neural network models, represent a significant advancement in feature extraction by learning directly from data, thus potentially overcoming the biases inherent in hand-crafted features. These deep features can be divided into partially and fully learnable spectral features, supervised embedding features, which can be one of the four different types: spoof, emotion, speaker, and pronunciation embeddings and self-supervised embedding features, which do not require the costly annotated audio data~\cite{yu2017dnn}. Some pre-trained self-supervised speech models are publicly available, such as Wav2vec, LS-R and HuBERT.
 
 \subsection{Competitions}
 There have been a series of competitions over the years that have played a
@@ -171,7 +171,7 @@ audio. These competitions try not only to benchmark the advancement in this
 field of study but also to emphasise the importance of robust detection
 methods.
 
-\subsubsection{ASVspoof} The ASVspoof 2021, 2022 and 2023 \cite{ASVspoof_21, jung2022sasv, ge2023can}
+\subsubsection{ASVspoof} The ASVspoof 2021, 2022 and 2023~\cite{ASVspoof_21, jung2022sasv, ge2023can}
 challenge focuses on improving the security of Automatic Speaker Verification
 (ASV) systems against spoofing attacks, which aim to imitate a legitimate
 user's voice. The challenge comments on the different ways to generate attacks
@@ -199,9 +199,10 @@ real-world scenarios with compressed and potentially distorted audio. Overall,
 high error rates were observed, though several systems outperformed baseline
 models, indicating progress yet significant room for improvement.
 
-\subsubsection{Audio Deepfake Detection (ADD)} Following the problems of the previous ADD 2022 challenge \cite{yi2022add},
+\subsubsection{Audio Deepfake Detection (ADD)}
+Following the problems of the previous ADD 2022 challenge~\cite{yi2022add},
 particularly the binary classification approach and limited evaluation rounds
-for the Fake Game Track, ADD 2023 \cite{yi2023add} introduces a new set of
+for the Fake Game Track, ADD 2023~\cite{yi2023add} introduces a new set of
 sub-challenges and tasks to improve audio deepfake detection capabilities. The
 2023 challenge consists of three main tracks: Audio Fake Game (FG),
 Manipulation Region Location (RL) and Deepfake Algorithm Recognition (AR).
@@ -219,16 +220,17 @@ The evaluation dataset even includes samples generated by unknown algorithms,
 adding further complexity. While the results show progress, challenges remain,
 particularly in accurately locating manipulated regions and recognising unknown
 deepfake algorithms. This indicates the need for further research and
-development in these areas \cite{zeng2023deepfake}.
+development in these areas~\cite{zeng2023deepfake}.
 
 \subsection{Methodological Evolution}
 Studies have explored various dimensions of audio deepfake detection, ranging
 from signal processing to multimodal and semantic approaches. Key findings and
 methodologies from recent literature include:
+
 \subsubsection{Traditional Machine Learning Classification}
 Traditional methods including a wide range of machine learning classifiers such
-as logistic regression \cite{10.1007/978-3-030-61702-8_1}, probabilistic linear
-discriminant analysis, random forest \cite{ji2017ensemble}, support vector
+as logistic regression~\cite{10.1007/978-3-030-61702-8_1}, probabilistic linear
+discriminant analysis, random forest~\cite{ji2017ensemble}, support vector
 machine (SVM) based models, Gaussian Mixture Models (GMM)\cite{ASVspoof_21} and
 k-nearest neighbour (KNN) which have been widely utilised for their robustness
 and efficacy in discriminating between genuine and spoofed speech. The GMM and
@@ -240,8 +242,8 @@ all audio deepfakes, given that the nature of the attack is usually unknown.
 \subsubsection{Deep Learning Classification}
 This subsection discusses audio feature extraction methods to improve detection
 performance against sophisticated deepfake algorithms. Time-Delay Neural
-Networks (TDNN) \cite{multimodal_df_detection} and Convolutional Neural
-Networks (CNN) \cite{xai_detection} trained on mel-spectrograms have been
+Networks (TDNN)~\cite{multimodal_df_detection} and Convolutional Neural
+Networks (CNN)~\cite{xai_detection} trained on mel-spectrograms have been
 pivotal in learning discriminative features from audio data. These methods
 introduce an approach to improve detection in multimodal (audio-visual)
 deepfakes by training a detector on a concatenation of features learnt from
@@ -254,7 +256,7 @@ challenges of deepfake detection.
 There have also been studies on the use of Explainable AI (XAI) techniques to
 interpret deepfake detection models, which offer insights into decision-making
 processes, potentially guiding the development of more robust detection
-mechanisms. \cite{xai_detection} uses simple CNN backbones trained on
+mechanisms.~\cite{xai_detection} uses simple CNN backbones trained on
 mel-spectrograms and LSTM in the detection to maintain as much simplicity as
 possible. Deep Taylor Decomposition (DTD) and Integrated Gradients and
 Layer-wise Relevance Propagation (LRP) were used to explain the neural networks
@@ -265,7 +267,7 @@ audio that cannot be recognised by a human.
 \subsubsection{Semantic Approach}
 Semantic approaches targeting the emotional properties of speech have shown
 promise, exploiting deepfake algorithms' inability to model complex emotional
-expressions accurately. \cite{conti2022deepfake} introduces one such method for
+expressions accurately.~\cite{conti2022deepfake} introduces one such method for
 identifying deepfake audio by focusing on the emotional nuances that current
 deepfake generators struggle to replicate accurately. The methodology leverages
 a Semantic Approach to detect emotion features through a Speech Emotion
@@ -286,7 +288,7 @@ set of emotions and trained on adversarial datasets to improve robustness
 against various deepfake generation algorithms.
 
 More recently, research has started focusing on multimodal and
-modality-agnostic methods for deepfake detection \cite{av_multimodal,
+modality-agnostic methods for deepfake detection~\cite{av_multimodal,
   multimodal_df_detection, modality_agnostic}, but these works are primarily
 aimed at audio-visual deepfake detection. These methods, along with previous
 studies in improving speech recognition through multi-task training

@@ -373,7 +373,7 @@ class SpeechCLRTrainerVanilla:
     
     def log_cluster_visualisation(self, epoch, split = 'val', n_samples=1000):
         self.model.eval()
-        feats = []
+        feats = [ ]
         labels = []
         if split == 'train':
             loader = self.train_vis_loader

@@ -188,3 +188,4 @@ out*.txt
 *.blg
 *.idx
 *.out
+*.synctex.gz
