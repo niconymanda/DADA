@@ -95,8 +95,8 @@ class TesterAuthorshipAttribution:
                 # all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
                 # _, classif_results_spoofed = self.gmm_predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
             else:   
-                classif_results = self.test_classification(test_dataloader)
-                classif_results_spoofed = self.test_classification(spoofed_dataloader)
+                classif_results, predictions = self.test_classification(test_dataloader)
+                classif_results_spoofed, predictions_spoofed = self.test_classification(spoofed_dataloader)
 
             name = f't-SNE_{self.args.classification_head}'
             self.plot_tsne_for_authors(all_embeddings, predictions, name)
@@ -237,7 +237,8 @@ class TesterAuthorshipAttribution:
 
         results = self.get_results(all_preds, all_labels)
 
-        return results
+        return results, all_labels
+    
     def get_results(self, all_preds, all_labels):
 
         accuracy = accuracy_score(all_labels, all_preds)

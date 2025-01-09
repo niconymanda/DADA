@@ -102,7 +102,7 @@ class TrainerAuthorshipAttribution:
             classification_model (optional): The trained classification model if `classification_head` is True.
         """
         if self.model_weights:
-            print("Loading model weights!...")
+            print("Loading custom model weights!...")
             self.model, self.optimizer, epoch_n = cfg.load_checkpoint(self.model, self.optimizer, self.model_weights)
         else:
             for epoch_n in range(self.args.epochs):
