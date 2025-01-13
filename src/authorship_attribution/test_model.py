@@ -294,10 +294,13 @@ class TesterAuthorshipAttribution:
             for i,batch in enumerate(tqdm(dataloader, desc=f"Extracting embeddings")):
                 
                 labels = batch['label']
-
-                embeddings = model(batch).detach().cpu().numpy()
-                # embeddings = embeddings['anchor'].detach().cpu().numpy()
-                all_embeddings.append(embeddings)
+                embeddings = model(batch)
+                # print(f"Embeddings: {embeddings}")
+                if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
+                    anchor_embeddings = embeddings.cpu().numpy()
+                else:
+                    anchor_embeddings = embeddings['anchor'].cpu().numpy()
+                all_embeddings.append(anchor_embeddings)
                 all_labels.extend(labels.cpu().numpy())
 
         all_embeddings = np.concatenate(all_embeddings, axis=0)

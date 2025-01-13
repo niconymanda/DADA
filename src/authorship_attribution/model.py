@@ -117,7 +117,7 @@ class MLP(nn.Module):
             self.layers.append(torch.nn.Linear(in_dim, out_features_layer))
             if norm_layer is not None:
                 self.layers.append(norm_layer(out_features_layer))
-            self.layers.append(torch.nn.LeakyReLU())
+            self.layers.append(torch.nn.ReLU())
             self.layers.append(torch.nn.Dropout(self.dropout_rate))
             in_dim = out_features_layer
 
@@ -177,7 +177,6 @@ class AuthorshipLLM(nn.Module):
         return inputs
     
     def _get_hidden_size(self):
-        
         return self.model.config.hidden_size
 
     def forward(self, input, mode='triplet'):

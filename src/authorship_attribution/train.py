@@ -5,7 +5,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import tempfile
 from ray import train
-from loss_functions import TripletLoss, ContrastiveLoss, SquaredCosineSimilarityLoss
+from loss_functions import TripletLoss, ContrastiveLoss, SquaredCosineSimilarityLoss, AdaTriplet, TripletLossTemperature
 from ray.train import Checkpoint, get_checkpoint
 from pathlib import Path
 import ray.cloudpickle as pickle
@@ -300,8 +300,6 @@ class TrainerAuthorshipAttribution:
             #     param_norm = p.grad.detach().data.norm(2)
             #     total_norm += param_norm.item() ** 2
             # total_norm = total_norm ** (1. / 2)
-            # metrics = { "Gradient Norm": total_norm, 'step':i }
-            # self._log_metrics(metrics, phase='Train_norm')
             # torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.clip_grad)
             self.optimizer.step()
             self.lr_scheduler.step(epoch_n + i / iters)
@@ -347,7 +345,6 @@ class TrainerAuthorshipAttribution:
         total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
-                # batch = {k: v.to(self.device) for k, v in batch.items()}
                 embeddings = self.model(batch)
                 
                 loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
@@ -399,10 +396,14 @@ class TrainerAuthorshipAttribution:
         margin = self.args.margin if margin is None else margin
         if self.args.loss_function == 'triplet':
             return TripletLoss(margin=margin, distance_function=self.args.distance_function)
+        elif self.args.loss_function == 'ada_triplet':
+            return AdaTriplet(lambda_=self.args.at_lambda)
         elif self.args.loss_function == 'contrastive':
             return ContrastiveLoss(margin=margin)
         elif self.args.loss_function == 'cos2':
             return SquaredCosineSimilarityLoss()
+        elif self.args.loss_function == 'triplet_temperature':
+            return TripletLossTemperature()
         else:
             raise ValueError("Invalid loss_function value. Must be 'triplet', 'contrastive', or 'cos2'")
     

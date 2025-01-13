@@ -13,18 +13,17 @@ import time
 import pandas as pd
 
 def main(args):
-    print('here')
     cfg.init_env(args)
     data, spoofed_data, rest_of_data, author_id_map = cfg.load_data(args)
     current_time = time.strftime("%Y%m%d-%H%M%S")
     repository_id = f"/data/iivanova-23/output/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
     os.makedirs(repository_id, exist_ok=True)
-    
-    _, val_rest = train_test_split(rest_of_data, test_size=0.3, stratify=rest_of_data['label'], random_state=args.seed)
-    train_data, val_data = train_test_split(data, test_size=0.2, stratify=data['label'], random_state=args.seed)
-    train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True)
-    val_data = pd.concat([val_data, val_rest])
-    val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True)
+    # index_set = '/home/infres/iivanova-23/DADA/src/authorship_attribution/index_5_authors.json'
+    # _, val_rest = train_test_split(rest_of_data, test_size=0.3, stratify=rest_of_data['label'], random_state=args.seed)
+    train_data, val_data = train_test_split(data, test_size=0.3, stratify=data['label'], random_state=args.seed)
+    train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True, predefined_set=None)
+    # val_data = pd.concat([val_data, val_rest])
+    val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True, predefined_set=None)
     spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=True)
     
     print(f"Train dataset size: {len(train_dataset)}")
@@ -46,12 +45,13 @@ def main(args):
                           dropout_rate=0.1, 
                           out_features=1024, 
                           max_length=64, 
-                          num_layers=2, 
+                          num_layers=3, 
                           freeze_encoder=False, 
-                          use_layers=[-1, -2, -3])
+                          use_layers=[-1, -2])
     # model = get_peft_model(model, lora_config)
     # path = '/home/infres/iivanova-23/DADA/output/n_authors_3/microsoft/deberta-v3-large_16_14_20241204-171443/final.pth'
     # path='/home/infres/iivanova-23/DADA/output/n_authors_6/answerdotai/ModernBERT-large_16_14_20250109-092429/final.pth'
+    # path='/data/iivanova-23/output/n_authors_6/answerdotai/ModernBERT-large_16_14_20250109-095045/final.pth'
     trainer = TrainerAuthorshipAttribution(model=model,
                                            train_dataloader=train_dataloader,
                                            val_dataloader=val_dataloader,

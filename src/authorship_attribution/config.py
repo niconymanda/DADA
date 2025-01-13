@@ -17,26 +17,27 @@ def get_args():
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes_train.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=14, help='Number of epochs to train for')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train for')
     parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
-    parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=1e-6, help='Learning rate')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
-    parser.add_argument('--weight_decay', type=float, default=0.01  , help='weight_decay')
+    parser.add_argument('--weight_decay', type=float, default=0.1  , help='weight_decay')
     parser.add_argument('--model_name', type=str, default='answerdotai/ModernBERT-large', help='Model to use')
     parser.add_argument('--gpu_id', type=str, default='2', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
-    parser.add_argument('--early_stopping_patience', type=int, default=5, help='Patience for early stopping based on validation loss')
+    parser.add_argument('--early_stopping_patience', type=int, default=40, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
-    parser.add_argument('--authors_to_train', type=int, default=3, help='Min number of quotes per author')
-    parser.add_argument('--authors_to_test', type=int, default=6, help='Min number of quotes per author')
+    parser.add_argument('--authors_to_train', type=int, default=5, help='Min number of quotes per author')
+    parser.add_argument('--authors_to_test', type=int, default=5, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
-    parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
-    parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
+    parser.add_argument('--loss_function', type=str, default='ada_triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
+    parser.add_argument('--margin', type=float, default=0.1, help='Margin for triplet loss')
     parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
     parser.add_argument('--classification_head', type=str, default='linear', help='Classification head type[linear, mlp, gmm]')
-    parser.add_argument('--clip_grad', type=float, default=50, help='Clip gradient norm')
+    parser.add_argument('--clip_grad', type=float, default=100, help='Clip gradient norm')
+    parser.add_argument('--at_lambda', type=float, default=0.5, help='Lambda for AdaTriplet loss')
     
     # 350 quotes=5 authors, 450 quotes=3 authors,
     return parser.parse_args()
@@ -58,20 +59,10 @@ def load_data(args):
     data = pd.read_csv(args.data)
     data = data.dropna()
     data['label'] = data['label'].astype('int')
-    # label_counts = data['label'].value_counts()
-    # # Keep only authors with more than number_quotes quotes
-    # labels_to_keep = label_counts[label_counts >= number_quotes].index
-    # data_to_train = data[data['label'].isin(labels_to_keep)]
-    # rest_of_data = data[~data['label'].isin(labels_to_keep)]
     data_to_train = data[data['label'] < args.authors_to_train]
     rest_of_data = data[(data['label'] >= args.authors_to_train) & (data['label'] < args.authors_to_test)]
     print(f"Number of authors to train on: {args.authors_to_train}, Number of authors to test on: {args.authors_to_test}")
     
-    # Map author labels to new labels starting from 0
-    # author_id_map = data_to_train[['label', 'author_name']].drop_duplicates().set_index('label').to_dict()['author_name']
-    # label_mapping = {old_label: new_label for new_label, old_label in enumerate(labels_to_keep)}
-    # data['label'] = data['label'].map(label_mapping)
-    # author_id_map = {new_label: author_id_map[old_label] for old_label, new_label in label_mapping.items()}
     data = pd.concat([data_to_train, rest_of_data])
     author_id_map = data[['label', 'author_name']].drop_duplicates().set_index('label').to_dict()['author_name']
     
@@ -139,7 +130,8 @@ def save_model_config(
     output_path: str = "model_config.json"
 ):
     config_new = {
-        "min_quotes_per_author": args.min_quotes_per_author,
+        "train authors": args.authors_to_train,
+        "test authors": args.authors_to_test,
         "architecture":{
             "name": "AuthorshipLLM",
             "args": {
