@@ -142,7 +142,7 @@
             <mxPoint x="550" y="300" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="Fa7wodahPX9oY0jX7aTg-21" value="Audio&lt;div&gt;Head&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Helvetica;fontSize=11;labelBackgroundColor=none;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+        <mxCell id="Fa7wodahPX9oY0jX7aTg-21" value="Head" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Helvetica;fontSize=11;labelBackgroundColor=none;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
           <mxGeometry x="500" y="275" width="30" height="50" as="geometry" />
         </mxCell>
         <mxCell id="Fa7wodahPX9oY0jX7aTg-22" value="$$\hat{y}$$ Prediction" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontFamily=Helvetica;fontSize=11;fontColor=default;labelBackgroundColor=none;fillColor=none;opacity=0;shadow=0;" vertex="1" parent="1">

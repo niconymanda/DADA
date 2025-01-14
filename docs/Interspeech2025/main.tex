@@ -1,3 +1,5 @@
+% !TEX root = main.tex
+
 \documentclass{Interspeech}
 
 \usepackage{todonotes}
@@ -25,7 +27,7 @@
 % If your paper is accepted, uncomment this to produce the
 %  'camera ready' version to submit for publication.
 
-% \interspeechcameraready 
+% \interspeechcameraready
 
 
 % **************************************
@@ -301,6 +303,19 @@ audio and linguistic cues from their transcriptions.
 \section{Method}
 \label{sec:method}
 
+\begin{figure*}[t]
+	\centering
+	\includegraphics[width=1\textwidth]{figures/mid_fusion.pdf}
+	\caption{Pipeline for Mid-Fusion}\label{fig:mid_fusion}
+\end{figure*}
+
+
+\begin{figure*}[t]
+	\centering
+	\includegraphics[width=1\textwidth]{figures/late_fusion.pdf}
+	\caption{Pipeline for Late-Fusion}\label{fig:late_fusion}
+\end{figure*}
+
 \section{Experiments and Results}
 \label{sec:experiments_results}
 
@@ -322,6 +337,6 @@ references may start on an earlier page, if there is space.
 would like to thank ISCA and the organising committees of past Interspeech conferences for their help and for kindly providing the previous version of this template.
 
 \bibliographystyle{IEEEtran}
-\bibliography{mybib}
+\bibliography{references}
 
 \end{document}
