@@ -61,7 +61,9 @@ This project fine-tunes a BERT-like model to perform authorship classification, 
 | RoBERTa  base  | ...  | ...  | ...  | ...  | ...  | 
 | RoBERTa  base  | ...  | ...  | ...  | ...  | ...  | 
 | RoBERTa large | ...  | ...  | ...  | ...  | ... |
-| T5 | ...  | ...  | ...  | ...  | ... |
+| Modern BERT | ...  | ...  | ...  | ...  | ... |
+| DeBERTa base | ...  | ...  | ...  | ...  | ... |
+| DeBERTa large | ...  | ...  | ...  | ...  | ... |
 ...
 
 #### Results on spoofed set

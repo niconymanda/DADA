@@ -2,15 +2,7 @@ import torch
 from tqdm import tqdm  
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
-import tempfile
-from ray import train
 from loss_functions import TripletLoss, ContrastiveLoss, SquaredCosineSimilarityLoss, AdaTriplet, TripletLossTemperature
-from ray.train import Checkpoint, get_checkpoint
-from pathlib import Path
-import ray.cloudpickle as pickle
-import os 
-from torch.utils.tensorboard import SummaryWriter
 from early_stopping import EarlyStopping
 import config as cfg
 from model import AuthorshipClassificationLLM
@@ -21,6 +13,9 @@ import numpy as np
 from transformers import get_linear_schedule_with_warmup
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import KNeighborsClassifier
+from logger import Logger
+import matplotlib.pyplot as plt
+from visualisation import get_tsne_fig
 
 
 class TrainerAuthorshipAttribution:
@@ -56,7 +51,8 @@ class TrainerAuthorshipAttribution:
                  early_stopping=True,
                  save_model=False, 
                  tune=False,
-                 model_weights=None):
+                 model_weights=None, 
+                 log_plots=True):
         self.model = model
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
@@ -69,6 +65,7 @@ class TrainerAuthorshipAttribution:
         self.early_stopping = early_stopping
         self.save_model = save_model
         self.model_weights = model_weights
+        self.log_plots = log_plots
         self.device = cfg.get_device()
         if not tune:
             self.criterion = self.get_criterion() if criterion is None else criterion   
@@ -79,14 +76,8 @@ class TrainerAuthorshipAttribution:
         self.model.to(self.device)
         # print(self.model)
         self.distance_function = cfg.get_distance_function(args.distance_function)
-        
-        if self.report_to == 'tensorboard':
-            self.writer = SummaryWriter(f"{repository_id}/logs")
-        elif report_to == 'wandb':
-            wandb.init(project=project_name, config=vars(args))
-            wandb.watch(model)
-        else:
-            raise ValueError("Invalid report_to value. Must be 'tensorboard' or 'wandb'")
+
+        self.logger = Logger(args, report_to, project_name, model, self.output_dir, train_dataloader, val_dataloader)
         
         if self.early_stopping:
             self.early_stopping_model = EarlyStopping(patience=args.early_stopping_patience)
@@ -120,12 +111,12 @@ class TrainerAuthorshipAttribution:
         if classification_head:
             print("Training classification head!")
             if self.args.classification_head == 'gmm':
-                embeddings = self.extract_embeddings()
+                embeddings, _ = self.extract_embeddings()
                 gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed, max_iter=3000, n_init=10)
                 gmm.fit(embeddings)
                 return self.model, gmm
             elif self.args.classification_head == 'knn':
-                embeddings = self.extract_embeddings()
+                embeddings, _= self.extract_embeddings()
                 knn = KNeighborsClassifier(n_neighbors=5)
                 knn.fit(embeddings, self.train_dataset.labels)
                 return self.model, knn
@@ -146,20 +137,25 @@ class TrainerAuthorshipAttribution:
                 cfg.save_checkpoint(classification_model, classification_optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
                 return self.model, classification_model
         return self.model, None 
+    
     def extract_embeddings(self):
         """
         Extracts embeddings from the model and saves them to a file.
         """
         self.model.eval()
         all_embeddings = []
+        all_labels = []
         with torch.no_grad():
             for batch in tqdm(self.train_dataloader, desc="Extracting embeddings"):
                 embeddings = self.model(batch)
+                labels = batch['label']
                 anchor_embeddings = embeddings['anchor'].cpu().numpy()
                 all_embeddings.append(anchor_embeddings)
+                all_labels.extend(labels.cpu().numpy())
 
         all_embeddings = np.vstack(all_embeddings)
-        return all_embeddings
+        all_labels = np.array(all_labels)
+        return all_embeddings, all_labels
     
 
     def train_classification(self, classification_model, criterion_classification, optimizer_classification, epoch_n):
@@ -205,7 +201,7 @@ class TrainerAuthorshipAttribution:
                     "epoch": epoch_n,
                     "step": i
                 }
-                self._log_metrics(metrics, phase='Train_classificaion')
+                self.logger._log_metrics(metrics, phase='Train_classificaion')
                 current_loss = 0.0  
 
         train_loss = total_loss / len(self.val_dataloader)
@@ -214,7 +210,7 @@ class TrainerAuthorshipAttribution:
             "epoch": epoch_n, 
             "Accuracy": correct / total
         }
-        self._log_metrics(metrics, phase='Train_classificaion_epochs')
+        self.logger._log_metrics(metrics, phase='Train_classificaion_epochs')
         return total_loss / len(self.train_dataloader)
     
     @torch.no_grad()
@@ -258,7 +254,7 @@ class TrainerAuthorshipAttribution:
                         "step": i,
                         "Accuracy": correct / total
                     }
-                    self._log_metrics(metrics, phase='Val_classificaion')
+                    self.logger._log_metrics(metrics, phase='Val_classificaion')
                     current_loss = 0.0  
                          
         val_loss = total_loss / len(self.val_dataloader)
@@ -267,7 +263,7 @@ class TrainerAuthorshipAttribution:
             "epoch": epoch_n,
             "Accuracy": correct / total
         }
-        self._log_metrics(metrics, phase='Val_classificaion_epochs')
+        self.logger._log_metrics(metrics, phase='Val_classificaion_epochs')
         return val_loss
 
     def train_model(self, epoch_n):
@@ -316,7 +312,7 @@ class TrainerAuthorshipAttribution:
                         "epoch": epoch_n,
                         "step": i
                     }
-                    self._log_metrics(metrics, phase='Train')
+                    self.logger._log_metrics(metrics, phase='Train')
                     current_loss = 0.0
                 
         train_loss = total_loss / len(self.train_dataloader)
@@ -325,7 +321,7 @@ class TrainerAuthorshipAttribution:
             "Accuracy": correct_count / len(self.train_dataloader.dataset),
             "epoch": epoch_n,
         }
-        self._log_metrics(metrics, phase='Train_epoch')
+        self.logger._log_metrics(metrics, phase='Train_epoch')
         return total_loss / len(self.train_dataloader)
     
     @torch.no_grad()
@@ -343,10 +339,15 @@ class TrainerAuthorshipAttribution:
         current_loss = 0.0
         correct_count = 0
         total = 0
+        all_feats = []
+        all_labels = []
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
                 embeddings = self.model(batch)
-                
+                features = embeddings['anchor']
+                labels = batch['label']
+                all_feats.append(features)
+                all_labels.extend(labels)
                 loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
@@ -364,7 +365,7 @@ class TrainerAuthorshipAttribution:
                     "epoch": epoch_n,
                     "step": i
                     }
-                    self._log_metrics(metrics, phase='Val')
+                    self.logger._log_metrics(metrics, phase='Val')
                     current_loss = 0.0
                     
         val_loss = total_loss / len(self.val_dataloader)
@@ -373,24 +374,16 @@ class TrainerAuthorshipAttribution:
                 "Accuracy": correct_count / total,
                 "epoch": epoch_n,
                 }
-        self._log_metrics(metrics, phase='Val_epoch')
+        self.logger._log_metrics(metrics, phase='Val_epoch')
+        if self.log_plots:
+            all_feats = torch.cat(all_feats, dim=0).cpu().numpy()
+            all_labels = np.array(all_labels)
+            print(f"Getting t-SNE plot for validation set")
+            fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on validaation : Epoch {epoch_n}")
+            plt.savefig(f"{self.repository_id}/tsne_validation_{epoch_n}.png")
+            self.logger.log_figure(fig, f"t-SNE on validaation : Epoch {epoch_n}")
         return val_loss, correct_count / total
     
-    def _log_metrics(self, metrics, phase):
-        if self.report_to == 'wandb':
-            for key, value in metrics.items():
-                wandb.log({f"{phase}/{key}": value}) if (key != 'epoch' and key != 'step') else None
-        elif self.report_to == 'tensorboard':
-            for key, value in metrics.items():
-                if 'epoch' in phase:
-                    # print(f"{phase}/{key}, epoch")
-                    self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch']) if (key != 'epoch' and key != 'step') else None
-                elif 'Train' in phase:                    
-                    self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.train_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
-                elif 'Val' in phase:
-                    self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch'] * len(self.val_dataloader) + metrics['step']) if (key != 'epoch' and key != 'step') else None
-                else:
-                    print("Invalid phase")
 
     def get_criterion(self, margin=None):
         margin = self.args.margin if margin is None else margin
@@ -433,108 +426,3 @@ class TrainerAuthorshipAttribution:
             raise ValueError("Invalid lr_scheduler value. Must be 'linear_warmup', 'linear', or 'cosine'")
 
 
-def train_tune(config, train_dataset, val_dataset, model, device, args):
-    """
-    Trains and tunes a model using the provided configuration, datasets, and device.
-    Args:
-        config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
-        train_dataset (Dataset): The dataset used for training.
-        val_dataset (Dataset): The dataset used for validation.
-        model (nn.Module): The model to be trained.
-        device (str): The device to run the training on, either 'cpu' or 'cuda'.
-    Returns:
-        None
-    The function performs the following steps:
-    1. Sets up the device for training (CPU or GPU).
-    2. Initializes the loss function and optimizer.
-    3. Loads a checkpoint if available to resume training from a previous state.
-    4. Creates data loaders for the training and validation datasets.
-    5. Trains the model for the specified number of epochs, performing validation at the end of each epoch.
-    6. Implements early stopping based on validation loss to prevent overfitting.
-    7. Saves checkpoints during training to allow resuming from the last state.
-    Note:
-        The function uses a TripletLoss with a fixed margin of 0.5.
-    """
-    
-    batch_size = config["batch_size"]
-    learning_rate = config["lr"]
-    margin = config["margin"]
-    # device = "cpu"
-    # if torch.cuda.is_available():
-    #     device = "cuda:0"
-    #     if torch.cuda.device_count() > 1:
-    #         model = nn.DataParallel(model)
-    device = cfg.get_device()
-    model.to(device)
-    criterion = TripletLoss(margin=margin)
-    criterion = criterion.to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
-    checkpoint = get_checkpoint()
-
-    distance_function = cfg.get_distance_function(args.distance_function)
-    
-    if checkpoint:
-        with checkpoint.as_directory() as checkpoint_dir:
-            data_path = Path(checkpoint_dir) / "data.pkl"
-            print(f"Resuming from checkpoint in {data_path}")
-            with open(data_path, "rb") as fp:
-                checkpoint_state = pickle.load(fp)
-            start_epoch = checkpoint_state["epoch"]
-            model.load_state_dict(checkpoint_state["net_state_dict"])
-            optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
-    else:
-        start_epoch = 0
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
-    lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"]*len(train_dataloader), eta_min=0, last_epoch=-1)
-    # early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
-
-    for epoch in range(start_epoch, config["epochs"]):
-        model.train()
-        total_loss = 0.0
-        for batch in train_dataloader:
-            # batch = {k: v.to(device) for k, v in batch.items()}
-            embeddings = model(batch)
-            optimizer.zero_grad()
-            loss = criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
-            
-            loss.backward()
-            optimizer.step()
-            lr_scheduler.step()
-            total_loss += loss_value.item()
-            
-        # Validate the model
-        val_loss = 0.0
-        correct_count = 0
-        avg_val_loss = 0.0
-        model.eval()
-        with torch.no_grad():
-            for batch in val_dataloader:
-                # batch = {k: v.to(device) for k, v in batch.items()}
-                embeddings = model(batch)
-                loss_value = criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
-                val_loss += loss_value.item()
-
-                distance_positive = distance_function(embeddings['anchor'], embeddings['positive'])
-                distance_negative = distance_function(embeddings['anchor'], embeddings['negative'])
-                correct_count += torch.sum(distance_positive < distance_negative).item()
-
-        avg_val_loss = val_loss / len(val_dataloader)
-        if epoch % config['epochs']-1 == 0:
-            checkpoint_data = {
-                "epoch": epoch,
-                "net_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-            }
-            with tempfile.TemporaryDirectory() as checkpoint_dir:
-                data_path = Path(checkpoint_dir) / "data.pkl"
-                with open(data_path, "wb") as fp:
-                    pickle.dump(checkpoint_data, fp)
-                checkpoint = Checkpoint.from_directory(checkpoint_dir)
-                train.report(
-                    {"loss": avg_val_loss, "accuracy": correct_count / len(val_dataloader.dataset)},
-                    checkpoint=checkpoint,
-                )
-        # if early_stopping_tune.step(avg_val_loss):
-        #     print("Early stopping triggered")
-        #     break 

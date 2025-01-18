@@ -13,7 +13,7 @@ from test_model import TesterAuthorshipAttribution
 import os
 import pickle
 from pathlib import Path
-from train import train_tune
+from train_tune import train_tune
 
 def main(args):
     config.init_env(args)
@@ -28,14 +28,17 @@ def main(args):
     test_dataset = AuthorTripletLossDataset(test_data, args.model_name, train=False)
     spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=False)
     
-    model = AuthorshipLLM(args.model_name)
+    
     device = config.get_device()
     
     config_tune = {
         "lr": tune.loguniform(1e-8, 1e-2),  
         "batch_size": tune.choice([8, 16, 32, 64]), 
         "margin": tune.choice([0.1, 0.5, 1.0, 1.5, 2.0]),	
-        "epochs": 20
+        "epochs": 20, 
+        "weight_decay": tune.loguniform(1e-8, 1e-2),
+        "layers": tune.choice([[-1, -2, -3], [-1, -2], [-1]]),
+        "mlp_layers": tune.choice([1, 2, 3, 4, 5]),
     }
 
     scheduler = ASHAScheduler(
@@ -47,7 +50,7 @@ def main(args):
     )
 
     analysis = tune.run(
-    tune.with_parameters(train_tune, train_dataset=train_dataset, val_dataset=val_dataset, model=model, device=device, args=args),
+    tune.with_parameters(train_tune, train_dataset=train_dataset, val_dataset=val_dataset, device=device, args=args),
     resources_per_trial={"cpu":64, "gpu": 1},  
     config=config_tune,
     num_samples=10,  
@@ -60,7 +63,7 @@ def main(args):
     best_trial = analysis.get_best_trial("loss", mode="min", scope="all")
     print(f"Best trial config: {best_trial.config}")
     print(f"Best trial final validation loss: {best_trial.last_result['loss']}")
-    torch.save(model.state_dict(), f"{repository_id}/best_model.pth")
+    # torch.save(model.state_dict(), f"{repository_id}/best_model.pth")
     best_trained_model = AuthorshipLLM(args.model_name)
     best_trained_model.to(device)
     best_checkpoint = analysis.get_best_checkpoint(trial=best_trial, metric="accuracy", mode="max")
