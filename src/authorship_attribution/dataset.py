@@ -102,7 +102,7 @@ class AuthorTripletLossDataset(Dataset):
                 positive_example = self.data[self.data['index'] == triplet[1]].iloc[0]
                 negative_example = self.data[self.data['index'] == triplet[2]].iloc[0]
             except:
-                print(f"Index {idx} not found in the dataset.")
+                print(f"Index {triplet} not found in the dataset.")
                 pass
             return {
                 "anchor": anchor_example['text'],

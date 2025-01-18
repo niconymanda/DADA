@@ -381,7 +381,7 @@ class TrainerAuthorshipAttribution:
             print(f"Getting t-SNE plot for validation set")
             fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on validaation : Epoch {epoch_n}")
             plt.savefig(f"{self.repository_id}/tsne_validation_{epoch_n}.png")
-            self.logger.log_figure(fig, f"t-SNE on validaation : Epoch {epoch_n}")
+            self.logger.log_figure(fig, f"t-SNE on validaation")
         return val_loss, correct_count / total
     
 

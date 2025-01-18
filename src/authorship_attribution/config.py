@@ -17,12 +17,12 @@ def get_args():
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes_train.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
-    parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
+    parser.add_argument('--epochs', type=int, default=1, help='Number of epochs to train for')
+    parser.add_argument('--epochs_classification', type=int, default=1, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
-    parser.add_argument('--weight_decay', type=float, default=0.01  , help='weight_decay')
+    parser.add_argument('--weight_decay', type=float, default=0.1  , help='weight_decay')
     parser.add_argument('--model_name', type=str, default='answerdotai/ModernBERT-large', help='Model to use')
     parser.add_argument('--gpu_id', type=str, default='2', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
@@ -33,13 +33,12 @@ def get_args():
     parser.add_argument('--authors_to_test', type=int, default=5, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
-    parser.add_argument('--margin', type=float, default=0.3, help='Margin for triplet loss')
+    parser.add_argument('--margin', type=float, default=0.4, help='Margin for triplet loss')
     parser.add_argument('--lr_scheduler', type=str, default='plateau', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
     parser.add_argument('--classification_head', type=str, default='linear', help='Classification head type[linear, mlp, gmm]')
     parser.add_argument('--clip_grad', type=float, default=100, help='Clip gradient norm')
     parser.add_argument('--at_lambda', type=float, default=0.4, help='Lambda for AdaTriplet loss')
     
-    # 350 quotes=5 authors, 450 quotes=3 authors,
     return parser.parse_args()
 
 def load_data(args):
@@ -59,6 +58,8 @@ def load_data(args):
     data = pd.read_csv(args.data)
     data = data.dropna()
     data['label'] = data['label'].astype('int')
+    spoofed_data = data[data['type'] == 'spoof']
+    data = data[data['type'] != 'spoof']
     data_to_train = data[data['label'] < args.authors_to_train]
     rest_of_data = data[(data['label'] >= args.authors_to_train) & (data['label'] < args.authors_to_test)]
     print(f"Number of authors to train on: {args.authors_to_train}, Number of authors to test on: {args.authors_to_test}")
@@ -66,17 +67,13 @@ def load_data(args):
     data = pd.concat([data_to_train, rest_of_data])
     author_id_map = data[['label', 'author_name']].drop_duplicates().set_index('label').to_dict()['author_name']
     
-    # Split spoofed data
-    spoofed_data = data[data['type'] == 'spoof']
-    data_to_train = data_to_train[data_to_train['type'] != 'spoof'] 
-    rest_of_data = rest_of_data[rest_of_data['type'] != 'spoof']
     return data_to_train, spoofed_data, rest_of_data, author_id_map
 
-def write_results_to_file(results, file_path, args):
+def write_results_to_file(results, file_path, args, path):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     print(f"Writing results to file {file_path}")
     with open(file_path, 'a') as f: 
-        f.write(f"Model: {args.model_name}, epochs {args.epochs}, batch_size {args. batch_size}, learning rate {args.learning_rate}\n")
+        f.write(f"Model: {args.model_name}, epochs {args.epochs}, batch_size {args. batch_size}, learning rate {args.learning_rate}, model path{path}\n")
         f.write("ABX accuracy, Accuracy, Precision, Recall, F1, AUC \n")
         f.write(f"{results['abx_accuracy']:.4f}, {results['accuracy']:.4f}, {results['precision']:.4f}, {results['recall']:.4f}, {results['f1_score']:.4f}, {results['auc']:.4f}\n")
 
@@ -103,6 +100,7 @@ def init_env(args):
     torch.backends.cudnn.benchmark = False
     os.environ["CUDA_VISIBLE_DEVICES"]=args.gpu_id
     os.environ['HF_HOME'] = '/data/iivanova-23/cache/'
+    os.environ['TOKENIZERS_PARALLELISM'] = 'true'
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')

@@ -80,7 +80,7 @@ class TesterAuthorshipAttribution:
         # Test results spoofed_dataloader
         acc_sp = self.test_abx_accuracy(spoofed_dataloader, self.model)
         print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
-        # results_spoofed['abx_accuracy'] = acc_sp
+        results_spoofed['abx_accuracy'] = acc_sp
         self.plot_cosine_distence_distribution('spoofed')
 
         all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
@@ -102,10 +102,10 @@ class TesterAuthorshipAttribution:
             self.plot_tsne_for_authors(all_embeddings, predictions, name)
 
             results.update(classif_results)
-            config.write_results_to_file(results, './output/results.txt', self.args)
+            config.write_results_to_file(results, './output/results.txt', self.args, self.repository_id)
 
-            # results_spoofed.update(classif_results_spoofed)
-            # config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args)
+            results_spoofed.update(classif_results_spoofed)
+            config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args, self.repository_id)
 
         self.plot_tsne_for_authors(all_embeddings, all_labels)
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
@@ -296,10 +296,7 @@ class TesterAuthorshipAttribution:
                 labels = batch['label']
                 embeddings = model(batch)
                 # print(f"Embeddings: {embeddings}")
-                if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
-                    anchor_embeddings = embeddings.cpu().numpy()
-                else:
-                    anchor_embeddings = embeddings['anchor'].cpu().numpy()
+                anchor_embeddings = embeddings.cpu().numpy()
                 all_embeddings.append(anchor_embeddings)
                 all_labels.extend(labels.cpu().numpy())
 

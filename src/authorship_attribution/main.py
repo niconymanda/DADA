@@ -18,18 +18,22 @@ def main(args):
     current_time = time.strftime("%Y%m%d-%H%M%S")
     repository_id = f"/data/iivanova-23/output/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
     os.makedirs(repository_id, exist_ok=True)
-    # index_set = '/home/infres/iivanova-23/DADA/src/authorship_attribution/index_5_authors.json'
+    print(f"Repository ID: {repository_id}")
+    index_set = "/home/infres/iivanova-23/DADA/Data/index_5_authors.json"
     # _, val_rest = train_test_split(rest_of_data, test_size=0.3, stratify=rest_of_data['label'], random_state=args.seed)
-    train_data, val_data = train_test_split(data, test_size=0.3, stratify=data['label'], random_state=args.seed)
-    train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True, predefined_set=None)
-    # val_data = pd.concat([val_data, val_rest])
-    val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True, predefined_set=None)
+    # train_data, val_data = train_test_split(data, test_size=0.3, stratify=data['label'], random_state=args.seed)
+    # train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True, predefined_set=None)
+    # # val_data = pd.concat([val_data, val_rest])
+    # val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True, predefined_set=None)
+    train_dataset = AuthorTripletLossDataset(data, args.model_name, train=True, predefined_set=index_set)
+    val_dataset = AuthorTripletLossDataset(data, args.model_name, train=False, predefined_set=index_set)
+    
     spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=True)
     
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
             
-    num_workers = 0
+    num_workers = 2
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
     spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
@@ -60,10 +64,10 @@ def main(args):
                                            author_id_map=author_id_map,
                                            report_to='tensorboard',
                                            early_stopping=True,
-                                           save_model=True,
+                                           save_model=False,
                                            model_weights=None
                                            )
-    model, classification_model = trainer.train(classification_head=False)
+    model, classification_model = trainer.train(classification_head=True)
     # loaded_model.load_state_dict(torch.load("output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth"))
     print("Training finished")
     tester = TesterAuthorshipAttribution(model=model, 
