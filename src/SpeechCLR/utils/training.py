@@ -251,7 +251,7 @@ class SpeechCLRTrainerVanilla:
 
             # Save best and latest models
 
-            if self.best_model_path is None or self.sis_best_model(val_info):
+            if self.best_model_path is None or self.is_best_model(val_info):
                 self.best_model_path = os.path.join(self.model_save_path, "best_model.pth")
                 self.save(self.best_model_path)
                 self.best_epoch = epoch
