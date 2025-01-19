@@ -17,16 +17,15 @@ from train_tune import train_tune
 
 def main(args):
     config.init_env(args)
-    data, spoofed_data, author_id_map = config.load_data(args)
+    data, spoofed_data, rest_data, author_id_map = config.load_data(args)
     repository_id = f"./output/n_authors_{len(author_id_map.keys())}_tune/{args.model_name}"
     os.makedirs(repository_id, exist_ok=True)
     
-    train_data, temp_data = train_test_split(data, test_size=0.3, stratify=data['label'])
-    val_data, test_data = train_test_split(temp_data, test_size=0.5, stratify=temp_data['label'])
-    train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True)
-    val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True)
-    test_dataset = AuthorTripletLossDataset(test_data, args.model_name, train=False)
-    spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=False)
+    index_set = "/home/infres/iivanova-23/DADA/Data/index_5_authors.json"
+    train_dataset = AuthorTripletLossDataset(data, args.model_name, train=True, predefined_set=index_set)
+    val_dataset = AuthorTripletLossDataset(data, args.model_name, train=False, predefined_set=index_set)
+    
+    spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=True)
     
     
     device = config.get_device()
@@ -39,6 +38,7 @@ def main(args):
         "weight_decay": tune.loguniform(1e-8, 1e-2),
         "layers": tune.choice([[-1, -2, -3], [-1, -2], [-1]]),
         "mlp_layers": tune.choice([1, 2, 3, 4, 5]),
+        "workers": 2,
     }
 
     scheduler = ASHAScheduler(
@@ -61,7 +61,7 @@ def main(args):
 )  
 
     best_trial = analysis.get_best_trial("loss", mode="min", scope="all")
-    print(f"Best trial config: {best_trial.config}")
+    print(f"Best trial: {best_trial}")
     print(f"Best trial final validation loss: {best_trial.last_result['loss']}")
     # torch.save(model.state_dict(), f"{repository_id}/best_model.pth")
     best_trained_model = AuthorshipLLM(args.model_name)
@@ -73,7 +73,7 @@ def main(args):
             best_checkpoint_data = pickle.load(fp)
 
         best_trained_model.load_state_dict(best_checkpoint_data["net_state_dict"])
-        test_dataloader = DataLoader(test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
+        test_dataloader = DataLoader(val_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
         spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=best_trial.config['batch_size'], shuffle=False)
 
         tester = TesterAuthorshipAttribution(model=best_trained_model,

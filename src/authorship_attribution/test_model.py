@@ -296,7 +296,11 @@ class TesterAuthorshipAttribution:
                 labels = batch['label']
                 embeddings = model(batch)
                 # print(f"Embeddings: {embeddings}")
-                anchor_embeddings = embeddings.cpu().numpy()
+                if self.classification_model is None:
+                    anchor_embeddings = embeddings['anchor'].cpu().numpy()
+                else:
+                    # linear head
+                    anchor_embeddings = embeddings.cpu().numpy()
                 all_embeddings.append(anchor_embeddings)
                 all_labels.extend(labels.cpu().numpy())
 

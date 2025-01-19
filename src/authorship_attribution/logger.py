@@ -32,8 +32,10 @@ class Logger:
                 else:
                     print("Invalid phase")
                     
-    def log_figure(self, figure, name):
+    def log_figure(self, figure, name, epoch):
         if self.report_to == 'wandb':
             wandb.log({name: figure})
         elif self.report_to == 'tensorboard':
-            self.writer.add_figure(name, figure)
+            self.writer.add_figure(name, figure, global_step=epoch)
+            
+    

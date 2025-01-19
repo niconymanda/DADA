@@ -12,14 +12,13 @@ import os
 from ray import train
 import tempfile
 
-def train_tune(config, train_dataset, val_dataset, model, device, args):
+def train_tune(config, train_dataset, val_dataset, device, args):
     """
     Trains and tunes a model using the provided configuration, datasets, and device.
     Args:
         config (dict): Configuration dictionary containing training parameters such as batch size, learning rate, and number of epochs.
         train_dataset (Dataset): The dataset used for training.
         val_dataset (Dataset): The dataset used for validation.
-        model (nn.Module): The model to be trained.
         device (str): The device to run the training on, either 'cpu' or 'cuda'.
     Returns:
         None
@@ -41,6 +40,7 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
     layers = config["layers"]
     mlp_layers = config["mlp_layers"]
     weight_decay = config["weight_decay"]
+    num_workers = config["workers"]
     # device = "cpu"
     # if torch.cuda.is_available():
     #     device = "cuda:0"
@@ -52,7 +52,6 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
     criterion = TripletLoss(margin=margin)
     criterion = criterion.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"]*len(train_dataloader), eta_min=0, last_epoch=-1)
     checkpoint = get_checkpoint()
 
     distance_function = cfg.get_distance_function(args.distance_function)
@@ -68,8 +67,8 @@ def train_tune(config, train_dataset, val_dataset, model, device, args):
             optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
     else:
         start_epoch = 0
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers)
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"]*len(train_dataloader), eta_min=0, last_epoch=-1)
     # early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
 

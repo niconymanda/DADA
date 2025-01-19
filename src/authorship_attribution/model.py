@@ -3,6 +3,7 @@ from transformers import AutoModel, AutoTokenizer
 from torch.nn import functional as F
 import torch
 from sklearn.mixture import GaussianMixture
+from transformers import T5EncoderModel
 import torchvision.ops as ops
 
 class AuthorshipClassificationLLM(nn.Module):
@@ -74,7 +75,7 @@ class MeanPooling(nn.Module):
         if self.use_layers is None:
             # Use all layers if not specified
             self.use_layers = list(range(len(hidden_states))) 
-
+        
         selected_states = [hidden_states[layer_idx] for layer_idx in self.use_layers]
         concatenated_states = torch.cat(selected_states, dim=-1)
 
@@ -101,14 +102,6 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
         self.num_layers = num_layers
         self.dropout_rate = dropout_rate
-        # self.mlp = nn.Sequential(
-        #     nn.Linear(in_features, in_features//2),
-        #     # nn.BatchNorm1d(out_features),
-        #     nn.ReLU(),
-        #     nn.Dropout(self.dropout_rate),
-        #     nn.Linear(in_features//2, out_features),  
-        #     # nn.Dropout(self.dropout_rate),
-        # )
         self.layers = []
         in_dim = in_features
         norm_layer = nn.BatchNorm1d
@@ -139,7 +132,7 @@ class AuthorshipLLM(nn.Module):
                  use_layers=[-1, -2]):  
         super(AuthorshipLLM, self).__init__()
         self.model_name = model_name
-        self.model = AutoModel.from_pretrained(model_name, output_hidden_states=True)
+        self.model = self._get_model(model_name)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.max_length = max_length
         self.use_layers = use_layers
@@ -147,13 +140,16 @@ class AuthorshipLLM(nn.Module):
         self.freeze_params() if freeze_encoder else None
 
         self.pooler = MeanPooling(self.use_layers)
-
         input_size = self._get_hidden_size() * len(self.use_layers)
         self.MLP = MLP(num_layers, dropout_rate=dropout_rate, in_features=input_size, out_features=out_features)
-        # self.dropout = nn.Dropout(dropout_rate)
-        # self.fc1 = nn.Linear(in_features=self.model.config.hidden_size,out_features=out_features)
 
-
+    def _get_model(self, model_name):
+        
+        if 't5' in model_name:
+            return T5EncoderModel.from_pretrained(model_name, output_hidden_states=True)
+        else:
+            return AutoModel.from_pretrained(model_name, output_hidden_states=True)
+        
     def freeze_params(self):
         for param in self.model.base_model.parameters():
             param.requires_grad = False
