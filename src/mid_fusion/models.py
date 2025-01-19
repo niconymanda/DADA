@@ -43,7 +43,7 @@ class MidFuse(nn.Module):
         self.classifier.eval()
 
     def forward(self, text_input, speech_input):
-        text_features = self.text_model(input_ids = text_input['input_ids'], attention_mask = text_input['attention_mask'])
+        text_features = self.text_model(text_input)
         speech_features = self.speech_model(speech_input, mode='classification')
         features = torch.cat([text_features, speech_features], dim=1)
         x = self.classifier(features)

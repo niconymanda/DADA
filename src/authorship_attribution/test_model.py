@@ -9,6 +9,7 @@ import seaborn as sns
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score
 from sklearn.preprocessing import label_binarize
 import pandas as pd
+from typing import Optional, Literal    
 
 class TesterAuthorshipAttribution:
     """
@@ -29,8 +30,9 @@ class TesterAuthorshipAttribution:
     def __init__(self, model, 
                  repository_id, 
                  author_id_map, 
+                 mode: Optional[Literal['min_negatives', 'random']] = 'random', 
                  classification_model=None, 
-                 args=None):
+                 args=None ):
         self.model = model
         self.repository_id = repository_id
         self.author_id_map = author_id_map
@@ -39,6 +41,7 @@ class TesterAuthorshipAttribution:
         self.all_cosine_distances_positive = []
         self.all_cosine_distances_negative = []
         self.args = args
+        self.mode = mode
 
         self.distance_function = config.get_distance_function(self.args.distance_function)
         
@@ -64,46 +67,51 @@ class TesterAuthorshipAttribution:
         8. Saves the model configuration to a JSON file.
         """
 
-
         results = {}
         results_spoofed = {}
 
         # Test results test_dataloader
-        acc = self.test_abx_accuracy(test_dataloader)
+        acc = self.test_abx_accuracy(test_dataloader, self.model)
         results['abx_accuracy'] = acc
         print(f"Test ABX Accuracy : {acc:.4f}")
        
         self.plot_cosine_distence_distribution('test')
 
         # Test results spoofed_dataloader
-        acc_sp = self.test_abx_accuracy(spoofed_dataloader)
+        acc_sp = self.test_abx_accuracy(spoofed_dataloader, self.model)
         print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
         results_spoofed['abx_accuracy'] = acc_sp
         self.plot_cosine_distence_distribution('spoofed')
 
+        all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
+
         #Test results on classification model
         if self.classification_model is not None:
-            if self.args.classification_head == 'gmm':
-                all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
-                classif_results = self.gmm_predict(self.classification_model, all_embeddings, all_labels)
 
-                all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
-                classif_results_spoofed = self.gmm_predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
-            else:  
-                classif_results = self.test_classification(test_dataloader)
-                classif_results_spoofed = self.test_classification(spoofed_dataloader)
+            if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
+                predictions, classif_results = self.predict(self.classification_model, all_embeddings, all_labels)
+                abx_classif = self.test_abx_accuracy(test_dataloader, self.classification_model)
+                print(f"ABX Accuracy for classification model: {abx_classif:.4f}")
+                # all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
+                # _, classif_results_spoofed = self.gmm_predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
+            else:   
+                classif_results, predictions = self.test_classification(test_dataloader)
+                classif_results_spoofed, predictions_spoofed = self.test_classification(spoofed_dataloader)
+
+            name = f't-SNE_{self.args.classification_head}'
+            self.plot_tsne_for_authors(all_embeddings, predictions, name)
 
             results.update(classif_results)
-            config.write_results_to_file(results, './output/results.txt', self.args)
+            config.write_results_to_file(results, './output/results.txt', self.args, self.repository_id)
 
             results_spoofed.update(classif_results_spoofed)
-            config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args)
+            config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args, self.repository_id)
 
-        self.plot_tsne_for_authors(test_dataloader)
+        self.plot_tsne_for_authors(all_embeddings, all_labels)
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
 
 
-    def test_abx_accuracy(self, test_dataloader):
+    def test_abx_accuracy(self, test_dataloader, model):
         """
         Evaluate the ABX accuracy of the model using the provided test dataloader (can be bona-fide and spoofed).
         Test the model by comparing the distance between the anchor and positive examples with the distance between the anchor and minimum of negative examples.
@@ -121,7 +129,7 @@ class TesterAuthorshipAttribution:
             float: The accuracy of the model on the test set.
         """
         
-        self.model.eval() 
+        model.eval() 
         correct = 0
         total = 0
 
@@ -130,113 +138,62 @@ class TesterAuthorshipAttribution:
 
         with torch.no_grad(): 
             for batch in tqdm(test_dataloader):
-                anchor_input_ids = batch['anchor_input_ids'].to(self.device)
-                anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
-                positive_input_ids = batch['positive_input_ids'].to(self.device)
-                positive_attention_mask = batch['positive_attention_mask'].to(self.device)
                 anchor_labels = batch['label']
 
                 # Anchor-Postive distances
-                anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
-                positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
-                dist_ax = self.distance_function(anchor_embeddings, positive_embeddings)
+                embeddings = model(batch)
                 
-                cosine_similarity_pos = F.cosine_similarity(anchor_embeddings, positive_embeddings)
+                dist_ax = self.distance_function(embeddings['anchor'], embeddings['positive'])
+                
+                cosine_similarity_pos = F.cosine_similarity(embeddings['anchor'], embeddings['positive'])
                 cosine_distance_pos = 1 - cosine_similarity_pos
                 self.all_cosine_distances_positive.extend(cosine_distance_pos.cpu().numpy())
 
                 # Anchor-Negative distances
-                negative_labels = batch['negative_labels']
-                negative_inputs_ids_list = batch['negative_input_ids']
-                negative_attention_masks_list = batch['negative_attention_mask']
+                if self.mode == 'min_negatives':
+                                       
+                    negative_examples = batch['negatives']
+                    negative_labels = batch['negative_labels']
 
-                for i in range(anchor_embeddings.size(0)): 
-                    min_dist = dist_ax[i]
-                    pred_label = anchor_labels[i] 
-                    negative_input_ids = negative_inputs_ids_list[i, 0].to(self.device)
-                    negative_attention_mask = negative_attention_masks_list[i, 0].to(self.device)
-                    negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
-                    min_negative_embeddings = negative_embeddings
+                    for i in range(embeddings['positive'].size(0)):
+                        min_dist = dist_ax[i]
+                        pred_label = anchor_labels[i]
+                        negative_example = negative_examples[i][0]
+                        
+                        embeddings = model(batch)
+                        min_negative_embeddings = embeddings['negative'][0]
 
-                    for neg_idx in range(negative_inputs_ids_list.size(1)):  # N_negatives per anchor = #num_labels - 1
-                        negative_input_ids = negative_inputs_ids_list[i, neg_idx].to(self.device)
-                        negative_attention_mask = negative_attention_masks_list[i, neg_idx].to(self.device)
-                        negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
-                        dist_bx = self.distance_function(anchor_embeddings[i].unsqueeze(0), negative_embeddings)
-                        if dist_bx < min_dist:
-                            min_dist = dist_bx
-                            pred_label = negative_labels[i][neg_idx]
-                            min_negative_embeddings = negative_embeddings
-                            # print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
-                            # print(f"Min dist: {min_dist}, possible label: {correct_label}")
-                    cosine_similarity_neg = F.cosine_similarity(anchor_embeddings[i], min_negative_embeddings)
+                        for neg_idx in range(1, len(negative_examples[i])):
+                            negative_example = negative_examples[i][neg_idx]
+                            negative_embeddings = model(negative_example)['negative']
+                            dist_bx = self.distance_function(embeddings['positive'][i].unsqueeze(0), negative_embeddings)
+                            if dist_bx < min_dist:
+                                min_dist = dist_bx
+                                pred_label = negative_labels[i][neg_idx]
+                                min_negative_embeddings = negative_embeddings
+                                print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
+                                # print(f"Min dist: {min_dist}, possible label: {correct_label}")
+                        cosine_similarity_neg = F.cosine_similarity(embeddings['anchor'][i], min_negative_embeddings)
+                        cosine_distance_neg = 1 - cosine_similarity_neg
+                        self.all_cosine_distances_negative.extend(cosine_distance_neg.cpu().numpy())
+
+                        if pred_label == anchor_labels[i]:
+                            correct += 1
+                        total += 1
+
+                elif self.mode == 'random':
+                    
+                    dist_bx = self.distance_function(embeddings['anchor'], embeddings['negative'])
+                    
+                    cosine_similarity_neg = F.cosine_similarity(embeddings['anchor'], embeddings['negative'])
                     cosine_distance_neg = 1 - cosine_similarity_neg
                     self.all_cosine_distances_negative.extend(cosine_distance_neg.cpu().numpy())
-
-                    if pred_label == anchor_labels[i]:
-                        correct += 1
-                    total += 1
-
-        accuracy = correct / total
-        return accuracy
-    
-    def test_spoofer_accuracy(self, spoofed_dataloader):
-        """
-        Evaluate the accuracy of the model on spoofed data.
-        Args:
-            spoofed_dataloader (DataLoader): A DataLoader object that provides batches of spoofed test data.
-        Returns:
-            float: The accuracy of the model on the spoofed test set.
-        """
-        
-        self.model.eval()
-        correct = 0
-        total = 0
-
-        with torch.no_grad():
-            for batch in tqdm(spoofed_dataloader):
-                anchor_input_ids = batch['anchor_input_ids'].to(self.device)
-                anchor_attention_mask = batch['anchor_attention_mask'].to(self.device)
-                positive_input_ids = batch['positive_input_ids'].to(self.device)
-                positive_attention_mask = batch['positive_attention_mask'].to(self.device)
-                anchor_labels = batch['label']
-
-                # Anchor-Positive distances
-                anchor_embeddings = self.model(anchor_input_ids, anchor_attention_mask)
-                positive_embeddings = self.model(positive_input_ids, positive_attention_mask)
-                dist_ax = self.distance_function(anchor_embeddings, positive_embeddings)
-
-                # Anchor-Negative distances
-                negative_labels = batch['negative_labels']
-                negative_inputs_ids_list = batch['negative_input_ids']
-                negative_attention_masks_list = batch['negative_attention_mask']
-
-                for i in range(anchor_embeddings.size(0)):
-                    min_dist = dist_ax[i]
-                    pred_label = anchor_labels[i]
-                    negative_input_ids = negative_inputs_ids_list[i, 0].to(self.device)
-                    negative_attention_mask = negative_attention_masks_list[i, 0].to(self.device)
-                    negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
-                    min_negative_embeddings = negative_embeddings
-
-                    for neg_idx in range(negative_inputs_ids_list.size(1)):
-                        negative_input_ids = negative_inputs_ids_list[i, neg_idx].to(self.device)
-                        negative_attention_mask = negative_attention_masks_list[i, neg_idx].to(self.device)
-                        negative_embeddings = self.model(negative_input_ids.unsqueeze(0), negative_attention_mask.unsqueeze(0))
-                        dist_bx = self.distance_function(anchor_embeddings[i].unsqueeze(0), negative_embeddings)
-                        if dist_bx < min_dist:
-                            min_dist = dist_bx
-                            pred_label = negative_labels[i][neg_idx]
-                            min_negative_embeddings = negative_embeddings
-                            print(f"+: {dist_ax[i]}, _: {dist_bx}, anchor: {anchor_labels[i]}, negative: {negative_labels[i][neg_idx]}")
-                            # print(f"Min dist: {min_dist}, possible label: {correct_label}")
-                    cosine_similarity_neg = F.cosine_similarity(anchor_embeddings[i], min_negative_embeddings)
-                    cosine_distance_neg = 1 - cosine_similarity_neg
-                    self.all_cosine_distances_negative.extend(cosine_distance_neg.cpu().numpy())
-
-                    if pred_label == anchor_labels[i]:
-                        correct += 1
-                    total += 1
+                    
+                    correct += torch.sum(dist_ax < dist_bx).item()
+                    total += dist_ax.size(0)
+                else:
+                    print("Mode not recognized. Please choose between 'min_negatives' and 'random'.")
+                    return None
 
         accuracy = correct / total
         return accuracy
@@ -266,11 +223,10 @@ class TesterAuthorshipAttribution:
 
         with torch.no_grad():
             for batch in tqdm(test_dataloader):
-                input_ids = batch['anchor_input_ids'].to(self.device)
-                attention_mask = batch['anchor_attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
+                
+                labels = batch['label']
 
-                outputs = self.classification_model(input_ids, attention_mask)
+                outputs = self.classification_model(batch)
                 preds = outputs.argmax(dim=1)
 
                 all_preds.extend(preds.cpu().numpy())
@@ -281,7 +237,8 @@ class TesterAuthorshipAttribution:
 
         results = self.get_results(all_preds, all_labels)
 
-        return results
+        return results, all_labels
+    
     def get_results(self, all_preds, all_labels):
 
         accuracy = accuracy_score(all_labels, all_preds)
@@ -323,28 +280,40 @@ class TesterAuthorshipAttribution:
         Returns:
             np.ndarray: An array of embeddings extracted from the model.
         """
-        self.model.eval()
+
+        if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn' or self.classification_model is None:
+            model = self.model
+            self.model.eval()
+        else:
+            model = self.classification_model
+            self.classification_model.eval()
+            
         all_embeddings = []
         all_labels = []
         with torch.no_grad():
             for i,batch in enumerate(tqdm(dataloader, desc=f"Extracting embeddings")):
-                input_ids = batch['anchor_input_ids'].to(self.device)
-                attention_mask = batch['anchor_attention_mask'].to(self.device)
-                labels = batch['label'].to(self.device)
-
-                embeddings = self.model(input_ids, attention_mask)
-                all_embeddings.append(embeddings)
+                
+                labels = batch['label']
+                embeddings = model(batch)
+                # print(f"Embeddings: {embeddings}")
+                if self.classification_model is None:
+                    anchor_embeddings = embeddings['anchor'].cpu().numpy()
+                else:
+                    # linear head
+                    anchor_embeddings = embeddings.cpu().numpy()
+                all_embeddings.append(anchor_embeddings)
                 all_labels.extend(labels.cpu().numpy())
 
-        all_embeddings = torch.cat(all_embeddings, dim=0)
+        all_embeddings = np.concatenate(all_embeddings, axis=0)
         all_labels = np.array(all_labels)
         return all_embeddings, all_labels
+
     
-    def gmm_predict(self, gmm, embeddings, labels):
+    def predict(self, classifier, embeddings, labels):
         """
-        Predicts author labels using a Gaussian Mixture Model (GMM).
+        Predicts author labels using a classifier.
         Args:
-            gmm (GaussianMixture): A trained GMM model.
+            classifier (object): A classifier object with a `predict` method, can be GMM, K-NN.
             embeddings (np.ndarray): An array of embeddings to predict labels for.
             labels (np.ndarray): An array of true labels for the embeddings.
         Returns:
@@ -352,13 +321,15 @@ class TesterAuthorshipAttribution:
                 - np.ndarray: An array of predicted probabilities for each class.
                 - np.ndarray: An array of predicted labels.
         """
-        probabilities = gmm.predict_proba(embeddings)
+        probabilities = classifier.predict_proba(embeddings)
         predictions = np.argmax(probabilities, axis=1)
+        print(f"Predictions: {predictions}")
+        print(f"Labels: {labels}")
         results = self.get_results(predictions, labels)
         
-        return results
+        return predictions, results
 
-    def plot_tsne_for_authors(self, dataloader):
+    def plot_tsne_for_authors(self, all_embeddings, all_labels, name='t-SNE_best_model'):
         """
         Plots a t-SNE visualization for author embeddings.
         This function takes a dataloader containing batches of data, extracts embeddings
@@ -376,22 +347,6 @@ class TesterAuthorshipAttribution:
             - The t-SNE plot is saved in the directory specified by `self.repository_id`.
         """
         
-        self.model.eval()
-        all_embeddings = []
-        all_labels = []
-
-        with torch.no_grad():
-            for batch in dataloader:
-                input_ids = batch['anchor_input_ids'].to(self.device)
-                attention_mask = batch['anchor_attention_mask'].to(self.device)
-                labels = batch['label'].cpu().numpy() 
-
-                embeddings = self.classification_model(input_ids, attention_mask).cpu().numpy()
-
-                all_embeddings.append(embeddings)
-                all_labels.extend(labels)
-
-        all_embeddings = np.concatenate(all_embeddings, axis=0)
         num_classes = len(set(all_labels))
         print(f"Number of classes: {num_classes}")
         tsne = TSNE(n_components=num_classes, perplexity=80, max_iter=3000, method='exact')
@@ -409,12 +364,32 @@ class TesterAuthorshipAttribution:
         # Modify legend to show author names
         handles, labels = scatter.get_legend_handles_labels()
         author_names = [self.author_id_map[int(label)] for label in labels]
+        
         plt.legend(handles, author_names, title="Author Name")
-        plt.title("t-SNE of Author Embeddings")
+        plt.title(f"Author Embeddings {name}")
         plt.xlabel("t-SNE Dimension 1")
         plt.ylabel("t-SNE Dimension 2")
+
+        # TODO :Plot ellipses
+        # for label in np.unique(all_labels):
+        #     points = tsne_results[all_labels == label]
+        #     cov = np.cov(points, rowvar=False)
+        #     mean = np.mean(points, axis=0)
+        #     eigvals, eigvecs = np.linalg.eigh(cov)
+        #     eigvals = 2.0 * np.sqrt(2.0) * np.sqrt(eigvals)
+        #     u = eigvecs[0] / np.linalg.norm(eigvecs[0])
+        #     angle = np.arctan(u[1] / u[0])
+        #     angle = 180.0 * angle / np.pi
+        #     # order = eigvals.argsort()[::-1]
+        #     # eigvals, eigvecs = eigvals[order], eigvecs[:, order]
+        #     # angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
+        #     # width, height = 2 * np.sqrt(eigvals)
+        #     ellipse = plt.matplotlib.patches.Ellipse(mean, width=eigvals[0], height=eigvals[1], angle=180.0+angle)
+        #     plt.gca().add_patch(ellipse)
+
         plt.show()
-        plt.savefig(f"{self.repository_id}/t-SNE_plot_best_model.png")
+        plt.savefig(f"{self.repository_id}/{name}.png")
+
 
     def plot_cosine_distence_distribution(self, test_dataloader):
         """

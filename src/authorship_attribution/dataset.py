@@ -2,7 +2,8 @@ import torch
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer, DebertaV2Tokenizer
 import random 
-
+import json
+import pandas as pd 
 class AuthorClassificationDataset(Dataset):
     """
     A custom dataset class for author classification tasks using Hugging Face tokenizers.
@@ -71,22 +72,48 @@ class AuthorTripletLossDataset(Dataset):
                                                           for all authors except the given anchor label.
     """
     
-    def __init__(self, data, tokenizer_name, max_length=64, train=True):
+    def __init__(self, data, tokenizer_name, max_length=64, train=True, predefined_set=None):
         self.data = data
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        # self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-        self.max_length = max_length
+        # self.max_length = max_length
         self.train = train
         self.texts_by_author = data.groupby('label')['text'].apply(list).to_dict()
         self.labels = list(self.texts_by_author.keys())
+        self.predefined_set = predefined_set
+        
+        if self.predefined_set is not None:
+            with open(self.predefined_set, 'r') as f:
+                self.predefined_triplets = json.load(f)
+        else:
+            self.predefined_triplets = None
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        auchor_data = self.data.iloc[idx]
-        auchor_text = auchor_data['text']
-        anchor_label = auchor_data['label']
+        mode = 'train' if self.train else 'test'
+        if self.predefined_triplets is not None:
+            if mode not in self.predefined_triplets:
+                raise KeyError(f"Mode '{mode}' not found in predefined triplets.")  
+            triplet = self.predefined_triplets[mode][idx]
+            try:
+                anchor_example = self.data[self.data['index'] == triplet[0]].iloc[0]
+                positive_example = self.data[self.data['index'] == triplet[1]].iloc[0]
+                negative_example = self.data[self.data['index'] == triplet[2]].iloc[0]
+            except:
+                print(f"Index {triplet} not found in the dataset.")
+                pass
+            return {
+                "anchor": anchor_example['text'],
+                "positive": positive_example['text'],
+                "negative": negative_example['text'],
+                "label": anchor_example['label'],
+                "negative_label": negative_example['label']
+            }
+        anchor_data = self.data.iloc[idx]
+        anchor_example = anchor_data['text']
+        anchor_label = anchor_data['label']
         
         positive_example = self._get_positive_example(anchor_label)
         
@@ -95,65 +122,24 @@ class AuthorTripletLossDataset(Dataset):
             
         else:
             negative_examples, negative_labels = self._get_negative_examples_all_authors(anchor_label)
-            
-        
-        anchor_inputs = self.tokenizer(
-            auchor_text,
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt"
-        )
-        # avg_token_length = sum(len(self.tokenizer.tokenize(text)) for text in self.texts_by_author[anchor_label]) / len(self.texts_by_author[anchor_label])
-        # print(f"Average token length for author {anchor_label}: {avg_token_length}")
-        
-        positive_inputs = self.tokenizer(
-            positive_example,
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt"
-        )
         if self.train:
-            negative_inputs = self.tokenizer(
-                negative_example,
-                max_length=self.max_length,
-                padding="max_length",
-                truncation=True,
-                return_tensors="pt"
-            )
-            return{
-                "anchor_input_ids": anchor_inputs["input_ids"].squeeze(),
-                "anchor_attention_mask": anchor_inputs["attention_mask"].squeeze(),
-                "positive_input_ids": positive_inputs["input_ids"].squeeze(),
-                "positive_attention_mask": positive_inputs["attention_mask"].squeeze(),
-                "negative_input_ids": negative_inputs["input_ids"].squeeze(),
-                "negative_attention_mask": negative_inputs["attention_mask"].squeeze(),
-                "label": anchor_label, 
+            return {
+                "anchor": anchor_example,
+                "positive": positive_example,
+                "negative": negative_example,
+                "label": anchor_label,
                 "negative_label": negative_label
             }
-        else:
-            negative_inputs = [self.tokenizer(
-                neg_example,
-                max_length=self.max_length,
-                padding="max_length",
-                truncation=True,
-                return_tensors="pt"
-            ) for neg_example in negative_examples]
-                
-            negative_input_ids = torch.stack([neg_inputs["input_ids"].squeeze() for neg_inputs in negative_inputs])
-            negative_attention_masks = torch.stack([neg_inputs["attention_mask"].squeeze() for neg_inputs in negative_inputs])
+        else:    
             return {
-                "anchor_input_ids": anchor_inputs["input_ids"].squeeze(),
-                "anchor_attention_mask": anchor_inputs["attention_mask"].squeeze(),
-                "positive_input_ids": positive_inputs["input_ids"].squeeze(),
-                "positive_attention_mask": positive_inputs["attention_mask"].squeeze(),
-                "negative_input_ids": negative_input_ids,
-                "negative_attention_mask": negative_attention_masks,
+                "anchor": anchor_example,
+                "positive": positive_example,
+                "negatives": negative_examples,
                 "label": anchor_label,
-                "negative_labels": torch.stack([torch.tensor(neg_label) for neg_label in negative_labels])
+                "negative_labels": negative_labels
             }
-
+            
+        
     def _get_positive_example(self, label):
         positive_samples = self.texts_by_author[label]
         return random.choice(positive_samples)  
@@ -175,6 +161,14 @@ class AuthorTripletLossDataset(Dataset):
                 negative_sampes_all_authors.append(negative_sample)
                 negative_labels.append(label)
         return negative_sampes_all_authors, negative_labels
+    
+    def __len__(self):
+        # Return the length of the triplet list for the current mode
+        if self.predefined_set is not None:
+            mode = 'train' if self.train else 'test'
+            return len(self.predefined_triplets[mode])
+        else:
+            return len(self.data)
         
         
 

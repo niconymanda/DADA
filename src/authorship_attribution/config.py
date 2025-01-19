@@ -16,25 +16,30 @@ def get_args():
     """
     
     parser = argparse.ArgumentParser(description='Train a text classification model')
-    parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=15, help='Number of epochs to train for')
+    parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes_train.csv', help='Path to the input data file')
+    parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train for')
     parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
-    parser.add_argument('--weight_decay', type=float, default=1e-5  , help='weight_decay')
-    parser.add_argument('--model_name', type=str, default='microsoft/deberta-v3-large', help='Model to use')
+    parser.add_argument('--weight_decay', type=float, default=0.001  , help='weight_decay')
+    parser.add_argument('--model_name', type=str, default='google-t5/t5-large', help='Model to use')
+    parser.add_argument('--gpu_id', type=str, default='1', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--layers_to_train', type=str, default="classifier", help='Layers to train: "classifier", "all", etc.')
-    parser.add_argument('--early_stopping_patience', type=int, default=10, help='Patience for early stopping based on validation loss')
+    parser.add_argument('--early_stopping_patience', type=int, default=5, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
-    parser.add_argument('--min_quotes_per_author', type=int, default=450, help='Min number of quotes per author')
+    parser.add_argument('--authors_to_train', type=int, default=5, help='Min number of quotes per author')
+    parser.add_argument('--authors_to_test', type=int, default=5, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
-    parser.add_argument('--margin', type=float, default=1.0, help='Margin for triplet loss')
+    parser.add_argument('--margin', type=float, default=0.4, help='Margin for triplet loss')
     parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
     parser.add_argument('--classification_head', type=str, default='linear', help='Classification head type[linear, mlp, gmm]')
-    # 350 quotes=5 authors, 450 quotes=3 authors,
+    parser.add_argument('--clip_grad', type=float, default=100, help='Clip gradient norm')
+    parser.add_argument('--at_lambda', type=float, default=0.5, help='Lambda for AdaTriplet loss')
+    parser.add_argument('--mlp_layers', type=int, default=3, help='Number of layers in MLP head')
+    parser.add_argument('--hidden_layers', type=lambda s: [int(item) for item in s.split(',')], default="-1,-2,-3", help='List of hidden layer sizes for the model')
+    
     return parser.parse_args()
 
 def load_data(args):
@@ -53,35 +58,25 @@ def load_data(args):
     
     data = pd.read_csv(args.data)
     data = data.dropna()
-    number_quotes = args.min_quotes_per_author
     data['label'] = data['label'].astype('int')
-    label_counts = data['label'].value_counts()
-    # Keep only authors with more than number_quotes quotes
-    labels_to_keep = label_counts[label_counts >= number_quotes].index
-    data = data[data['label'].isin(labels_to_keep)]
-    num_authors = len(data['label'].unique())
-    print(f"Number of authors that have more then {number_quotes} quotes: {num_authors}")
-    
-    # Map author labels to new labels starting from 0
-    author_id_map = data[['label', 'author_name']].drop_duplicates().set_index('label').to_dict()['author_name']
-    label_mapping = {old_label: new_label for new_label, old_label in enumerate(labels_to_keep)}
-    data['label'] = data['label'].map(label_mapping)
-    author_id_map = {new_label: author_id_map[old_label] for old_label, new_label in label_mapping.items()}
-    
-    # Split spoofed data
     spoofed_data = data[data['type'] == 'spoof']
-    data = data[data['type'] != 'spoof'] 
-    return data[:500], spoofed_data, author_id_map
+    data = data[data['type'] != 'spoof']
+    data_to_train = data[data['label'] < args.authors_to_train]
+    rest_of_data = data[(data['label'] >= args.authors_to_train) & (data['label'] < args.authors_to_test)]
+    print(f"Number of authors to train on: {args.authors_to_train}, Number of authors to test on: {args.authors_to_test}")
+    
+    data = pd.concat([data_to_train, rest_of_data])
+    author_id_map = data[['label', 'author_name']].drop_duplicates().set_index('label').to_dict()['author_name']
+    
+    return data_to_train, spoofed_data, rest_of_data, author_id_map
 
-def write_results_to_file(results, file_path, args):
+def write_results_to_file(results, file_path, args, path):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     print(f"Writing results to file {file_path}")
     with open(file_path, 'a') as f: 
-        f.write(f"Model: {args.model_name}, epochs {args.epochs}, batch_size {args. batch_size}, learning rate {args.learning_rate}\n")
+        f.write(f"Model: {args.model_name}, epochs {args.epochs}, batch_size {args. batch_size}, learning rate {args.learning_rate}, model path{path}\n")
         f.write("ABX accuracy, Accuracy, Precision, Recall, F1, AUC \n")
         f.write(f"{results['abx_accuracy']:.4f}, {results['accuracy']:.4f}, {results['precision']:.4f}, {results['recall']:.4f}, {results['f1_score']:.4f}, {results['auc']:.4f}\n")
-
-
 
 def init_env(args):
     """
@@ -104,12 +99,12 @@ def init_env(args):
         torch.cuda.manual_seed_all(seed_val)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    os.environ["CUDA_VISIBLE_DEVICES"]="1"
+    os.environ["CUDA_VISIBLE_DEVICES"]=args.gpu_id
     os.environ['HF_HOME'] = '/data/iivanova-23/cache/'
+    os.environ['TOKENIZERS_PARALLELISM'] = 'true'
 
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 def save_checkpoint(model, optimizer, epoch, path):
     checkpoint = {
@@ -122,7 +117,7 @@ def save_checkpoint(model, optimizer, epoch, path):
     print(f"Model saved to {path}")
     
 def load_checkpoint(model, optimizer, path):
-    checkpoint = torch.load(path)
+    checkpoint = torch.load(path, map_location=torch.device('cpu'), weights_only=True)
     print(f"Loading model from {path}")
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -134,7 +129,8 @@ def save_model_config(
     output_path: str = "model_config.json"
 ):
     config_new = {
-        "min_quotes_per_author": args.min_quotes_per_author,
+        "train authors": args.authors_to_train,
+        "test authors": args.authors_to_test,
         "architecture":{
             "name": "AuthorshipLLM",
             "args": {
@@ -143,20 +139,20 @@ def save_model_config(
                 "learning_rate": args.learning_rate,
                 "weight_decay": args.weight_decay,
                 "early_stopping_patience": args.early_stopping_patience,
-                "logging_step": args.logging_step,
-                "n_gpu": 1
+                "num_mlp_layers": args.mlp_layers,
+                "hidden_layers mean pool": args.hidden_layers,
+                
                 }
         },
         "architecture_classifier":{
             "name": "AuthorshipClassificationLLM",
             "args": {
-                "model_name": "Liner head with softmax",
+                "model_name": args.classification_head,
                 "epochs": args.epochs_classification,
                 "learning_rate": args.learning_rate_classification,
                 "weight_decay": args.weight_decay,
                 "early_stopping_patience": args.early_stopping_patience,
                 "logging_step": args.logging_step,
-                "n_gpu": 1
                 }
         },
         "loss_function": {
@@ -164,7 +160,8 @@ def save_model_config(
             "args": {
                 "margin": args.margin,
                 "distance_function": args.distance_function,
-                "reduction": "mean"
+                "reduction": "mean",
+                "at_lambda": args.at_lambda,
             }
         },
         "data_loader": {
@@ -173,8 +170,8 @@ def save_model_config(
             "data": args.data,             # dataset path
             "batch_size": args.batch_size,                # batch size
             "shuffle": True,                 # shuffle training data before splitting
-            "validation_split": 0.2,         # size of validation dataset. float(portion) or int(number of samples)
-            "num_workers": 0,                # number of cpu processes to be used for data loading
+            "validation_split": 0.3,         # size of validation dataset. float(portion) or int(number of samples)
+            "num_workers": 2,                # number of cpu processes to be used for data loading
           }
         },
         "optimizer_LLM_model": {
