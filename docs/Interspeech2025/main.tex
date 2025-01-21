@@ -4,6 +4,7 @@
 
 \usepackage{todonotes}
 \usepackage{hyperref}
+\usepackage{mathrsfs}
 \hypersetup{
     colorlinks=true,
     linkcolor=black,
@@ -73,57 +74,46 @@
 \begin{abstract}
 
   % 1000 characters. ASCII characters only. No citations.
-  \todo[inline]{Abhay : Exceeding 408 characters.}
-  The increasing use of generative AI models to create realistic deepfakes poses significant challenges to information security, particularly in the realm of audio manipulation. This paper addresses the pressing need for improved detection of audio deepfakes by proposing a novel approach that incorporates context awareness. We begin by discussing the various types of audio deepfakes and their potential consequences, emphasising their ethical considerations and threats to privacy, security, and democratic processes. We review existing deepfake detection techniques and currently identified challenges in the field. We then present our method, which leverages textual context extracted from transcriptions as well as audio features extracted from deepfake detection models. We propose two fusion strategies, late fusion and mid fusion, to integrate these features and enhance detection accuracy. We conduct experiments using benchmark datasets and state-of-the-art deepfake detection models to evaluate the performance of our proposed approach. Our results demonstrate promising improvements in detecting audio deepfakes, highlighting the potential of context awareness in enhancing detection capabilities. Finally, we discuss the implications of our findings, including the privacy-security trade-off and limitations of our approach, and suggest directions for future research to address these challenges.
+  \todo[inline]{Abhay : 1000 character limit; 848 currently.}
+  The increasing use of generative AI models to create realistic deepfakes poses significant challenges to information security, particularly in the realm of audio manipulation. This paper addresses the pressing need for improved detection of audio deepfakes by proposing a novel approach that leverages textual context extracted from transcriptions as well as audio features extracted from deepfake detection models. We propose two fusion strategies, late fusion and mid fusion, to integrate these features and enhance detection accuracy. We conduct experiments using benchmark datasets and state-of-the-art deepfake detection models to evaluate the performance of our proposed approach. Our results demonstrate promising improvements in detecting audio deepfakes, highlighting the potential of context awareness in enhancing detection capabilities.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:introduction}
 
-With the rapid advances of the digital landscape and new media technologies,
+With the rapid advances in the digital landscape and new media technologies,
 users become increasingly exposed to different types of manipulations.
-Nowadays, everyone can create super realistic AI-generated content such as
-images, audio, and even videos. The challenge of distinguishing between those
-and the real ones becomes nearly impossible for the ordinary user. Audio
-deepfakes or voice clones are like digital ventriloquists, using various deep
-learning techniques to create voices that convincingly impersonate real
-people~\cite{adversarial}. We can distinguish between a couple of different
-types of deepfakes.~\cite{review_audio_deepfake_issues}. The first approach is
-imitation-based (voice conversion), wherein the original audio signal is
-modified to mimic another targeted voice. The manipulations can be of the
-speech style, tone, and articulation. This technique is mainly used in show
-business and, therefore, is applied by a third person or deep learning
-software.
+Nowadays, everyone can create highly realistic AI-generated content such as
+images, audio, and even videos. Distinguishing between those and the real ones
+becomes nearly impossible for the ordinary user. Audio deepfakes or voice
+clones are like digital ventriloquists, using various deep learning techniques
+to create voices that convincingly impersonate real people~\cite{adversarial}.
+We can distinguish between a couple of different types of deepfakes.
+~\cite{review_audio_deepfake_issues}. The first approach is imitation-based
+(voice conversion), wherein the original audio signal is modified to mimic
+another targeted voice. This technique is mainly used in show business and,
+therefore, is applied by a third person or deep learning software. The next
+approach is synthetic-based, producing artificially generated speech using
+text-to-speech techniques (TTS). This process involves three stages: text
+analysis, acoustic, and vocoder. The third technique is centred on replaying
+existing recordings of the target speaker. Two techniques are notable here:
+cut-and-paste detection, where a victim's recorded segment is played through a
+phone handset for capture, and far-field detection, which involves crafting
+sentences for manipulation of a text-dependent system. There are other types of
+deepfakes, such as emotion fake. This technique alters the emotions of a
+speaker's voice while preserving the original words and speaker identity.
+~\cite{zhao2023emofake}. Another type is scene fake, which involve modifying
+the background sounds of a recording, leaving the speaker and content
+untouched.~\cite{yi2022scenefake}. The last type of deepfake is the partially
+fake, which involves replacing specific words within the original audio signal
+with either real or synthetic audio segments. The speaker remains the same
+throughout, but the content is altered~\cite{yi2023halftruth}.
 
-The second approach is synthetic-based, which produces artificially generated
-speech by using text-to-speech techniques (TTS). This process involves three
-stages: text analysis, acoustic, and vocoder. The text analysis step gathers
-related audio files and the corresponding transcripts. Next, the acoustic
-module extracts relevant features from the collected audio files to train the
-new model. Techniques like Tacotron 2, Deep Voice 3~\cite{ping2018deep}, and
-Flat Speech 2~\cite{ren2022fastspeech} are being used for this module. Finally,
-the vocoder generates the final deepfake audio output by creating a speech
-waveform based on the information extracted from the steps before.
-
-The third technique is centred on replaying existing recordings of the target
-speaker. Two techniques are notable here: cut-and-paste detection, where a
-victim's recorded segment is played through a phone handset for capture, and
-far-field detection, which involves crafting sentences for manipulation of a
-text-dependent system.
-
-There are other types of deepfakes, such as emotion fake. This technique alters
-the emotions of a speaker's voice while preserving the original words and
-speaker identity. For example, a happy statement can be transformed into a
-sorrowful one, potentially twisting the meaning and intent of the
-message~\cite{zhao2023emofake}. Another type is scene fake, which involves
-modifying the background sounds of a recording, leaving the speaker and content
-untouched. For instance, an office, bus or park conversation can be made to
-sound like it took place at an airport. Altering the acoustic scene can raise
-concerns about the recording's authenticity and even influence its
-interpretation~\cite{yi2022scenefake}. The last type of deepfake is the
-partially fake, which involves replacing specific words within the original
-audio signal with either real or synthetic audio segments. The speaker remains
-the same throughout, but the content is altered~\cite{yi2023halftruth}.
+\begin{figure}[t]
+  \centering
+    \includegraphics[width=0.5\textwidth]{figures/overview.pdf}
+    \caption{Overview of the DADA pipeline. Audio files are first transcribed to obtain textual content. Features are then extracted from both the audio and text using separate models. Finally, these features are combined (using either mid fusion or late fusion strategies) to generate the final prediction.}\label{fig:overview}
+  \end{figure}
 
 All these different techniques can have far-reaching consequences, affecting
 domains ranging from political discourse to personal security. These deepfakes
@@ -131,210 +121,220 @@ are not only used in creating political propaganda to manipulate public
 opinion~\cite{stuanescuinformational} but have also become tools for conducting
 phone scams~\cite{mirsky2022dfcaptcha}, posing significant threats to
 individual privacy and security. The ability to convincingly replicate or alter
-voices using artificial intelligence has underscored the urgent need for robust
-detection mechanisms. This paper discusses existing deepfake detection
-techniques and proposes a new pipeline leveraging these techniques.
-
+voices using AI have affirmed the urgent need for robust detection mechanisms.
 This paper contributes to proactive measures in detecting audio deepfakes,
 particularly focusing on detecting audio deepfakes of public figures. Public
 figures are especially susceptible to the detrimental effects of audio
 deepfakes as their extensive online presence renders them prime targets for
 malicious actors seeking to disseminate misinformation.
 
-\section{Related Work}
-\label{sec:related_work}
+We propose a new pipeline that aims to not only analyze the audio utterances
+but also incorporate contextual information. Furthermore, DADA has two
+different branches, one responsible for detecting if the audio is real or fake
+and a text branch performing the task of Authorship Attribution on the
+transcription of the audio. We want to answer the question of what is the
+probability of the anticipated speaker having made the given statement.
+% changelog[Abhay]: removed the abbreviation AA here, as it is not used in the text later + Alcoholics Anonymous prolly has dibs
 
-This section reviews the different methods of audio deepfake detection,
-focusing on several competitions that benchmark progress and pivotal studies
-that mark the development in this field. We propose a detailed overview of
-various approaches spanning from signal processing to advanced deep learning
-techniques and consider the challenges of generalising detection across diverse
-deepfake datasets.
+Recent advancements in authorship attribution using deep learning have
+showcased the efficacy of various encoder-based architectures in capturing
+linguistic and stylistic patterns unique to individual authors. We can
+encounter multiple papers that explore BERT or T5-based models for identifying
+authorship in literary texts, achieving notable
+accuracy~\cite{hicke2023t5,silva2024forged}. For instance,
+BertAA~\cite{fabien2020bertaa} is a fine-tuned pretrained BERT model for
+authorship attribution, demonstrating competitive performance on multiple
+datasets. We can also find several works that use techniques from contrastive
+learning in creating discriminative embedding spaces. Works like
+DeepStyle,~\cite{hu2020deepstyle} focusing on short-text authorship
+attribution, leveraging Triplet Loss, which outperformed existing baselines
+using Twitter and Weibo datasets and using Siamese networks for large-scale
+author identification~\cite{saedi2021siamese}.~\cite{bauersfeld2023cracking}
+proposed a transformer-based model using arXiv manuscripts, achieving high
+attribution accuracy in a large-scale dataset with up to 2,000 authors.
 
-\subsection{Feature Extraction}
+\section{Related Work}\label{sec:related_work}
+\todo[inline]{Keeping all related work in Introduction~\ref{sec:introduction} for now, in line with papers from Interspeech24.}
 
-Feature extraction is an essential phase of the pipeline of every detection
-method. Features are categorised into short-term spectral, long-term spectral,
-prosodic, and deep features, each with unique characteristics and extraction
-methods.
+\section{Method}\label{sec:method}
 
-\textit{Short-term spectral features}, derived through digital signal processing techniques like the Short-Time Fourier Transform (STFT), focus on the immediate magnitude and phase spectrum being computed at each time step~\cite{tian2016spoofing} but fall short in capturing temporal dynamics. Long-term spectral features, on the other hand, aim to grasp extended information across speech signals, using different transform methods such as STFT, Constant-Q Transform, Hilbert Transform, and Wavelet Transform to enhance detection accuracy by covering a broader temporal scope.
+In this section, we present the DADA architecture for audio deepfake detection
+that improves the traditional methods analyzing only the utterances of the
+audio files, by incorporating contextual information to improve detection
+capabilities. Specifically, our approach seeks to determine not only whether an
+audio sample is a deepfake but also the likelihood of the supposed speaker
+having made the given statement, thus embedding contextual awareness into the
+detection pipeline.
 
-\textit{Prosodic features} include elements like fundamental frequency, duration, and energy distribution, which leverage the rhythmic and intonation patterns of the speech, offering a complementary detection dimension by exploiting the nuances of natural language that are often poorly replicated in synthetic speech. In contrast to the short-term features, prosodic ones are extracted from longer speeches such as phone calls and audio recordings.~\cite{kinnunen2010overview}.
+Our method operates in three stages: transcription, feature extraction and
+fusion. First, the audio files are transcribed using
+Whisper~\cite{radford2023robust} to obtain the textual content. Following
+transcription, the architecture leverages two separate models trained
+independently a text and an audio model. The extracted audio and text feature
+are then combined using two distinct fusion strategies to obtain the final
+classification score.
+% \subsection{Audio Model}
+\subsection{Text Model}
 
-\textit{Deep features}, extracted through neural network models, represent a significant advancement in feature extraction by learning directly from data, thus potentially overcoming the biases inherent in hand-crafted features. These deep features can be divided into partially and fully learnable spectral features, supervised embedding features, which can be one of the four different types: spoof, emotion, speaker, and pronunciation embeddings and self-supervised embedding features, which do not require the costly annotated audio data~\cite{yu2017dnn}. Some pre-trained self-supervised speech models are publicly available, such as Wav2vec, LS-R and HuBERT.
+The main idea of the text model is to fine-tune a pretrained encoder-based LLM
+for authorship attribution. To improve the model's ability to differentiate
+between stylistic and linguistic patterns unique to specific author, we
+extracted the features from the last three hidden states of the encoder,
+instead of only the CLS token. Transformer models encode information
+hierarchically across layers. The lower layers capture phrase-level or
+segment-level interactions, where the intermediate layers represent syntactic
+information like grammar and vocabulary and the higher layers encode
+task-specific or abstract semantic information. By using multiple layers we
+want capture a broader spectrum of features, combining syntactic, semantic, and
+task-specific information~\cite{jawahar2019does}. The extracted features are
+aggregated using a Mean Pooling layer, which computes the mean while accounting
+for the attention mask. This vector is passed to task-specific layers, such as
+a several fully connected layers. To model the space of authors effectively and
+identify the characteristics of their speech sets, we employ techniques from
+contrastive learning such as Triplet loss. This loss function helps create a
+well-defined embedding space, where texts attributed to the same author are
+closer together, while those from different authors are further
+apart~\cite{mao2019metric}. The function is defined using triplets (A,P,N),
+where A is a randomly sampled anchor (reference point), P is a positive sample
+that has the same label as A and N is the negative sample of a different random
+class than the anchor. The goal is to ensure that the distance between the
+anchor and the positive is smaller than the distance between the anchor and the
+negative by at least a certain margin $m$. We define the function as follows:
 
-\subsection{Competitions}
-There have been a series of competitions over the years that have played a
-crucial role in advancing state-of-the-art deepfake detection methods. The most
-well-known challenges are ASVspoof and Audio Deepfake Detection (ADD), which
-have systematically tried to leverage the detection of spoofed and deepfake
-audio. These competitions try not only to benchmark the advancement in this
-field of study but also to emphasise the importance of robust detection
-methods.
+\todo[inline]{Abhay: Aliter}
+We define the loss on features $f_\theta^{A}$, $f_\theta^{P}$ and $f_\theta^{N}$ generated by the model on a triplet as follows:
 
-\subsubsection{ASVspoof} The ASVspoof 2021, 2022 and 2023~\cite{ASVspoof_21, jung2022sasv, ge2023can}
-challenge focuses on improving the security of Automatic Speaker Verification
-(ASV) systems against spoofing attacks, which aim to imitate a legitimate
-user's voice. The challenge comments on the different ways to generate attacks
-and the difficulties of finding a robust detection method that can tackle all
-of them at once. To do so, the competition is divided into three different
-sub-tasks. The first and the most important for our paper is the deepfake task
-(DF), which focuses on detecting manipulated or synthetic speech, often used to
-impersonate a target speaker and potentially harm their reputation.
-%Such an example is the video produced by the American actor and director Jordan Peele, which shows former US president Barack Obama, which is insulting the president of that time, Trump. 
-This task consists of genuine and manipulated speech utterances processed using
-different lossy codecs commonly used in media storage. These codecs introduce
-distortions during the encoding and decoding process, which vary depending on
-the codec and its configuration.
+\todo[inline]{changelog[Abhay]: added label, modified notation to reduce width}
+\begin{align}
+  \mathcal{L} = [d(f_\theta^{A},f_\theta^{P}) - d(f_\theta^{A},f_\theta^{N}) + \lambda]_{+}
+  \label{eq:triplet_loss}
+\end{align}
 
-This part aims to assess the robustness of spoofing detection solutions when
-used to detect compressed manipulated speech data of varying characteristics
-posted online. The second sub-challenge is Logical Access (LA), which
-differentiates between actual human speech and speech generated using
-artificial intelligence, like text-to-speech (TTS) and voice conversion (VC)
-technologies.
+% $$\mathscr{L} = \sum_{i=1}^N max[d(f(A^i), f(P^i))- d(f(A^i), f(N^i))+ \lambda, 0]$$
 
-The final task is Physical Access (PA), focusing on detecting replay attacks,
-where a pre-recorded voice sample is used to spoof the system. It simulates
-real-world scenarios with compressed and potentially distorted audio. Overall,
-high error rates were observed, though several systems outperformed baseline
-models, indicating progress yet significant room for improvement.
+Where $f_\theta(x)$ is the embedding of the input x generated by the model,
+$\lambda$ is the margin that enforces a minimum separation between similar and
+dissimilar pairs, $d(x,y)$ is the distance function between the two embeddings,
+and $[\cdot]_{+} = \max(\cdot, 0)$. We experimented with two different distance
+functions, the squared Euclidean distance (L2-norm) and the cosine similarity
+between the features.
 
-\subsubsection{Audio Deepfake Detection (ADD)}
-Following the problems of the previous ADD 2022 challenge~\cite{yi2022add},
-particularly the binary classification approach and limited evaluation rounds
-for the Fake Game Track, ADD 2023~\cite{yi2023add} introduces a new set of
-sub-challenges and tasks to improve audio deepfake detection capabilities. The
-2023 challenge consists of three main tracks: Audio Fake Game (FG),
-Manipulation Region Location (RL) and Deepfake Algorithm Recognition (AR).
+\subsection{Audio Model}
 
-The FG task aims to improve track features in two evaluation rounds for
-generating and detecting fake audio. The generation task (FG-G) aims to create
-fake audio that bypasses the detection model in the detection task (FG-D),
-which attempts to identify these generated utterances. The RL sub-challenge
-focuses on pinpointing the specific regions within partially fake audio that
-have been manipulated with either real or generated audio. Moreover, the AR
-task aims to identify the specific algorithms used to generate the deepfake
-audio.
+% Architecture
 
-The evaluation dataset even includes samples generated by unknown algorithms,
-adding further complexity. While the results show progress, challenges remain,
-particularly in accurately locating manipulated regions and recognising unknown
-deepfake algorithms. This indicates the need for further research and
-development in these areas~\cite{zeng2023deepfake}.
+% 
 
-\subsection{Methodological Evolution}
-Studies have explored various dimensions of audio deepfake detection, ranging
-from signal processing to multimodal and semantic approaches. Key findings and
-methodologies from recent literature include:
+\subsection{Fusion Strategies}
+After independently training the audio and text models, we freeze their
+parameters and combine their features using one of two fusion strategies: mid
+fusion or late fusion.
 
-\subsubsection{Traditional Machine Learning Classification}
-Traditional methods including a wide range of machine learning classifiers such
-as logistic regression~\cite{10.1007/978-3-030-61702-8_1}, probabilistic linear
-discriminant analysis, random forest~\cite{ji2017ensemble}, support vector
-machine (SVM) based models, Gaussian Mixture Models (GMM)\cite{ASVspoof_21} and
-k-nearest neighbour (KNN) which have been widely utilised for their robustness
-and efficacy in discriminating between genuine and spoofed speech. The GMM and
-SVM-based classifiers have been used in various challenges over the years and
-have produced promising results. However, the problem with the traditional
-classifiers is that they cannot be used as one robust detection method against
-all audio deepfakes, given that the nature of the attack is usually unknown.
+\subsubsection{Mid Fusion}
+In this strategy, the extracted features from the audio and text models are
+concatenated to create a joint representation. This combined representation is
+then passed through a Multi-Layer Perceptron (MLP) network. The MLP learns to
+integrate the audio and text features effectively to make a final prediction.
+The training of the MLP is guided by the Binary Cross-Entropy (BCE) loss
+function, which is appropriate for binary classification tasks such as
+distinguishing between real and spoof audio samples. With this approach we hope
+that one of the branches will compensate for the mistakes of the other and
+hopefully increase the performance of the detector.
 
-\subsubsection{Deep Learning Classification}
-This subsection discusses audio feature extraction methods to improve detection
-performance against sophisticated deepfake algorithms. Time-Delay Neural
-Networks (TDNN)~\cite{multimodal_df_detection} and Convolutional Neural
-Networks (CNN)~\cite{xai_detection} trained on mel-spectrograms have been
-pivotal in learning discriminative features from audio data. These methods
-introduce an approach to improve detection in multimodal (audio-visual)
-deepfakes by training a detector on a concatenation of features learnt from
-video and audio channels. The deep learning models outperform traditional
-classifiers by effectively modelling the important patterns in audio data, with
-specific architectures like Light CNNs and ResNets being highlighted for their
-success in competitions and their innovative adaptations to address the
-challenges of deepfake detection.
+\subsubsection{Late Fusion}
+In this approach, the audio and text models are treated as independent
+branches, and each produces its own prediction score. The final prediction is
+obtained by taking the weighted mean of the scores from the two branches. This
+simple averaging method ensures that the final decision benefits from the
+independent contributions of both modalities while maintaining the
+interpretability of individual scores.
 
-There have also been studies on the use of Explainable AI (XAI) techniques to
-interpret deepfake detection models, which offer insights into decision-making
-processes, potentially guiding the development of more robust detection
-mechanisms.~\cite{xai_detection} uses simple CNN backbones trained on
-mel-spectrograms and LSTM in the detection to maintain as much simplicity as
-possible. Deep Taylor Decomposition (DTD) and Integrated Gradients and
-Layer-wise Relevance Propagation (LRP) were used to explain the neural networks
-by highlighting the most prominent features of the audio signals. These methods
-found that dependency varies on the frequency bands and characteristics of the
-audio that cannot be recognised by a human.
+\todo[inline]{!!! Abhay: Need to discuss this}
 
-\subsubsection{Semantic Approach}
-Semantic approaches targeting the emotional properties of speech have shown
-promise, exploiting deepfake algorithms' inability to model complex emotional
-expressions accurately.~\cite{conti2022deepfake} introduces one such method for
-identifying deepfake audio by focusing on the emotional nuances that current
-deepfake generators struggle to replicate accurately. The methodology leverages
-a Semantic Approach to detect emotion features through a Speech Emotion
-Recognition (SER) system, which is more adept at recognising complex emotional
-cues in speech that are not typically well-simulated by deepfake technologies.
+We model late fusion for two possible scenarios: one where there exists a
+purported speaker (consistent with deepfakes claiming to be a specific
+individual/celebrity) and one where the speaker is unknown. In the former case,
+the text model outputs the probability of the anticipated speaker having made
+the given statement, while the audio model predicts the likelihood of the audio
+being real or fake. In the latter case, the text model predicts the probability
+of the speaker being any of the known authors, while the audio model predicts
+the likelihood of the audio being real or fake. The final prediction is
+obtained by taking the weighted mean of the scores from the two branches. This
+simple averaging method ensures that the final decision benefits from the
+independent contributions of both modalities while maintaining the
+interpretability of individual scores.
 
-The process begins by analysing the audio signal to estimate the expressed
-emotion and extract relevant features, which are then given to a Synthetic
-Speech Detector (SSD) system to classify the audio as fake or real. The SER
-employs a neural network, including 3D convolutional layers and an attention
-mechanism, to categorise emotions and enhance feature extraction, while the SSD
-utilises a Random Forest classifier for final determination of the final set of
-possible emotions such as happy, sad and angry. The approach demonstrated high
-accuracy, around 0.8, for all deepfake generation algorithms over various
-datasets (ASVspoof2019 and Cloud2019). The paper reports significant success in
-detecting deepfakes, particularly when the model is finetuned with a diverse
-set of emotions and trained on adversarial datasets to improve robustness
-against various deepfake generation algorithms.
+Formally, 
 
-More recently, research has started focusing on multimodal and
-modality-agnostic methods for deepfake detection~\cite{av_multimodal,
-  multimodal_df_detection, modality_agnostic}, but these works are primarily
-aimed at audio-visual deepfake detection. These methods, along with previous
-studies in improving speech recognition through multi-task training
-\cite{multitask_sr}, consistently show, however, that combining cues from
-different modalities can achieve more comprehensive and reliable deepfake
-detection/recognition by learning robust cross-modal features. We demonstrate
-the same for audio deepfake detection by combining acoustic cues from the raw
-audio and linguistic cues from their transcriptions.
-
-\section{Method}
-\label{sec:method}
+Both fusion strategies provide distinct advantages: mid fusion enables the
+model to learn deeper interactions between the modalities, while late fusion
+offers simplicity and preserves the autonomy of each model.
 
 \begin{figure*}[t]
-	\centering
-	\includegraphics[width=1\textwidth]{figures/mid_fusion.pdf}
-	\caption{Pipeline for Mid-Fusion}\label{fig:mid_fusion}
+  \centering
+  \includegraphics[width=1\textwidth]{figures/mid_fusion.pdf}
+  \caption{Pipeline for Mid-Fusion. Features from the text and audio modules are concatenated and passed through an MLP to produce the final classification.}\label{fig:mid_fusion}
 \end{figure*}
 
-
 \begin{figure*}[t]
-	\centering
-	\includegraphics[width=1\textwidth]{figures/late_fusion.pdf}
-	\caption{Pipeline for Late-Fusion}\label{fig:late_fusion}
+  \centering
+  \includegraphics[width=1\textwidth]{figures/late_fusion.pdf}
+  \caption{Pipeline for Late-Fusion. Predictions from the audio and text models are combined using a weighted mean to produce the final classification.}\label{fig:late_fusion} \todo[inline]{Abhay: I need to fix these arrowheads. Are centered captions better?}
 \end{figure*}
 
 \section{Experiments and Results}
+
+\todo[inline]{Abhay: Need to decide whether we group by task\{text, audio, fusion\} or by \{datasets,metrics,baselines\}. Further, should we rename the text model the context module?}
+
+\subsection{Text / Context Module}
+\subsubsection{Dataset}
+For the authorship attribution task we incorporate an additional dataset
+Wikiquotes, which provides a rich corpus of speeches from various authors.
+Since only real samples are needed for training the text model, relying only on
+the transcriptions provided by Whisper proved insufficient for learning the
+nuanced characteristics of individual authors. \\
+\subsubsection{Metrics}
+ABX accuracy is a commonly used metric in speech and speaker representation
+learning, often used in tasks related to contrastive learning. Similar to the
+triplet loss we have three samples A,B and X. Where A and B are two embeddings
+from different categories and X is a third representation, and the task is to
+determine whether X is more similar to A or B based on the learned embeddings.
+The accuracy measures the percentage of times the model correctly assigns X to
+its corresponding label (closer to A or B). The decision rule is: $d(X,A) <
+  d(X,B)$, where $d(x,y)$ is the distance function. \\
+\subsubsection{Benchmark} We consider several state-of-the-art encoder-only architectures to benchmark
+the effectiveness of the text model, including BERT, RoBERTa, DeBERTa, Modern
+BERT, and the encoder of T5. Encoder-only models are particularly well-suited
+for the task of authorship attribution because they focus exclusively on
+encoding the input sequence into a fixed-size representation without
+introducing additional complexities of the sequence-to-sequence
+transformations. This focus allows them to better capture nuanced relationships
+in the text, such as stylistic patterns and semantic coherence. We wanted to
+identify the best architecture by comparing these models for capturing each
+author's writing style and improving our detection system's overall
+performance.
+
 \label{sec:experiments_results}
 
 \section{Conclusions / Discussion}
 \label{sec:conclusions}
 
-\section{Acknowledgements}
-Acknowledgement should only be included in the camera-ready version, not in the
-version submitted for review. The 5th page is reserved exclusively for
-acknowledgements and references. No other content must appear on the 5th page.
-Appendices, if any, must be within the first 4 pages. The acknowledgments and
-references may start on an earlier page, if there is space.
-
+\newpage
 \ifinterspeechfinal
-  The Interspeech 2025 organisers
-\else
-  The authors
+  \section{Acknowledgements}
+  Acknowledgement should only be included in the camera-ready version, not in the
+  version submitted for review. The 5th page is reserved exclusively for
+  acknowledgements and references. No other content must appear on the 5th page.
+  Appendices, if any, must be within the first 4 pages. The acknowledgments and
+  references may start on an earlier page, if there is space.
+
+  \ifinterspeechfinal
+    The Interspeech 2025 organisers
+  \else
+    The authors
+  \fi
+  would like to thank ISCA and the organising committees of past Interspeech conferences for their help and for kindly providing the previous version of this template.
 \fi
-would like to thank ISCA and the organising committees of past Interspeech conferences for their help and for kindly providing the previous version of this template.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
