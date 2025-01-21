@@ -45,7 +45,7 @@ class TesterAuthorshipAttribution:
 
         self.distance_function = config.get_distance_function(self.args.distance_function)
         
-    def test(self, test_dataloader, spoofed_dataloader):
+    def test(self, test_dataloader, spoofed_dataloader, dataset_name='test'):
         """
         Tests the model using the provided dataloaders and generates various evaluation metrics.
 
@@ -74,14 +74,14 @@ class TesterAuthorshipAttribution:
         acc = self.test_abx_accuracy(test_dataloader, self.model)
         results['abx_accuracy'] = acc
         print(f"Test ABX Accuracy : {acc:.4f}")
-       
-        self.plot_cosine_distence_distribution('test')
+        
+        self.plot_cosine_distence_distribution(f'test_{dataset_name}')
 
         # Test results spoofed_dataloader
         acc_sp = self.test_abx_accuracy(spoofed_dataloader, self.model)
         print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
         results_spoofed['abx_accuracy'] = acc_sp
-        self.plot_cosine_distence_distribution('spoofed')
+        self.plot_cosine_distence_distribution(f'spoofed_{dataset_name}')
 
         all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
 
@@ -98,7 +98,7 @@ class TesterAuthorshipAttribution:
                 classif_results, predictions = self.test_classification(test_dataloader)
                 classif_results_spoofed, predictions_spoofed = self.test_classification(spoofed_dataloader)
 
-            name = f't-SNE_{self.args.classification_head}'
+            name = f't-SNE_{self.args.classification_head}_{dataset_name}'
             self.plot_tsne_for_authors(all_embeddings, predictions, name)
 
             results.update(classif_results)
@@ -107,7 +107,7 @@ class TesterAuthorshipAttribution:
             results_spoofed.update(classif_results_spoofed)
             config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args, self.repository_id)
 
-        self.plot_tsne_for_authors(all_embeddings, all_labels)
+        self.plot_tsne_for_authors(all_embeddings, all_labels, f't-SNE_{dataset_name}')
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
 
 
@@ -348,9 +348,10 @@ class TesterAuthorshipAttribution:
         """
         
         num_classes = len(set(all_labels))
-        print(f"Number of classes: {num_classes}")
-        tsne = TSNE(n_components=num_classes, perplexity=80, max_iter=3000, method='exact')
-        tsne_results = tsne.fit_transform(all_embeddings)
+        print(f"Number of classes: {num_classes}, Fitting t-SNE...")
+        tsne_results = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=3).fit_transform(all_embeddings)
+        # tsne = TSNE(n_components=num_classes, perplexity=80, max_iter=3000, method='exact')
+        # tsne_results = tsne.fit_transform(all_embeddings)
 
         all_labels = np.array(all_labels)
 

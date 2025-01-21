@@ -16,19 +16,24 @@ def main(args):
     cfg.init_env(args)
     data, spoofed_data, rest_of_data, author_id_map = cfg.load_data(args)
     current_time = time.strftime("%Y%m%d-%H%M%S")
-    repository_id = f"/data/iivanova-23/output/margin_0.4/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
+    repository_id = f"/data/iivanova-23/output/train_in_the_wild/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
     os.makedirs(repository_id, exist_ok=True)
     print(f"Repository ID: {repository_id}")
-    index_set = "/home/infres/iivanova-23/DADA/Data/index_5_authors.json"
+    # index_set = "/home/infres/iivanova-23/DADA/Data/index_10_authors.json"
     # _, val_rest = train_test_split(rest_of_data, test_size=0.3, stratify=rest_of_data['label'], random_state=args.seed)
     # train_data, val_data = train_test_split(data, test_size=0.3, stratify=data['label'], random_state=args.seed)
     # train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True, predefined_set=None)
     # # val_data = pd.concat([val_data, val_rest])
     # val_dataset = AuthorTripletLossDataset(val_data, args.model_name, train=True, predefined_set=None)
-    train_dataset = AuthorTripletLossDataset(data, args.model_name, train=True, predefined_set=index_set)
-    val_dataset = AuthorTripletLossDataset(data, args.model_name, train=False, predefined_set=index_set)
+    # train_dataset = AuthorTripletLossDataset(data, args.model_name, train=True, predefined_set=index_set)
+    # val_dataset = AuthorTripletLossDataset(data, args.model_name, train=False, predefined_set=index_set)
+    in_the_wild = pd.read_csv("/data/iivanova-23/DataDADA/train_merged.csv")
+    in_the_wild = in_the_wild[in_the_wild['label']<args.authors_to_train]
+    index_set = '/data/iivanova-23/DataDADA/index_10_authors_merged.json'
+    train_dataset = AuthorTripletLossDataset(in_the_wild, args.model_name, train=True, predefined_set=index_set)
+    val_dataset = AuthorTripletLossDataset(in_the_wild, args.model_name, train=False, predefined_set=index_set)
     
-    spoofed_test_dataset = AuthorTripletLossDataset(spoofed_data, args.model_name, train=True)
+    spoofed_test_dataset = AuthorTripletLossDataset(in_the_wild, args.model_name, mode = 'spoof')
     
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
@@ -37,7 +42,8 @@ def main(args):
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=num_workers)
     spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
-    
+    # real_in_the_wild_loader = DataLoader(real_in_the_wild, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
+    # spoof_in_the_wild_loader = DataLoader(spoof_in_the_wild, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
     # lora_config = LoraConfig(
     #     r=4,  
     #     lora_alpha=16,  
@@ -56,6 +62,7 @@ def main(args):
     # path = '/home/infres/iivanova-23/DADA/output/n_authors_3/microsoft/deberta-v3-large_16_14_20241204-171443/final.pth'
     # path='/home/infres/iivanova-23/DADA/output/n_authors_6/answerdotai/ModernBERT-large_16_14_20250109-092429/final.pth'
     # path='/data/iivanova-23/output/n_authors_6/answerdotai/ModernBERT-large_16_14_20250109-095045/final.pth'
+    # path = '/data/iivanova-23/output/margin_0.4/n_authors_10/google-t5/t5-large_16_20_20250120-113103/final.pth'
     trainer = TrainerAuthorshipAttribution(model=model,
                                            train_dataloader=train_dataloader,
                                            val_dataloader=val_dataloader,
@@ -77,7 +84,8 @@ def main(args):
                     args=args)
     
     tester.test(val_dataloader, spoofed_data_loader)
-
+    # print("Test In the Wild")
+    # tester.test(real_in_the_wild_loader, spoof_in_the_wild_loader, 'In the Wild')
 
 if __name__ == "__main__":
     args = cfg.get_args()
