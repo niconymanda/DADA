@@ -72,7 +72,7 @@ class AuthorTripletLossDataset(Dataset):
                                                           for all authors except the given anchor label.
     """
     
-    def __init__(self, data, tokenizer_name, max_length=64, train=True, predefined_set=None):
+    def __init__(self, data, tokenizer_name, max_length=64, train=True, predefined_set=None, mode=None):
         self.data = data
         # self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
@@ -81,6 +81,7 @@ class AuthorTripletLossDataset(Dataset):
         self.texts_by_author = data.groupby('label')['text'].apply(list).to_dict()
         self.labels = list(self.texts_by_author.keys())
         self.predefined_set = predefined_set
+        self.mode = mode
         
         if self.predefined_set is not None:
             with open(self.predefined_set, 'r') as f:
@@ -92,7 +93,7 @@ class AuthorTripletLossDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        mode = 'train' if self.train else 'test'
+        mode = self.mode if self.mode is not None else 'train' if self.train else 'test'
         if self.predefined_triplets is not None:
             if mode not in self.predefined_triplets:
                 raise KeyError(f"Mode '{mode}' not found in predefined triplets.")  

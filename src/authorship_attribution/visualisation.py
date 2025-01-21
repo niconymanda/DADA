@@ -28,7 +28,7 @@ def get_tsne_fig(feats, labels, title):
 
     plt.figure(figsize=(5, 5))
     scatter = plt.scatter(
-        x_embedded[:, 0], x_embedded[:, 1], c=label_ids, cmap="viridis"
+        x_embedded[:, 0], x_embedded[:, 1], c=label_ids, cmap="tab20c"
     )
     plt.title(title)
     handles, _ = scatter.legend_elements()
