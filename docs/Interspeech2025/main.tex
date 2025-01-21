@@ -12,6 +12,7 @@
     urlcolor=red,
     pdftitle={Defence Against the Deepfake Arts},
     pdfpagemode=FullScreen,
+    references=true,  
 }
 
 % 2023-10-21 modified by Simon King (Simon.King@ed.ac.uk)  
@@ -75,7 +76,7 @@
 
   % 1000 characters. ASCII characters only. No citations.
   \todo[inline]{Abhay : 1000 character limit; 848 currently.}
-  The increasing use of generative AI models to create realistic deepfakes poses significant challenges to information security, particularly in the realm of audio manipulation. This paper addresses the pressing need for improved detection of audio deepfakes by proposing a novel approach that leverages textual context extracted from transcriptions as well as audio features extracted from deepfake detection models. We propose two fusion strategies, late fusion and mid fusion, to integrate these features and enhance detection accuracy. We conduct experiments using benchmark datasets and state-of-the-art deepfake detection models to evaluate the performance of our proposed approach. Our results demonstrate promising improvements in detecting audio deepfakes, highlighting the potential of context awareness in enhancing detection capabilities.
+  The increasing use of generative AI models to create realistic deepfakes poses significant challenges to information security, particularly in the realm of audio manipulation. This paper addresses the pressing need for improved detection of audio deepfakes by proposing a novel approach, DADA, that leverages textual context extracted from transcriptions as well as audio features extracted from deepfake detection models. We propose two fusion strategies, late fusion and mid fusion, to integrate these features and enhance detection accuracy. We conduct experiments using benchmark datasets and state-of-the-art deepfake detection models to evaluate the performance of our proposed approach. Our results demonstrate promising improvements in detecting audio deepfakes, highlighting the potential of context awareness in enhancing detection capabilities.
 \end{abstract}
 
 \section{Introduction}
@@ -111,9 +112,9 @@ throughout, but the content is altered~\cite{yi2023halftruth}.
 
 \begin{figure}[t]
   \centering
-    \includegraphics[width=0.5\textwidth]{figures/overview.pdf}
-    \caption{Overview of the DADA pipeline. Audio files are first transcribed to obtain textual content. Features are then extracted from both the audio and text using separate models. Finally, these features are combined (using either mid fusion or late fusion strategies) to generate the final prediction.}\label{fig:overview}
-  \end{figure}
+  \includegraphics[width=0.5\textwidth]{figures/overview.pdf}
+  \caption{Overview of the DADA pipeline. Audio files are first transcribed to obtain textual content. Features are then extracted from both the audio and text using separate models. Finally, these features are combined (using either mid fusion or late fusion strategies) to generate the final prediction.}\label{fig:overview}
+\end{figure}
 
 All these different techniques can have far-reaching consequences, affecting
 domains ranging from political discourse to personal security. These deepfakes
@@ -144,14 +145,12 @@ authorship in literary texts, achieving notable
 accuracy~\cite{hicke2023t5,silva2024forged}. For instance,
 BertAA~\cite{fabien2020bertaa} is a fine-tuned pretrained BERT model for
 authorship attribution, demonstrating competitive performance on multiple
-datasets. We can also find several works that use techniques from contrastive
+datasets. We can also find several papers that use techniques from contrastive
 learning in creating discriminative embedding spaces. Works like
-DeepStyle,~\cite{hu2020deepstyle} focusing on short-text authorship
+DeepStyle ~\cite{hu2020deepstyle}, focusing on short-text authorship
 attribution, leveraging Triplet Loss, which outperformed existing baselines
 using Twitter and Weibo datasets and using Siamese networks for large-scale
-author identification~\cite{saedi2021siamese}.~\cite{bauersfeld2023cracking}
-proposed a transformer-based model using arXiv manuscripts, achieving high
-attribution accuracy in a large-scale dataset with up to 2,000 authors.
+author identification~\cite{saedi2021siamese}. A transformer-based model ~\cite{bauersfeld2023cracking} are used also for authorship attribution on arXiv manuscripts, achieving high attribution accuracy in a large-scale dataset with up to 2,000 authors.
 
 \section{Related Work}\label{sec:related_work}
 \todo[inline]{Keeping all related work in Introduction~\ref{sec:introduction} for now, in line with papers from Interspeech24.}
@@ -164,7 +163,8 @@ audio files, by incorporating contextual information to improve detection
 capabilities. Specifically, our approach seeks to determine not only whether an
 audio sample is a deepfake but also the likelihood of the supposed speaker
 having made the given statement, thus embedding contextual awareness into the
-detection pipeline.
+detection pipeline. An overview of the pipeline is shown in
+Figure~\ref{fig:overview}.
 
 Our method operates in three stages: transcription, feature extraction and
 fusion. First, the audio files are transcribed using
@@ -199,7 +199,7 @@ where A is a randomly sampled anchor (reference point), P is a positive sample
 that has the same label as A and N is the negative sample of a different random
 class than the anchor. The goal is to ensure that the distance between the
 anchor and the positive is smaller than the distance between the anchor and the
-negative by at least a certain margin $m$. We define the function as follows:
+negative by at least a certain margin $\lambda$. We define the function as follows:
 
 \todo[inline]{Abhay: Aliter}
 We define the loss on features $f_\theta^{A}$, $f_\theta^{P}$ and $f_\theta^{N}$ generated by the model on a triplet as follows:
@@ -222,8 +222,50 @@ between the features.
 \subsection{Audio Model}
 
 % Architecture
-
+The audio model uses a Wav2Vec2~\cite{wav2vec2} backbone for feature
+extraction, which allows learning representations directly from raw audio
+waveforms. To capture a comprehensive set of features, multiple layers from the
+model are pooled into a single feature vector. This pooling is achieved using a
+compression module that employs attentive mean pooling, which allows the model
+to focus on the most informative parts of the audio signal. Additionally,
+following~\cite{slim}, a non-linear bottleneck is applied to further refine the
+feature vector, ensuring that it captures the essential characteristics needed
+for accurate deepfake detection. \todo[inline]{Abhay: not sure if using
+  citations independently is consistent/recommended.}
 % 
+
+% Training
+
+Similar to the text module, audio features (denoted as $f_{\phi}$) are trained using Contrastive
+Learning, with a triplet loss as in Equation~\ref{eq:triplet_loss} using the
+cosine distance function. To optimize the margin used in the triplet loss
+function, we employ an iterative process that involves three stages: initial
+training with a fixed margin, adaptive margin adjustment, and final training
+with a fixed margin.
+
+% \subsubsection{Initial Training with Fixed Margin}
+In the first stage, we train the model for a few epochs using an a priori fixed
+margin, $\lambda_0$. This initial training helps achieve some separation
+between classes and provides a good starting point for further optimization.
+
+% \subsubsection{Adaptive Margin Adjustment}
+Next, we train the model for additional epochs using an adaptive triplet loss
+introduced in~\cite{adatriplet}. \todo[inline]{Abhay: Again, using citation
+  independently.} This
+constitutes adding an additional soft constraint on the virtual angle between
+the anchor and the negative sample using another margin $\lambda'$ as follows.
+
+\begin{align}
+  \begin{split}
+    \mathcal{L}_{ada} & = [d(f_\phi^{A},f_\phi^{P}) - d(f_\phi^{A},f_\phi^{N})+ \lambda]_{+} \\
+                      & + [d(f_\phi^{A},f_\phi^{N}) + \lambda']_{+}
+  \end{split}
+\end{align}
+
+% \subsubsection{Final Training with Fixed Margin}
+In the final stage, we fix the margin as the final margin obtained from the
+adaptive stage, $\lambda_{f}$, and train the model for a couple more epochs to
+achieve optimal performance.
 
 \subsection{Fusion Strategies}
 After independently training the audio and text models, we freeze their
@@ -264,7 +306,7 @@ simple averaging method ensures that the final decision benefits from the
 independent contributions of both modalities while maintaining the
 interpretability of individual scores.
 
-Formally, 
+Formally, \todo[inline]{Abhay: I'll complete this today [21.01].}
 
 Both fusion strategies provide distinct advantages: mid fusion enables the
 model to learn deeper interactions between the modalities, while late fusion
@@ -272,19 +314,19 @@ offers simplicity and preserves the autonomy of each model.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=1\textwidth]{figures/mid_fusion.pdf}
+  \includegraphics[width=0.8\textwidth]{figures/mid_fusion.pdf}
   \caption{Pipeline for Mid-Fusion. Features from the text and audio modules are concatenated and passed through an MLP to produce the final classification.}\label{fig:mid_fusion}
 \end{figure*}
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=1\textwidth]{figures/late_fusion.pdf}
+  \includegraphics[width=0.8\textwidth]{figures/late_fusion.pdf}
   \caption{Pipeline for Late-Fusion. Predictions from the audio and text models are combined using a weighted mean to produce the final classification.}\label{fig:late_fusion} \todo[inline]{Abhay: I need to fix these arrowheads. Are centered captions better?}
 \end{figure*}
 
-\section{Experiments and Results}
+\section{Experiments and Results}\label{sec:experiments_results}
 
-\todo[inline]{Abhay: Need to decide whether we group by task\{text, audio, fusion\} or by \{datasets,metrics,baselines\}. Further, should we rename the text model the context module?}
+\todo[inline]{Abhay: Need to decide whether we group by task\{text, audio, fusion\} or by \{datasets,metrics,baselines\}. Further, should we call the text model the `context module'?}
 
 \subsection{Text / Context Module}
 \subsubsection{Dataset}
@@ -314,10 +356,10 @@ identify the best architecture by comparing these models for capturing each
 author's writing style and improving our detection system's overall
 performance.
 
-\label{sec:experiments_results}
+\todo[inline]{TODO @abhaydmathur : make gpu details fit.}
+All experiments were conducted on a single NVIDIA A100 GPU with 40GB vRAM.
 
-\section{Conclusions / Discussion}
-\label{sec:conclusions}
+\section{Conclusions / Discussion}\label{sec:conclusions}
 
 \newpage
 \ifinterspeechfinal
