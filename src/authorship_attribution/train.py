@@ -95,18 +95,21 @@ class TrainerAuthorshipAttribution:
         if self.model_weights:
             print("Loading custom model weights!...")
             self.model, self.optimizer, epoch_n = cfg.load_checkpoint(self.model, self.optimizer, self.model_weights)
+            self.model.to(self.device)
+            self.optimizer.to(self.device)
         else:
-            for epoch_n in range(self.args.epochs):
-                # train_loss = self.train_model(epoch_n)
-                # val_loss = self.validate(epoch_n)
-                train_loss = self.train_model(epoch_n)
-                val_loss, accuracy = self.validate(epoch_n)
-                
-                if self.early_stopping:
-                    if self.early_stopping_model.step(val_loss):
-                        print("Early stopping triggered")
-                        break 
-            cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
+            print("Training from scratch!...")
+        for epoch_n in range(self.args.epochs):
+            # train_loss = self.train_model(epoch_n)
+            # val_loss = self.validate(epoch_n)
+            train_loss = self.train_model(epoch_n)
+            val_loss, accuracy = self.validate(epoch_n)
+            
+            if self.early_stopping:
+                if self.early_stopping_model.step(val_loss):
+                    print("Early stopping triggered")
+                    break 
+        cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
         
         if classification_head:
             print("Training classification head!")
