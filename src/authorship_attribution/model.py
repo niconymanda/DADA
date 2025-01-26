@@ -146,6 +146,7 @@ class AuthorshipLLM(nn.Module):
     def _get_model(self, model_name):
         
         if 't5' in model_name:
+            T5EncoderModel._keys_to_ignore_on_load_unexpected = ["decoder.*"]
             return T5EncoderModel.from_pretrained(model_name, output_hidden_states=True)
         else:
             return AutoModel.from_pretrained(model_name, output_hidden_states=True)
