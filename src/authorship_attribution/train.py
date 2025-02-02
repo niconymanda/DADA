@@ -50,9 +50,9 @@ class TrainerAuthorshipAttribution:
                  report_to: Optional[Literal['tensorboard', 'wandb']] = None, 
                  early_stopping=True,
                  save_model=False, 
-                 tune=False,
-                 model_weights=None, 
-                 log_plots=True):
+                 tune=False, 
+                 log_plots=True, 
+                 additional_training=False):
         self.model = model
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
@@ -64,9 +64,11 @@ class TrainerAuthorshipAttribution:
         self.num_labels = len(self.author_id_map.keys())
         self.early_stopping = early_stopping
         self.save_model = save_model
-        self.model_weights = model_weights
+        self.model_weights = self.args.text_model_path
         self.log_plots = log_plots
+        self.additional_training = additional_training
         self.device = cfg.get_device()
+        
         if not tune:
             self.criterion = self.get_criterion() if criterion is None else criterion   
             self.optimizer = self.get_optimizer() if optimizer is None else optimizer
@@ -74,7 +76,6 @@ class TrainerAuthorshipAttribution:
             self.criterion.to(self.device)
 
         self.model.to(self.device)
-        # print(self.model)
         self.distance_function = cfg.get_distance_function(args.distance_function)
 
         self.logger = Logger(args, report_to, project_name, model, self.output_dir, train_dataloader, val_dataloader)
@@ -92,34 +93,46 @@ class TrainerAuthorshipAttribution:
             model: The trained model.
             classification_model (optional): The trained classification model if `classification_head` is True.
         """
-        if self.model_weights:
+        if self.model_weights is not None:
             print("Loading custom model weights!...")
-            self.model, self.optimizer, epoch_n = cfg.load_checkpoint(self.model, self.optimizer, self.model_weights)
+            self.model = cfg.load_checkpoint(self.model, self.model_weights)
             self.model.to(self.device)
-            self.optimizer.to(self.device)
+            if self.additional_training:
+                print("Training on paper set with weights!...")
+                for epoch_n in range(self.args.epochs):
+                    train_loss = self.train_model(epoch_n)
+                    val_loss, accuracy = self.validate(epoch_n)
+                    if self.early_stopping:
+                        if self.early_stopping_model.step(val_loss):
+                            print("Early stopping triggered")
+                            break 
+                cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
+        
         else:
             print("Training from scratch!...")
-        for epoch_n in range(self.args.epochs):
-            # train_loss = self.train_model(epoch_n)
-            # val_loss = self.validate(epoch_n)
-            train_loss = self.train_model(epoch_n)
-            val_loss, accuracy = self.validate(epoch_n)
-            
-            if self.early_stopping:
-                if self.early_stopping_model.step(val_loss):
-                    print("Early stopping triggered")
-                    break 
-        cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
+            for epoch_n in range(self.args.epochs):
+                train_loss = self.train_model(epoch_n)
+                val_loss, accuracy = self.validate(epoch_n)
+
+                if self.early_stopping:
+                    if self.early_stopping_model.step(val_loss):
+                        print("Early stopping triggered")
+                        break 
+            cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
         
         if classification_head:
             print("Training classification head!")
+            self.model = cfg.load_checkpoint(self.model, f'{self.repository_id}/final.pth')
+            self.model.to(self.device)
             if self.args.classification_head == 'gmm':
                 embeddings, _ = self.extract_embeddings()
+                print("Fitting GMM")
                 gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed, max_iter=3000, n_init=10)
                 gmm.fit(embeddings)
                 return self.model, gmm
             elif self.args.classification_head == 'knn':
                 embeddings, _= self.extract_embeddings()
+                print("Fitting KNN")
                 knn = KNeighborsClassifier(n_neighbors=5)
                 knn.fit(embeddings, self.train_dataset.labels)
                 return self.model, knn
@@ -179,39 +192,23 @@ class TrainerAuthorshipAttribution:
         
         classification_model.train()
         total_loss = 0
-        current_loss = 0.0
         correct = 0
-        total = 0
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
-            # text = batch['anchor']
             labels = batch['label'].to(self.device)
-
             out_model = classification_model(batch)
-                        
             optimizer_classification.zero_grad()
             loss_value = criterion_classification(out_model, labels)
             loss_value.backward()
             optimizer_classification.step()
             total_loss += loss_value.item()
-            current_loss += loss_value.item()
             preds = out_model.argmax(dim=1)
-            total += labels.size(0)
             correct += (preds == labels).sum().item()
 
-            if i % self.args.logging_step == self.args.logging_step - 1:
-                metrics = {
-                    "Loss": current_loss / self.args.logging_step,
-                    "epoch": epoch_n,
-                    "step": i
-                }
-                self.logger._log_metrics(metrics, phase='Train_classificaion')
-                current_loss = 0.0  
-
-        train_loss = total_loss / len(self.val_dataloader)
+        train_loss = total_loss / len(self.train_dataloader)
         metrics = {
             "Loss": train_loss,
             "epoch": epoch_n, 
-            "Accuracy": correct / total
+            "Accuracy": correct / len(self.train_dataloader.dataset)
         }
         self.logger._log_metrics(metrics, phase='Train_classificaion_epochs')
         return total_loss / len(self.train_dataloader)
@@ -234,37 +231,21 @@ class TrainerAuthorshipAttribution:
         
         classificaion_model.eval()
         total_loss = 0
-        current_loss = 0.0
         correct = 0
-        total = 0
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
-                # text = batch['anchor']
                 labels = batch['label'].to(self.device)
-
                 outputs = classificaion_model(batch)
                 loss_value = criterion_classification(outputs, labels)
                 total_loss += loss_value.item()
-                current_loss += loss_value.item()
                 preds = outputs.argmax(dim=1)
-                total += labels.size(0)
                 correct += (preds == labels).sum().item()
-
-                if i % self.args.logging_step == self.args.logging_step - 1:
-                    metrics = {
-                        "Loss": current_loss / self.args.logging_step,
-                        "epoch": epoch_n,
-                        "step": i,
-                        "Accuracy": correct / total
-                    }
-                    self.logger._log_metrics(metrics, phase='Val_classificaion')
-                    current_loss = 0.0  
                          
         val_loss = total_loss / len(self.val_dataloader)
         metrics = {
             "Loss": val_loss,
             "epoch": epoch_n,
-            "Accuracy": correct / total
+            "Accuracy": correct / len(self.val_dataloader.dataset)
         }
         self.logger._log_metrics(metrics, phase='Val_classificaion_epochs')
         return val_loss
@@ -282,11 +263,15 @@ class TrainerAuthorshipAttribution:
         total_loss = 0
         current_loss = 0.0
         correct_count = 0
+        all_feats = []
+        all_labels =[]        
         iters = len(self.train_dataloader)
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
             
             # batch = {k: v.to(self.device) for k, v in batch.items()}
             embeddings = self.model(batch)
+            all_feats.append(embeddings['anchor'].detach().cpu().numpy())
+            all_labels.extend(batch['label'].detach().cpu().numpy())
             self.optimizer.zero_grad()
 
             loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
@@ -294,6 +279,7 @@ class TrainerAuthorshipAttribution:
 
             total_loss += loss_value.item()
             current_loss += loss_value.item()
+
             # total_norm = 0
             # for p in self.model.parameters():
             #     param_norm = p.grad.detach().data.norm(2)
@@ -325,6 +311,13 @@ class TrainerAuthorshipAttribution:
             "epoch": epoch_n,
         }
         self.logger._log_metrics(metrics, phase='Train_epoch')
+        if self.log_plots:
+            all_feats = np.vstack(all_feats)
+            all_labels = np.array(all_labels)
+            print(f"Getting t-SNE plot for train set")
+            fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on train : Epoch {epoch_n}")
+            plt.savefig(f"{self.repository_id}/tsne_train.png")
+            self.logger.log_figure(fig, f"t-SNE on train", epoch_n)
         return total_loss / len(self.train_dataloader)
     
     @torch.no_grad()
@@ -383,7 +376,7 @@ class TrainerAuthorshipAttribution:
             all_labels = np.array(all_labels)
             print(f"Getting t-SNE plot for validation set")
             fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on validaation : Epoch {epoch_n}")
-            plt.savefig(f"{self.repository_id}/tsne_validation_{epoch_n}.png")
+            plt.savefig(f"{self.repository_id}/tsne_validation.png")
             self.logger.log_figure(fig, f"t-SNE on validaation", epoch_n)
         return val_loss, correct_count / total
     
