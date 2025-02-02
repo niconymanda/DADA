@@ -90,10 +90,8 @@ class TesterAuthorshipAttribution:
 
             if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
                 predictions, classif_results = self.predict(self.classification_model, all_embeddings, all_labels)
-                abx_classif = self.test_abx_accuracy(test_dataloader, self.classification_model)
-                print(f"ABX Accuracy for classification model: {abx_classif:.4f}")
-                # all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
-                # _, classif_results_spoofed = self.gmm_predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
+                all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
+                _, classif_results_spoofed = self.predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
             else:   
                 classif_results, predictions = self.test_classification(test_dataloader)
                 classif_results_spoofed, predictions_spoofed = self.test_classification(spoofed_dataloader)
@@ -296,7 +294,7 @@ class TesterAuthorshipAttribution:
                 labels = batch['label']
                 embeddings = model(batch)
                 # print(f"Embeddings: {embeddings}")
-                if self.classification_model is None:
+                if self.classification_model is None or self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
                     anchor_embeddings = embeddings['anchor'].cpu().numpy()
                 else:
                     # linear head
@@ -349,9 +347,7 @@ class TesterAuthorshipAttribution:
         
         num_classes = len(set(all_labels))
         print(f"Number of classes: {num_classes}, Fitting t-SNE...")
-        tsne_results = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=3).fit_transform(all_embeddings)
-        # tsne = TSNE(n_components=num_classes, perplexity=80, max_iter=3000, method='exact')
-        # tsne_results = tsne.fit_transform(all_embeddings)
+        tsne_results = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=5).fit_transform(all_embeddings)
 
         all_labels = np.array(all_labels)
 
@@ -370,24 +366,7 @@ class TesterAuthorshipAttribution:
         plt.title(f"Author Embeddings {name}")
         plt.xlabel("t-SNE Dimension 1")
         plt.ylabel("t-SNE Dimension 2")
-
-        # TODO :Plot ellipses
-        # for label in np.unique(all_labels):
-        #     points = tsne_results[all_labels == label]
-        #     cov = np.cov(points, rowvar=False)
-        #     mean = np.mean(points, axis=0)
-        #     eigvals, eigvecs = np.linalg.eigh(cov)
-        #     eigvals = 2.0 * np.sqrt(2.0) * np.sqrt(eigvals)
-        #     u = eigvecs[0] / np.linalg.norm(eigvecs[0])
-        #     angle = np.arctan(u[1] / u[0])
-        #     angle = 180.0 * angle / np.pi
-        #     # order = eigvals.argsort()[::-1]
-        #     # eigvals, eigvecs = eigvals[order], eigvecs[:, order]
-        #     # angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
-        #     # width, height = 2 * np.sqrt(eigvals)
-        #     ellipse = plt.matplotlib.patches.Ellipse(mean, width=eigvals[0], height=eigvals[1], angle=180.0+angle)
-        #     plt.gca().add_patch(ellipse)
-
+        
         plt.show()
         plt.savefig(f"{self.repository_id}/{name}.png")
 
@@ -409,7 +388,7 @@ class TesterAuthorshipAttribution:
             "Pair Type": ["Anchor-Positive"] * len(self.all_cosine_distances_positive) + ["Anchor-Negative"] * len(self.all_cosine_distances_negative)
         })
 
-        plt.figure(figsize=(6, 8))
+        plt.figure(figsize=(4, 6))
         sns.violinplot(data=data, x="Pair Type", y="Cosine Distance", split=True, hue="Pair Type", inner="quartile")
         plt.ylabel("Cosine Distance")
         plt.title("Distribution of Cosine Distances Between Embeddings")

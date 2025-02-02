@@ -17,10 +17,12 @@ def get_args():
     
     # answerdotai/ModernBERT-large, google-t5/t5-large, microsoft/deberta-v3-large
     parser = argparse.ArgumentParser(description='Train a text classification model')
-    parser.add_argument('--data', type=str, default='~/DADA/Data/WikiQuotes_train.csv', help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=15, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--data', type=str, default='/data/iivanova-23/data/wiki_train.csv', help='Path to the input data file')
+    parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train for')
+    parser.add_argument('--epochs_classification', type=int, default=10, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
+    parser.add_argument('--batch_size_classification', type=int, default=32, help='Batch size for classification head')
+    parser.add_argument('--num_workers', type=int, default=2, help='Number of workers for data loading')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
     parser.add_argument('--weight_decay', type=float, default=0.1  , help='weight_decay')
@@ -29,19 +31,36 @@ def get_args():
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--early_stopping_patience', type=int, default=5, help='Patience for early stopping based on validation loss')
     parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
-    parser.add_argument('--authors_to_train', type=int, default=10, help='Min number of quotes per author')
-    parser.add_argument('--authors_to_test', type=int, default=10, help='Min number of quotes per author')
+    parser.add_argument('--authors_to_train', type=int, default=0, help='Min number of quotes per author')
+    parser.add_argument('--authors_to_test', type=int, default=0, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
-    parser.add_argument('--margin', type=float, default=0.4, help='Margin for triplet loss')
+    parser.add_argument('--margin', type=float, default=0.44, help='Margin for triplet loss')
     parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
     parser.add_argument('--classification_head', type=str, default='linear', help='Classification head type[linear, mlp, gmm]')
     parser.add_argument('--clip_grad', type=float, default=100, help='Clip gradient norm')
     parser.add_argument('--at_lambda', type=float, default=0.5, help='Lambda for AdaTriplet loss')
-    parser.add_argument('--mlp_layers', type=int, default=3, help='Number of layers in MLP head')
-    parser.add_argument('--hidden_layers', type=lambda s: [int(item) for item in s.split(',')], default="-1, -2", help='List of hidden layer sizes for the model')
-    
-    return parser.parse_args()
+    parser.add_argument('--mlp_layers', type=int, default=2, help='Number of layers in MLP head')
+    parser.add_argument('--hidden_layers', type=lambda s: [int(item) for item in s.split(',')], default="-1", help='List of hidden layer sizes for the model')
+    parser.add_argument('--text_model_path', type=str, default=None, help='Path to the text model weights')
+    # '/data/iivanova-23/output/ada/custom_m/classif/n_authors_10/google-t5/t5-large_16_20_20250201-110817/final.pth'
+    # path = '/data/iivanova-23/output/ada/custom_m/n_authors_10/google-t5/t5-large_16_20_20250126-185149/final.pth'
+    # path = '/data/iivanova-23/output/ada/custom_m/n_authors_10/google/flan-t5-large_16_20_20250126-190419/final.pth'
+    args = parser.parse_args()
+    args = load_config(args)
+    return args
+
+def load_config(args):
+    if args.text_model_path is not None:
+        config_path = args.text_model_path.replace('final.pth', 'model_config.json')
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        args.model_name = config['architecture']['args']['model_name']
+        args.learning_rate = config['architecture']['args']['learning_rate']
+        args.weight_decay = config['architecture']['args']['weight_decay']
+        args.mlp_layers = config['architecture']['args']['num_mlp_layers']
+        args.hidden_layers = config['architecture']['args']['hidden_layers mean pool']
+    return args
 
 def load_data(args):
     """
@@ -60,8 +79,12 @@ def load_data(args):
     data = pd.read_csv(args.data)
     data = data.dropna()
     data['label'] = data['label'].astype('int')
-    spoofed_data = data[data['type'] == 'spoof']
-    data = data[data['type'] != 'spoof']
+    # spoofed_data = data[data['type'] == 'spoof']
+    # data = data[data['type'] != 'spoof']
+    if args.authors_to_train == 0:
+        args.authors_to_train = len(data['label'].unique())
+    if args.authors_to_test == 0:
+        args.authors_to_test = len(data['label'].unique())
     data_to_train = data[data['label'] < args.authors_to_train]
     rest_of_data = data[(data['label'] >= args.authors_to_train) & (data['label'] < args.authors_to_test)]
     print(f"Number of authors to train on: {args.authors_to_train}, Number of authors to test on: {args.authors_to_test}")
@@ -69,7 +92,7 @@ def load_data(args):
     data = pd.concat([data_to_train, rest_of_data])
     author_id_map = data[['label', 'author_name']].drop_duplicates().set_index('label').to_dict()['author_name']
     
-    return data_to_train, spoofed_data, rest_of_data, author_id_map
+    return data_to_train, rest_of_data, author_id_map
 
 def write_results_to_file(results, file_path, args, path):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -109,21 +132,18 @@ def get_device():
 
 def save_checkpoint(model, optimizer, epoch, path):
     checkpoint = {
-        'epoch': epoch,
         'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
     }
     
     torch.save(checkpoint, path)
     print(f"Model saved to {path}")
     
-def load_checkpoint(model, optimizer, path):
+def load_checkpoint(model, path):
     checkpoint = torch.load(path, map_location=torch.device('cpu'), weights_only=True)
     print(f"Loading model from {path}")
     model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     print(f"Model loaded from {path}")
-    return model, optimizer, checkpoint['epoch']
+    return model
 
 def save_model_config(
     args,

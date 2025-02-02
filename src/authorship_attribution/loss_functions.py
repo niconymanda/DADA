@@ -168,7 +168,7 @@ class AdaTriplet(nn.Module):
 
         loss = torch.clamp_min(phi_an - phi_ap + self.eps, 0)
         loss = loss + self.lambda_ * torch.clamp_min(phi_an - self.beta, 0)
-
+        
         if self.reduction == "mean":
             return loss.mean()
         elif self.reduction == "sum":

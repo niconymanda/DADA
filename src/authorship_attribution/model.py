@@ -7,33 +7,26 @@ from transformers import T5EncoderModel
 import torchvision.ops as ops
 
 class AuthorshipClassificationLLM(nn.Module):
-    def __init__(self, model, num_labels, head_type='gmm', class_weights=None):
+    def __init__(self, model, num_labels, head_type='linear'):
         super(AuthorshipClassificationLLM, self).__init__()
         self.num_labels = num_labels
-        self.class_weights = class_weights
         self.model = model
         self.tokenizer = model.tokenizer
         self.max_length = model.max_length
+        self.device = model.device
 
         hidden_size = self.model.model.config.hidden_size
         self.head_type = head_type
         if head_type == 'linear':
             self.classifier = nn.Linear(hidden_size, num_labels)
             self.softmax = nn.Softmax(dim=1)
-            self.loss_fn = nn.CrossEntropyLoss(weight=self.class_weights)
             self.freeze_params()
         elif head_type == 'mlp':
-            self.classifier = nn.Sequential(
-                nn.Linear(hidden_size, hidden_size),
-                nn.ReLU(),
-                nn.Linear(hidden_size, num_labels)
-            )
+            self.classifier = MLP(num_layers=3, in_features=hidden_size, out_features=num_labels, dropout_rate=0.2)
             self.softmax = nn.Softmax(dim=1)
-            self.loss_fn = nn.CrossEntropyLoss(weight=self.class_weights)
             self.freeze_params()
         
     def freeze_params(self):
-        # Freeze all layers except the classification head
         for name, param in self.model.named_parameters():
             if 'classifier' in name:
                 param.requires_grad = True
@@ -123,13 +116,13 @@ class MLP(nn.Module):
     
 class AuthorshipLLM(nn.Module):
     def __init__(self, model_name, 
-                 dropout_rate=0.1, 
+                 dropout_rate=0.2, 
                  out_features=1024, 
                  max_length=64, 
-                 num_layers=2,
+                 num_layers=4,
                  device='cuda', 
                  freeze_encoder=False, 
-                 use_layers=[-1, -2, -3]):  
+                 use_layers=[-1, -2]):  
         super(AuthorshipLLM, self).__init__()
         self.model_name = model_name
         self.model = self._get_model(model_name)
@@ -146,7 +139,6 @@ class AuthorshipLLM(nn.Module):
     def _get_model(self, model_name):
         
         if 't5' in model_name:
-            T5EncoderModel._keys_to_ignore_on_load_unexpected = ["decoder.*"]
             return T5EncoderModel.from_pretrained(model_name, output_hidden_states=True)
         else:
             return AutoModel.from_pretrained(model_name, output_hidden_states=True)
@@ -185,24 +177,20 @@ class AuthorshipLLM(nn.Module):
             self.model(**x_a, return_dict=True),
             self.model(**x_p, return_dict=True),
             self.model(**x_n, return_dict=True))
-        # print(x_a_output.shape)
         x_a_output, x_p_output, x_n_output = (
             self.pooler(x_a_output.hidden_states, x_a['attention_mask']),
             self.pooler(x_p_output.hidden_states, x_p['attention_mask']),
             self.pooler(x_n_output.hidden_states, x_n['attention_mask']))
         
-        # print(x_a_output.shape)
         x_a_output, x_p_output, x_n_output = (
             self.MLP(x_a_output),
             self.MLP(x_p_output),
             self.MLP(x_n_output))
         
-        # print(x_a_output.shape)
         x_a_output, x_p_output, x_n_output = (
             F.normalize(x_a_output, p=2, dim=-1),
             F.normalize(x_p_output, p=2, dim=-1),
             F.normalize(x_n_output, p=2, dim=-1))   
-        # print(x_a_output.shape)
         return {
             "anchor": x_a_output,
             "positive": x_p_output,
