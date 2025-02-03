@@ -4,7 +4,7 @@ from torch.nn import functional as F
 import torch
 from sklearn.mixture import GaussianMixture
 from transformers import T5EncoderModel
-import torchvision.ops as ops
+# import torchvision.ops as ops
 
 class AuthorshipClassificationLLM(nn.Module):
     def __init__(self, model, num_labels, head_type='linear'):
