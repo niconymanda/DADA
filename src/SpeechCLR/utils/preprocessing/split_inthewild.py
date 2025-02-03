@@ -5,7 +5,12 @@ import argparse
 import os
 
 
-def split_dataset(dataset, train_authors, val_authors, max_samples={'train':-1, 'val':-1, 'test':-1}):
+def split_dataset(
+    dataset,
+    train_authors,
+    val_authors,
+    max_samples={"train": -1, "val": -1, "test": -1},
+):
     authors = (
         dataset["speaker"].value_counts().index.tolist()
     )  # Authors in decreasing order of number of samples
@@ -14,9 +19,13 @@ def split_dataset(dataset, train_authors, val_authors, max_samples={'train':-1, 
     val_authors_set = set(authors[train_authors : train_authors + val_authors])
     test_authors_set = set(authors[train_authors + val_authors :])
 
-    train_data = dataset[dataset["speaker"].isin(train_authors_set)][:max_samples['train']]
-    val_data = dataset[dataset["speaker"].isin(val_authors_set)][:max_samples['val']]
-    test_data = dataset[dataset["speaker"].isin(test_authors_set)][:max_samples['test']]
+    train_data = dataset[dataset["speaker"].isin(train_authors_set)][
+        : max_samples["train"]
+    ]
+    val_data = dataset[dataset["speaker"].isin(val_authors_set)][: max_samples["val"]]
+    test_data = dataset[dataset["speaker"].isin(test_authors_set)][
+        : max_samples["test"]
+    ]
 
     train_files = train_data["file"].values
     val_files = val_data["file"].values
@@ -42,7 +51,7 @@ def get_args():
     parser.add_argument(
         "--val_authors",
         type=int,
-        default = 3,
+        default=3,
         required=False,
         help="Number of authors in the validation set",
     )
@@ -66,7 +75,7 @@ def get_args():
         required=False,
         default=0.8,
         help="Ratio of training data",
-    )   
+    )
     parser.add_argument(
         "--max_train_samples",
         type=int,
@@ -79,13 +88,17 @@ def get_args():
     return args
 
 
-def main():  
+def main():
     args = get_args()
 
     max_samples = {
-        'train': args.max_train_samples,
-        'val': int(args.max_train_samples * (1 - args.train_ratio)) if args.max_train_samples > 0 else -1,
-        'test': -1
+        "train": args.max_train_samples,
+        "val": (
+            int(args.max_train_samples * (1 - args.train_ratio))
+            if args.max_train_samples > 0
+            else -1
+        ),
+        "test": -1,
     }
 
     dataset = pd.read_csv(os.path.join(args.data_path, "meta.csv"))
@@ -100,11 +113,11 @@ def main():
         "val": list(val_data),
         "test": list(test_data),
     }
-    
+
     output_path = os.path.join(args.output_dir, args.output_name)
     os.makedirs(args.output_dir, exist_ok=True)
 
-    with open(output_path, 'w') as outfile:
+    with open(output_path, "w") as outfile:
         yaml.dump(output_data, outfile)
 
 

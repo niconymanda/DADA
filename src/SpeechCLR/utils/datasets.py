@@ -125,10 +125,16 @@ class InTheWildDataset(torch.utils.data.Dataset):
             mode (str): Mode of the dataset (triplet, classification)
         """
         self.root_dir = root_dir
-        self.df = pd.read_csv(os.path.join(root_dir, metadata_file))
+        self.metadata_file = metadata_file
+        if self.metadata_file.endswith(".csv"):
+            self.df = pd.read_csv(os.path.join(root_dir, metadata_file))
+        elif self.metadata_file.endswith(".json"):
+            self.df = pd.read_json(os.path.join(root_dir, metadata_file))
         self.include_spoofs = include_spoofs
         self.split = split
         self.mode = mode
+
+        self.bonafide_label = bonafide_label
 
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
@@ -179,7 +185,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         x = self.load_audio_tensor(idx)
-        y = self.id_to_label[idx]
+        y = int(self.id_to_label[idx] == self.bonafide_label)
         author = self.id_to_author[idx]
 
         if self.mode == "classification":
@@ -192,7 +198,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
             x_n = self.load_audio_tensor(id_n)
 
             return {"anchor": x, "positive": x_p, "negative": x_n}
-        
+
         elif self.mode == "pair":
             a = x
             a_label = author

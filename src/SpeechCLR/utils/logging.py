@@ -43,6 +43,9 @@ class Logger(object):
 
         self.writer.add_images(tag, img_summaries, global_step=step)
 
+    def figure_summary(self, tag, figure, step):
+        self.writer.add_figure(tag, figure, global_step=step)
+
     def histo_summary(self, tag, values, step, bins=1000):
         counts, bin_edges = np.histogram(values.cpu().numpy(), bins=bins)
 
