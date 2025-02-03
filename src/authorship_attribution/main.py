@@ -8,13 +8,13 @@ from dataset import AuthorTripletLossDataset
 from test_model import TesterAuthorshipAttribution
 from train import TrainerAuthorshipAttribution
 from model import AuthorshipLLM
-from peft import LoraConfig, get_peft_model
 import time
 import pandas as pd
 
 def main(args):
     print(args.model_name)
     print(args.hidden_layers)
+    print(args.epochs)
     cfg.init_env(args)
     data, rest_of_data, author_id_map = cfg.load_data(args)
     current_time = time.strftime("%Y%m%d-%H%M%S")
@@ -57,7 +57,7 @@ def main(args):
     model = AuthorshipLLM(args.model_name, 
                           dropout_rate=0.1, 
                           out_features=1024, 
-                          max_length=24, 
+                          max_length=64, 
                           num_layers=args.mlp_layers, 
                           freeze_encoder=False, 
                           use_layers=args.hidden_layers)
@@ -73,7 +73,7 @@ def main(args):
                                            save_model=True,
                                            additional_training=True
                                            )
-    model, classification_model = trainer.train(classification_head=True)
+    model, classification_model = trainer.train(classification_head=False)
     # loaded_model.load_state_dict(torch.load("output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth"))
     print("Training finished")
     tester = TesterAuthorshipAttribution(model=model, 

@@ -2,9 +2,7 @@ import torch.nn as nn
 from transformers import AutoModel, AutoTokenizer
 from torch.nn import functional as F
 import torch
-from sklearn.mixture import GaussianMixture
 from transformers import T5EncoderModel
-import torchvision.ops as ops
 
 class AuthorshipClassificationLLM(nn.Module):
     def __init__(self, model, num_labels, head_type='linear'):
@@ -169,31 +167,37 @@ class AuthorshipLLM(nn.Module):
         return self.model.config.hidden_size
 
     def forward(self, input, mode='triplet'):
-   
-        a, p, n = input["anchor"], input["positive"], input["negative"]
-        x_a, x_p, x_n = self.get_features(a), self.get_features(p), self.get_features(n)
+        if mode == 'triplet':
+            a, p, n = input["anchor"], input["positive"], input["negative"]
+            x_a, x_p, x_n = self.get_features(a), self.get_features(p), self.get_features(n)
 
-        x_a_output, x_p_output, x_n_output = (
-            self.model(**x_a, return_dict=True),
-            self.model(**x_p, return_dict=True),
-            self.model(**x_n, return_dict=True))
-        x_a_output, x_p_output, x_n_output = (
-            self.pooler(x_a_output.hidden_states, x_a['attention_mask']),
-            self.pooler(x_p_output.hidden_states, x_p['attention_mask']),
-            self.pooler(x_n_output.hidden_states, x_n['attention_mask']))
-        
-        x_a_output, x_p_output, x_n_output = (
-            self.MLP(x_a_output),
-            self.MLP(x_p_output),
-            self.MLP(x_n_output))
-        
-        x_a_output, x_p_output, x_n_output = (
-            F.normalize(x_a_output, p=2, dim=-1),
-            F.normalize(x_p_output, p=2, dim=-1),
-            F.normalize(x_n_output, p=2, dim=-1))   
-        return {
-            "anchor": x_a_output,
-            "positive": x_p_output,
-            "negative": x_n_output,
-        }
+            x_a_output, x_p_output, x_n_output = (
+                self.model(**x_a, return_dict=True),
+                self.model(**x_p, return_dict=True),
+                self.model(**x_n, return_dict=True))
+            x_a_output, x_p_output, x_n_output = (
+                self.pooler(x_a_output.hidden_states, x_a['attention_mask']),
+                self.pooler(x_p_output.hidden_states, x_p['attention_mask']),
+                self.pooler(x_n_output.hidden_states, x_n['attention_mask']))
+
+            x_a_output, x_p_output, x_n_output = (
+                self.MLP(x_a_output),
+                self.MLP(x_p_output),
+                self.MLP(x_n_output))
+
+            x_a_output, x_p_output, x_n_output = (
+                F.normalize(x_a_output, p=2, dim=-1),
+                F.normalize(x_p_output, p=2, dim=-1),
+                F.normalize(x_n_output, p=2, dim=-1))   
+            return {
+                "anchor": x_a_output,
+                "positive": x_p_output,
+                "negative": x_n_output,
+            }
+        elif mode == 'classification':
+            x = self.get_features(input)
+            x_output = self.model(input_ids=x['input_ids'], attention_mask=x['attention_mask'], return_dict=True)
+            x_output = self.pooler(x_output.hidden_states[-1], x['attention_mask'])
+            x_output = F.normalize(x_output, p=2, dim=-1)
+            return x_output
         

@@ -212,7 +212,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
         x = self.load_audio_tensor(idx)
         y = int(self.id_to_label[idx] == self.bonafide_label)
         author = self.id_to_author[idx]
-        transcription = self.text_to_input_dict(self.id_to_transcription[idx])
+        transcription = self.id_to_transcription[idx]
 
         if self.mode == "classification":
             return {"x": x, "label": y, "author": author, "transcription": transcription}

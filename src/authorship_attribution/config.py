@@ -35,7 +35,7 @@ def get_args():
     parser.add_argument('--authors_to_test', type=int, default=0, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
-    parser.add_argument('--margin', type=float, default=0.44, help='Margin for triplet loss')
+    parser.add_argument('--margin', type=float, default=0.4, help='Margin for triplet loss')
     parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
     parser.add_argument('--classification_head', type=str, default='linear', help='Classification head type[linear, mlp, gmm]')
     parser.add_argument('--clip_grad', type=float, default=100, help='Clip gradient norm')
@@ -43,6 +43,7 @@ def get_args():
     parser.add_argument('--mlp_layers', type=int, default=2, help='Number of layers in MLP head')
     parser.add_argument('--hidden_layers', type=lambda s: [int(item) for item in s.split(',')], default="-1", help='List of hidden layer sizes for the model')
     parser.add_argument('--text_model_path', type=str, default=None, help='Path to the text model weights')
+    # '/home/infres/iivanova-23/DADA/iivanova-23/output/paper_sets/n_authors_51/google-t5/t5-large_16_20_20250202-222036/final.pth'
     # '/data/iivanova-23/output/ada/custom_m/classif/n_authors_10/google-t5/t5-large_16_20_20250201-110817/final.pth'
     # path = '/data/iivanova-23/output/ada/custom_m/n_authors_10/google-t5/t5-large_16_20_20250126-185149/final.pth'
     # path = '/data/iivanova-23/output/ada/custom_m/n_authors_10/google/flan-t5-large_16_20_20250126-190419/final.pth'
@@ -56,8 +57,6 @@ def load_config(args):
         with open(config_path, 'r') as f:
             config = json.load(f)
         args.model_name = config['architecture']['args']['model_name']
-        args.learning_rate = config['architecture']['args']['learning_rate']
-        args.weight_decay = config['architecture']['args']['weight_decay']
         args.mlp_layers = config['architecture']['args']['num_mlp_layers']
         args.hidden_layers = config['architecture']['args']['hidden_layers mean pool']
     return args
@@ -140,9 +139,8 @@ def save_checkpoint(model, optimizer, epoch, path):
     
 def load_checkpoint(model, path):
     checkpoint = torch.load(path, map_location=torch.device('cpu'), weights_only=True)
-    print(f"Loading model from {path}")
+    print(f"Loading text model from {path}")
     model.load_state_dict(checkpoint['model_state_dict'])
-    print(f"Model loaded from {path}")
     return model
 
 def save_model_config(

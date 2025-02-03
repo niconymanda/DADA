@@ -31,7 +31,6 @@ from mid_fusion.models import MidFuse
 class MidFusionTrainer():
     def __init__(self, args):
         self.args = args
-
         self.train_dataset = InTheWildDataset(
             root_dir=args.data_path,
             metadata_file="wild_transcription_meta.json",
@@ -78,9 +77,13 @@ class MidFusionTrainer():
         print(F"Using device: {self.device}")
 
         self.speech_model = SpeechEmbedder()
-        self.text_model = AuthorshipLLM(model_name = args.text_model_name)
+        self.text_model = AuthorshipLLM(self.args.text_model_name, 
+                          num_layers=self.args.mlp_layers, 
+                          use_layers=self.args.hidden_layers)
+        
         if args.text_model_path is not None:
-            self.text_model.load_state_dict(torch.load(args.text_model_path)) # TODO @abhaydmathur : ensure this is how Ivi loads the model
+            checkpoint = torch.load(args.text_model_path, map_location=torch.device('cpu'), weights_only=True)
+            self.text_model.load_state_dict(checkpoint['model_state_dict']) # TODO @abhaydmathur : ensure this is how Ivi loads the model
             print(f"Loaded text model from {args.text_model_path}")
         if args.speech_model_path is not None:
             self.speech_model.load_(torch.load(args.speech_model_path))
@@ -162,7 +165,7 @@ class MidFusionTrainer():
             text = batch['transcription']
             label = batch['label'].squeeze().float().to('cuda')
 
-            text = {k: v.to('cuda') for k, v in text.items()}
+            # text = {k: v.to('cuda') for k, v in text.items()}
             batch['x'] = batch['x'].to('cuda')
 
             self.optimizer.zero_grad()
@@ -241,7 +244,7 @@ class MidFusionTrainer():
                 text = batch['transcription']
                 label = batch['label'].squeeze().float().to('cuda')
 
-                text = {k: v.to('cuda') for k, v in text.items()}
+                # text = {k: v.to('cuda') for k, v in text.items()}
                 batch['x'] = batch['x'].to('cuda')
 
                 output = self.model(text_input = text, speech_input = batch).squeeze()
