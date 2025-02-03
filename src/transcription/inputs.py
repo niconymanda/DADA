@@ -5,3 +5,8 @@ transcription_model_id = "openai/whisper-large-v3"
 transcriptions_path = "data/transcriptions/test_in_the_wild_transcriptions.json"
 meta_data_path_csv = "data/release_in_the_wild/meta.csv"
 in_the_wild = "data/in_the_wild.json"
+
+asv_audios = glob("/data/amathur-23/DADA/ASVspoof2021_DF_eval/flac/*.flac")
+transcription_path_asv = "/data/iivanov/ASVspoof2021_DF_eval_transcriptions.json"
+meta_data_path_asv = "/data/amathur-23/DADA/ASVspoof2021_DF_eval/keys/DF/CM/trial_metadata.txt"
+asv_spoof = "/data/iivanova-23/ASVspoof2021_DF_eval.json"
