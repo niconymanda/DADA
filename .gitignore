@@ -1,11 +1,12 @@
-<<<<<<< HEAD
-=======
 Data/
 output/
 output_data
 wandb/
+<<<<<<< HEAD
 iivanova-23
 >>>>>>> 16651a65aa03684ba33a0b99d096177ef782a0a2
+=======
+>>>>>>> 77d43bd80defda305fac0e5ed5b04178440d2057
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -172,6 +173,7 @@ cython_debug/
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+<<<<<<< HEAD
 #.idea/
 
 
@@ -180,3 +182,17 @@ out*.txt
 
 # symbolic links
 iivanova-23
+=======
+<<<<<<< HEAD
+#.idea/
+
+# Datasets / Other Folders
+data/
+datasets/
+# authorship_attribution/
+=======
+#.idea/
+
+#out files
+out*.txt
+>>>>>>> 77d43bd80defda305fac0e5ed5b04178440d2057

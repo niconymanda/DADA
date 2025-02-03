@@ -1,0 +1,7 @@
+# python3 main.py --data_path /home/infres/amathur-23/DADA/datasets/InTheWild --model_save_path /home/infres/amathur-23/DADA/src/models --dataset_config configs/data/inthewild_10v8.yaml --loss_fn squared_similarity --gpu_id 1 --epochs=10 --log_dir=runs/sq_sim_10v8 --batch_size=16 --at_lambda=0 --margin=0.5 --lr_scheduler cosine --early_stopping_metric=accuracy
+
+# python3 main.py --data_path /home/infres/amathur-23/DADA/datasets/InTheWild --model_save_path /home/infres/amathur-23/DADA/src/models --dataset_config configs/data/inthewild_10v8.yaml --loss_fn ada_triplet --gpu_id 1 --epochs=10 --log_dir=runs/tricos_p5_PLUS_ada2 --batch_size=16 --at_lambda=0 --margin=0.5 --lr_scheduler cosine --early_stopping_metric=accuracy --load_path='/data/amathur-23/DADA/models/SpeechEmbedder/tri_cosine_10v8_eps_p5'
+
+# python3 main.py --data_path /home/infres/amathur-23/DADA/datasets/InTheWild --model_save_path /home/infres/amathur-23/DADA/src/models --dataset_config configs/data/inthewild_10v8.yaml --loss_fn triplet_cosine --gpu_id 1 --epochs=10 --log_dir=runs/tricos_p35_10v8 --batch_size=16 --at_lambda=0 --margin=0.35 --lr_scheduler cosine --early_stopping_metric=accuracy 
+
+python3 main.py --data_path /home/infres/amathur-23/DADA/datasets/InTheWild --model_save_path /home/infres/amathur-23/DADA/src/models --dataset_config configs/data/inthewild_10v8.yaml --loss_fn triplet_cosine --gpu_id 0 --epochs=1 --log_dir=runs/random_trial --batch_size=16 --at_lambda=0 --margin=0.35 --lr_scheduler plateau --early_stopping_metric=accuracy

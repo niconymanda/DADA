@@ -28,7 +28,11 @@ def get_tsne_fig(feats, labels, title):
 
     plt.figure(figsize=(5, 5))
     scatter = plt.scatter(
+<<<<<<< HEAD:src/authorship_attribution/visualisation.py
         x_embedded[:, 0], x_embedded[:, 1], c=label_ids, cmap="tab20c"
+=======
+        x_embedded[:, 0], x_embedded[:, 1], c=label_ids, cmap="viridis"
+>>>>>>> 77d43bd80defda305fac0e5ed5b04178440d2057:src/SpeechCLR/utils/visualisation.py
     )
     plt.title(title)
     handles, _ = scatter.legend_elements()
@@ -40,4 +44,8 @@ def get_tsne_fig(feats, labels, title):
 def get_tsne_img(X, y, title):
     fig = get_tsne_fig(X, y, title)
     img = fig2img(fig)
+<<<<<<< HEAD:src/authorship_attribution/visualisation.py
     return img
+=======
+    return img
+>>>>>>> 77d43bd80defda305fac0e5ed5b04178440d2057:src/SpeechCLR/utils/visualisation.py
