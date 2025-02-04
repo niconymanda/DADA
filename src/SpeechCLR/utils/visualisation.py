@@ -16,8 +16,8 @@ def fig2img(fig):
 
 
 def get_tsne_fig(feats, labels, title):
-    if feats.shape[-1] > 50:
-        feats = PCA(n_components=50).fit_transform(feats)
+    # if feats.shape[-1] > 50:
+    #     feats = PCA(n_components=50).fit_transform(feats)
     x_embedded = TSNE(
         n_components=2, learning_rate="auto", init="random", perplexity=3
     ).fit_transform(feats)

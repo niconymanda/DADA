@@ -90,7 +90,7 @@ class MidFusionTrainer():
             self.text_model.load_state_dict(torch.load(args.text_model_path)) # TODO @abhaydmathur : ensure this is how Ivi loads the model
             print(f"Loaded text model from {args.text_model_path}")
         if args.speech_model_path is not None:
-            self.speech_model.load_(torch.load(args.speech_model_path))
+            self.speech_model.load_(args.speech_model_path)
             print(f"Loaded speech model from {args.speech_model_path}")
 
         self.model = MidFuse(

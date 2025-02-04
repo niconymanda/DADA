@@ -91,7 +91,7 @@ def get_args():
     parser.add_argument(
         "--save_visualisations",
         type=bool,
-        default=True,
+        default=False,
         help="Save visualizations of embeddings",
     )
     parser.add_argument(
