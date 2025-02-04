@@ -17,7 +17,7 @@ def get_args():
     parser.add_argument('--data_path', type=str, default = '/data/amathur-23/DADA/InTheWild/release_in_the_wild/', help='Path to the training data')
     parser.add_argument('--model_save_path', type=str, default='./models', help='Path to save the trained model')
     parser.add_argument('--log_interval', type=int, default=1, help='Interval for logging training status')
-    parser.add_argument('--dataset_config', type=str, default='/home/infres/iivanova-23/DADA/src/mid_fusion/configs/inthewild_full.yaml', help='Path to the dataset configuration file')
+    parser.add_argument('--dataset_config', type=str, default='mid_fusion/configs/inthewild_full.yaml', help='Path to the dataset configuration file')
     parser.add_argument('--log_dir', type=str, default='./runs', help='Path to save logs')
     parser.add_argument('--max_duration', type=int, default=4, help='Maximum duration of audio files')
     parser.add_argument('--sampling_rate', type=int, default=16000, help='Sampling rate of audio files')
