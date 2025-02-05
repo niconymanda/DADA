@@ -5,7 +5,21 @@ import argparse
 import os
 
 
-def split_dataset(
+def split_by_samples(dataset, max_train_samples, max_val_samples):
+    dataset = dataset.sample(frac=1).reset_index(drop=True)  # Shuffle the dataset
+
+    train_data = dataset[:max_train_samples]
+    val_data = dataset[max_train_samples:max_train_samples + max_val_samples]
+    test_data = dataset[max_train_samples + max_val_samples:]
+
+    train_files = train_data["file"].values
+    val_files = val_data["file"].values
+    test_files = test_data["file"].values
+
+    return train_files, val_files, test_files
+
+
+def split_by_author(
     dataset,
     train_authors,
     val_authors,
@@ -73,15 +87,41 @@ def get_args():
         "--train_ratio",
         type=float,
         required=False,
-        default=0.8,
+        default=0.7,
         help="Ratio of training data",
     )
+
     parser.add_argument(
         "--max_train_samples",
         type=int,
         required=False,
-        default=200,
+        default=None,
         help="Maximum number of training samples",
+    )
+
+    parser.add_argument(
+        "--max_val_samples",
+        type=int,
+        required=False,
+        default=None,
+        help="Maximum number of validation samples",
+    )
+
+    parser.add_argument(
+        "--val_ratio",
+        type=float,
+        required=False,
+        default=0.2,
+        help="Ratio of validation data",
+    )
+
+    parser.add_argument(
+        "--split_strategy",
+        type=str,
+        required=True,
+        choices=["author", "samples"],
+        default="author",
+        help="Whether to split by authors or simply samples",
     )
 
     args = parser.parse_args()
@@ -91,20 +131,26 @@ def get_args():
 def main():
     args = get_args()
 
-    max_samples = {
-        "train": args.max_train_samples,
-        "val": (
-            int(args.max_train_samples * (1 - args.train_ratio))
-            if args.max_train_samples > 0
-            else -1
-        ),
-        "test": -1,
-    }
-
     dataset = pd.read_csv(os.path.join(args.data_path, "meta.csv"))
-    train_data, val_data, test_data = split_dataset(
-        dataset, args.train_authors, args.val_authors
-    )
+
+
+    if args.max_train_samples is None:
+        args.max_train_samples = int(args.train_ratio * len(dataset))
+        args.max_val_samples = int(args.val_ratio * len(dataset))
+    else :
+        if args.max_val_samples is None:
+            args.max_val_samples = int(args.val_ratio * len(dataset))
+
+    if args.split_strategy == "author":
+        train_data, val_data, test_data = split_by_author(
+            dataset, args.train_authors, args.val_authors
+        )
+    elif args.split_strategy == "samples":
+        train_data, val_data, test_data = split_by_samples(
+            dataset, args.max_train_samples, args.max_val_samples
+        )
+    else:
+        raise NotImplementedError
 
     print(train_data[:5])
 
