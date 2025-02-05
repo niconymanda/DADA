@@ -45,7 +45,7 @@ class TesterAuthorshipAttribution:
 
         self.distance_function = config.get_distance_function(self.args.distance_function)
         
-    def test(self, test_dataloader, spoofed_dataloader):
+    def test(self, test_dataloader, spoofed_dataloader, dataset_name='test'):
         """
         Tests the model using the provided dataloaders and generates various evaluation metrics.
 
@@ -71,43 +71,45 @@ class TesterAuthorshipAttribution:
         results_spoofed = {}
 
         # Test results test_dataloader
-        acc = self.test_abx_accuracy(test_dataloader)
+        acc = self.test_abx_accuracy(test_dataloader, self.model)
         results['abx_accuracy'] = acc
         print(f"Test ABX Accuracy : {acc:.4f}")
-       
-        self.plot_cosine_distence_distribution('test')
+        
+        self.plot_cosine_distence_distribution(f'test_{dataset_name}')
 
         # Test results spoofed_dataloader
-        acc_sp = self.test_abx_accuracy(spoofed_dataloader)
+        acc_sp = self.test_abx_accuracy(spoofed_dataloader, self.model)
         print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
-        # results_spoofed['abx_accuracy'] = acc_sp
-        # self.plot_cosine_distence_distribution('spoofed')
+        results_spoofed['abx_accuracy'] = acc_sp
+        self.plot_cosine_distence_distribution(f'spoofed_{dataset_name}')
+
+        all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
 
         #Test results on classification model
         if self.classification_model is not None:
-            all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
 
-            if self.args.classification_head == 'gmm':
-                predictions, classif_results = self.gmm_predict(self.classification_model, all_embeddings, all_labels)
-                self.plot_tsne_for_authors(all_embeddings, predictions, 't-SNE_gmm')
-
-                # all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
-                # _, classif_results_spoofed = self.gmm_predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
+            if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
+                predictions, classif_results = self.predict(self.classification_model, all_embeddings, all_labels)
+                all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
+                _, classif_results_spoofed = self.predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
             else:   
-                classif_results = self.test_classification(test_dataloader)
-                classif_results_spoofed = self.test_classification(spoofed_dataloader)
+                classif_results, predictions = self.test_classification(test_dataloader)
+                classif_results_spoofed, predictions_spoofed = self.test_classification(spoofed_dataloader)
+
+            name = f't-SNE_{self.args.classification_head}_{dataset_name}'
+            self.plot_tsne_for_authors(all_embeddings, predictions, name)
 
             results.update(classif_results)
-            config.write_results_to_file(results, './output/results.txt', self.args)
+            config.write_results_to_file(results, './output/results.txt', self.args, self.repository_id)
 
-            # results_spoofed.update(classif_results_spoofed)
-            # config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args)
+            results_spoofed.update(classif_results_spoofed)
+            config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args, self.repository_id)
 
-        self.plot_tsne_for_authors(all_embeddings, all_labels)
+        self.plot_tsne_for_authors(all_embeddings, all_labels, f't-SNE_{dataset_name}')
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
 
 
-    def test_abx_accuracy(self, test_dataloader):
+    def test_abx_accuracy(self, test_dataloader, model):
         """
         Evaluate the ABX accuracy of the model using the provided test dataloader (can be bona-fide and spoofed).
         Test the model by comparing the distance between the anchor and positive examples with the distance between the anchor and minimum of negative examples.
@@ -125,7 +127,7 @@ class TesterAuthorshipAttribution:
             float: The accuracy of the model on the test set.
         """
         
-        self.model.eval() 
+        model.eval() 
         correct = 0
         total = 0
 
@@ -137,7 +139,7 @@ class TesterAuthorshipAttribution:
                 anchor_labels = batch['label']
 
                 # Anchor-Postive distances
-                embeddings = self.model(batch)
+                embeddings = model(batch)
                 
                 dist_ax = self.distance_function(embeddings['anchor'], embeddings['positive'])
                 
@@ -156,12 +158,12 @@ class TesterAuthorshipAttribution:
                         pred_label = anchor_labels[i]
                         negative_example = negative_examples[i][0]
                         
-                        embeddings = self.model(batch)
+                        embeddings = model(batch)
                         min_negative_embeddings = embeddings['negative'][0]
 
                         for neg_idx in range(1, len(negative_examples[i])):
                             negative_example = negative_examples[i][neg_idx]
-                            negative_embeddings = self.model(negative_example)['negative']
+                            negative_embeddings = model(negative_example)['negative']
                             dist_bx = self.distance_function(embeddings['positive'][i].unsqueeze(0), negative_embeddings)
                             if dist_bx < min_dist:
                                 min_dist = dist_bx
@@ -219,10 +221,10 @@ class TesterAuthorshipAttribution:
 
         with torch.no_grad():
             for batch in tqdm(test_dataloader):
-                text = batch['anchor_example']
+                
                 labels = batch['label']
 
-                outputs = self.classification_model(text)
+                outputs = self.classification_model(batch)
                 preds = outputs.argmax(dim=1)
 
                 all_preds.extend(preds.cpu().numpy())
@@ -233,7 +235,8 @@ class TesterAuthorshipAttribution:
 
         results = self.get_results(all_preds, all_labels)
 
-        return results
+        return results, all_labels
+    
     def get_results(self, all_preds, all_labels):
 
         accuracy = accuracy_score(all_labels, all_preds)
@@ -275,7 +278,8 @@ class TesterAuthorshipAttribution:
         Returns:
             np.ndarray: An array of embeddings extracted from the model.
         """
-        if self.args.classification_head == 'gmm':
+
+        if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn' or self.classification_model is None:
             model = self.model
             self.model.eval()
         else:
@@ -288,20 +292,26 @@ class TesterAuthorshipAttribution:
             for i,batch in enumerate(tqdm(dataloader, desc=f"Extracting embeddings")):
                 
                 labels = batch['label']
-
-                embeddings = model(batch)['anchor'].detach().cpu().numpy()
-                all_embeddings.append(embeddings)
+                embeddings = model(batch)
+                # print(f"Embeddings: {embeddings}")
+                if self.classification_model is None or self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
+                    anchor_embeddings = embeddings['anchor'].cpu().numpy()
+                else:
+                    # linear head
+                    anchor_embeddings = embeddings.cpu().numpy()
+                all_embeddings.append(anchor_embeddings)
                 all_labels.extend(labels.cpu().numpy())
 
         all_embeddings = np.concatenate(all_embeddings, axis=0)
         all_labels = np.array(all_labels)
         return all_embeddings, all_labels
+
     
-    def gmm_predict(self, gmm, embeddings, labels):
+    def predict(self, classifier, embeddings, labels):
         """
-        Predicts author labels using a Gaussian Mixture Model (GMM).
+        Predicts author labels using a classifier.
         Args:
-            gmm (GaussianMixture): A trained GMM model.
+            classifier (object): A classifier object with a `predict` method, can be GMM, K-NN.
             embeddings (np.ndarray): An array of embeddings to predict labels for.
             labels (np.ndarray): An array of true labels for the embeddings.
         Returns:
@@ -309,7 +319,7 @@ class TesterAuthorshipAttribution:
                 - np.ndarray: An array of predicted probabilities for each class.
                 - np.ndarray: An array of predicted labels.
         """
-        probabilities = gmm.predict_proba(embeddings)
+        probabilities = classifier.predict_proba(embeddings)
         predictions = np.argmax(probabilities, axis=1)
         print(f"Predictions: {predictions}")
         print(f"Labels: {labels}")
@@ -336,9 +346,8 @@ class TesterAuthorshipAttribution:
         """
         
         num_classes = len(set(all_labels))
-        print(f"Number of classes: {num_classes}")
-        tsne = TSNE(n_components=num_classes, perplexity=80, max_iter=3000, method='exact')
-        tsne_results = tsne.fit_transform(all_embeddings)
+        print(f"Number of classes: {num_classes}, Fitting t-SNE...")
+        tsne_results = TSNE(n_components=2, learning_rate="auto", init="random", perplexity=5).fit_transform(all_embeddings)
 
         all_labels = np.array(all_labels)
 
@@ -357,24 +366,7 @@ class TesterAuthorshipAttribution:
         plt.title(f"Author Embeddings {name}")
         plt.xlabel("t-SNE Dimension 1")
         plt.ylabel("t-SNE Dimension 2")
-
-        # TODO :Plot ellipses
-        # for label in np.unique(all_labels):
-        #     points = tsne_results[all_labels == label]
-        #     cov = np.cov(points, rowvar=False)
-        #     mean = np.mean(points, axis=0)
-        #     eigvals, eigvecs = np.linalg.eigh(cov)
-        #     eigvals = 2.0 * np.sqrt(2.0) * np.sqrt(eigvals)
-        #     u = eigvecs[0] / np.linalg.norm(eigvecs[0])
-        #     angle = np.arctan(u[1] / u[0])
-        #     angle = 180.0 * angle / np.pi
-        #     # order = eigvals.argsort()[::-1]
-        #     # eigvals, eigvecs = eigvals[order], eigvecs[:, order]
-        #     # angle = np.degrees(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
-        #     # width, height = 2 * np.sqrt(eigvals)
-        #     ellipse = plt.matplotlib.patches.Ellipse(mean, width=eigvals[0], height=eigvals[1], angle=180.0+angle)
-        #     plt.gca().add_patch(ellipse)
-
+        
         plt.show()
         plt.savefig(f"{self.repository_id}/{name}.png")
 
@@ -396,7 +388,7 @@ class TesterAuthorshipAttribution:
             "Pair Type": ["Anchor-Positive"] * len(self.all_cosine_distances_positive) + ["Anchor-Negative"] * len(self.all_cosine_distances_negative)
         })
 
-        plt.figure(figsize=(6, 8))
+        plt.figure(figsize=(4, 6))
         sns.violinplot(data=data, x="Pair Type", y="Cosine Distance", split=True, hue="Pair Type", inner="quartile")
         plt.ylabel("Cosine Distance")
         plt.title("Distribution of Cosine Distances Between Embeddings")

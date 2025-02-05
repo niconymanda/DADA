@@ -19,13 +19,13 @@ The increasing use of generative AI models to create realistic deepfakes poses s
 To run the model training
 ```bash
 cd DADA
-python authorship_attribution/main.py --model_name 'BERT-like model'
+python src/authorship_attribution/main.py --model_name 'BERT-like model'
 ``` 
 How to run hyperparameter search tuning on a specific model.
 You can define your hyperparameter space in the 'main_tune.py' file and use the 'config_tune' dictionary.
 ```bash
 cd DADA
-python authorship_attribution/main_tune.py --model_name 'BERT-like model'
+python src/authorship_attribution/main_tune.py --model_name 'BERT-like model'
 ``` 
 ### Dataset 
 The dataset used for training and testing is an augmented version of the original "In the Wild" dataset, supplemented with data from "WikiQuotes" as well as quotes, tweets, and interviews of all the public figures included in the original dataset. This augmentation was necessary as the initial dataset was not sufficiently large to effectively fine-tune a LLM. By incorporating a broader range of data sources, we ensured more comprehensive coverage of the linguistic styles, topics, and contextual variety needed for robust model performance. 
@@ -71,7 +71,9 @@ This project fine-tunes a BERT-like model to perform authorship classification, 
 | RoBERTa  base  | ...  | ...  | ...  | ...  | ...  | 
 | RoBERTa  base  | ...  | ...  | ...  | ...  | ...  | 
 | RoBERTa large | ...  | ...  | ...  | ...  | ... |
-| T5 | ...  | ...  | ...  | ...  | ... |
+| Modern BERT | ...  | ...  | ...  | ...  | ... |
+| DeBERTa base | ...  | ...  | ...  | ...  | ... |
+| DeBERTa large | ...  | ...  | ...  | ...  | ... |
 ...
 
 #### Results on spoofed set

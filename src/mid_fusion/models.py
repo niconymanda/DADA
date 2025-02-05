@@ -12,7 +12,7 @@ class MidFuse(nn.Module):
         self.speech_features = speech_features
 
         self.classifier = nn.Sequential(
-            nn.Linear(text_features + speech_features, 512),
+            nn.Linear(self.text_features + self.speech_features, 512),
             nn.Linear(512, 256),
             nn.Linear(256, 1),
             nn.Sigmoid()
@@ -32,19 +32,15 @@ class MidFuse(nn.Module):
         return self.classifier.parameters()
     
     def load_(self, path):
-        self.classifier.load_state_dict(torch.load(path))
+        self.classifier.load_state_dict(torch.load(path, weights_only=True))
 
     def save_(self, path):
         torch.save(self.classifier.state_dict(), path)
-    
-    def eval(self):
-        self.text_model.eval()
-        self.speech_model.eval()
-        self.classifier.eval()
 
     def forward(self, text_input, speech_input):
-        text_features = self.text_model(text_input, mode='classification')
-        speech_features = self.speech_model(speech_input, mode='classification')
-        features = torch.cat([text_features, speech_features], dim=1)
+        with torch.no_grad():
+            text_features = self.text_model(text_input, mode = 'classification')
+            speech_features = self.speech_model(speech_input, mode='classification')
+            features = torch.cat([text_features, speech_features], dim=1)
         x = self.classifier(features)
         return x

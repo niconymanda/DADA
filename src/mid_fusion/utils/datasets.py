@@ -98,6 +98,7 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         x = self.load_audio_tensor(y)
         return x, y
 
+
 class InTheWildDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -106,14 +107,14 @@ class InTheWildDataset(torch.utils.data.Dataset):
         include_spoofs=False,
         bonafide_label="bona-fide",
         filename_col="file",
-        transcription_col='content',
+        transcription_col="content",
         sampling_rate=16000,
         max_duration=4,
         split="train",
         config=None,
-        max_text_length = 64,
+        max_text_length=64,
         mode="classification",
-        text_tokenizer_name = None,
+        text_tokenizer_name=None,
     ):
         """
         Args:
@@ -130,7 +131,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
 
         if text_tokenizer_name is None:
             raise NotImplementedError("Text tokenizer is required for this dataset")
-        
+
         self.text_tokenizer = AutoTokenizer.from_pretrained(text_tokenizer_name)
         self.max_text_length = max_text_length
 
@@ -212,10 +213,15 @@ class InTheWildDataset(torch.utils.data.Dataset):
         x = self.load_audio_tensor(idx)
         y = int(self.id_to_label[idx] == self.bonafide_label)
         author = self.id_to_author[idx]
-        transcription = self.text_to_input_dict(self.id_to_transcription[idx])
+        transcription = self.id_to_transcription[idx]
 
         if self.mode == "classification":
-            return {"x": x, "label": y, "author": author, "transcription": transcription}
+            return {
+                "x": x,
+                "label": y,
+                "author": author,
+                "transcription": transcription,
+            }
 
         elif self.mode == "triplet":
             id_p, id_n = self.get_triplets_from_anchor(idx)
@@ -224,7 +230,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
             x_n = self.load_audio_tensor(id_n)
 
             return {"anchor": x, "positive": x_p, "negative": x_n}
-        
+
         elif self.mode == "pair":
             a = x
             a_label = author
