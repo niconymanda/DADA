@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class SelfContrastiveLoss(nn.Module):
     def __init__(self, lambda_=0.1):
         super(SelfContrastiveLoss, self).__init__()

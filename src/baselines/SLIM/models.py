@@ -7,6 +7,7 @@ from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
 STYLE_MODEL = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
 LINGUISTICS_MODEL = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
 
+
 class CompressionModule(nn.Module):
     def __init__(
         self, K=23, F_in=1024, F_out=256, bottleneck_dropout=0.5, head_dropout=0.5
@@ -71,17 +72,15 @@ class SLIMStage1(nn.Module):
 
         self.self_contrastive_loss = SelfContrastiveLoss()
 
-    def load_(self, dir):
-        self.style_model.load_state_dict(torch.load(f"{dir}/style_model.pth"))
-        self.linguistics_model.load_state_dict(
-            torch.load(f"{dir}/linguistics_model.pth")
-        )
-        self.style_compression.load_state_dict(
-            torch.load(f"{dir}/style_compression.pth")
-        )
-        self.linguistics_compression.load_state_dict(
-            torch.load(f"{dir}/linguistics_compression.pth")
-        )
+    def load_(self, path):
+        # self.style_model.load_state_dict(torch.load(f"{dir}/style_model.pth"))
+        # self.linguistics_model.load_state_dict(
+        #     torch.load(f"{dir}/linguistics_model.pth")
+        # )
+        # self.style_compression.load_state_dict(
+        #     torch.load(f"{dir}/style_compression.pth")
+        # )
+        self.linguistics_compression.load_state_dict(torch.load(path))
 
     def save_(self, dir):
         torch.save(self.style_model.state_dict(), f"{dir}/style_model.pth")
@@ -92,21 +91,35 @@ class SLIMStage1(nn.Module):
             f"{dir}/linguistics_compression.pth",
         )
 
-    def forward(self, x):
-        out_style = self.style_model(x, output_hidden_states=True, return_dict=True)
-        out_linguistics = self.linguistics_model(
-            x, output_hidden_states=True, return_dict=True
-        )
+    def train_(self):
+        self.style_model.eval()
+        self.linguistics_model.eval()
+        self.style_compression.train()
+        self.linguistics_compression.train()
+    
+    def eval_(self):
+        self.style_model.eval()
+        self.linguistics_model.eval()
+        self.style_compression.eval()
+        self.linguistics_compression.eval()
 
-        x_style = torch.cat(
-            out_style.hidden_states[self.style_layers[0] : self.style_layers[1]], dim=-1
-        )
-        x_linguistics = torch.cat(
-            out_linguistics.hidden_states[
-                self.linguistics_layers[0] : self.linguistics_layers[1]
-            ],
-            dim=-1,
-        )
+    def forward(self, x):
+        with torch.no_grad():
+            print(x.size())
+            out_style = self.style_model(x, output_hidden_states=True, return_dict=True)
+            out_linguistics = self.linguistics_model(
+                x, output_hidden_states=True, return_dict=True
+            )
+
+            x_style = torch.cat(
+                out_style.hidden_states[self.style_layers[0] : self.style_layers[1]], dim=-1
+            )
+            x_linguistics = torch.cat(
+                out_linguistics.hidden_states[
+                    self.linguistics_layers[0] : self.linguistics_layers[1]
+                ],
+                dim=-1,
+            )
 
         x_style = self.style_compression(x_style)
         x_linguistics = self.linguistics_compression(x_linguistics)

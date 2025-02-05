@@ -68,10 +68,17 @@ def get_spoof_list(meta_dir, is_train=False, is_eval=False):
             file_list.append(key)
             d_meta[key] = 1 if label == "bonafide" else 0
         return d_meta, file_list
-    
+
 
 class CommonVoiceDataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir, split='train', sampling_rate=16000, max_duration=4, return_transcription=False):
+    def __init__(
+        self,
+        root_dir,
+        split="train",
+        sampling_rate=16000,
+        max_duration=4,
+        return_transcription=False,
+    ):
         """
         Args:
             root_dir (str): Root directory of the dataset
@@ -85,7 +92,7 @@ class CommonVoiceDataset(torch.utils.data.Dataset):
 
         metadata_file = f"{split}.tsv"
 
-        self.df = pd.read_csv(os.path.join(root_dir, metadata_file), sep='\t')
+        self.df = pd.read_csv(os.path.join(self.root_dir, metadata_file), sep="\t")
 
         self.clip_dir = os.path.join(self.root_dir, "clips")
 
@@ -122,7 +129,14 @@ class CommonVoiceDataset(torch.utils.data.Dataset):
 
 
 class RAVDESSDataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir, metadata_file="ravdess_config.yaml", split='train', sampling_rate=16000, max_duration=4):
+    def __init__(
+        self,
+        root_dir,
+        metadata_file="ravdess_config.yaml",
+        split="train",
+        sampling_rate=16000,
+        max_duration=4,
+    ):
         """
         Args:
             root_dir (str): Root directory of the dataset
@@ -153,8 +167,7 @@ class RAVDESSDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         x = self.load_audio_tensor(idx)
-        y = self.id_to_label[idx]
-        return x, y
+        return x
 
 
 class ASVSpoof21Dataset(torch.utils.data.Dataset):
@@ -333,5 +346,3 @@ class InTheWildDataset(torch.utils.data.Dataset):
 
         else:
             raise NotImplementedError(f"Mode {self.mode} not implemented")
-
-
