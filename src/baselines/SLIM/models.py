@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from speechbrain.lobes.models.ECAPA_TDNN import AttentiveStatisticsPooling
-
+from utils.losses import SelfContrastiveLoss
 from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
 
 STYLE_MODEL = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"

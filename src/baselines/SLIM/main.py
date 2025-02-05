@@ -18,6 +18,13 @@ def get_args():
     )
 
     parser.add_argument(
+        "--model_name",
+        type=str,
+        default="SLIM",
+        help="Name of the model to train",
+    )
+
+    parser.add_argument(
         "--batch_size", type=int, default=4, help="Batch size for training"
     )
 
@@ -37,7 +44,21 @@ def get_args():
     )
 
     parser.add_argument(
-        "--model_save_path",
+        "--cv_dir",
+        type=str,
+        default=None,
+        help="Path to the root directory of the CommonVoice dataset",
+    )
+
+    parser.add_argument(
+        "--ravdess_dir",
+        type=str,
+        default=None,
+        help="Path to the root directory of the RAVDESS dataset",
+    )
+
+    parser.add_argument(
+        "--model_save_dir",
         type=str,
         default="./models",
         help="Path to save the trained model",

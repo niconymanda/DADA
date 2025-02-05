@@ -1,0 +1,55 @@
+nohup: ignoring input
+2025-02-05 03:54:36.055924: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1738724076.077668 2097978 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1738724076.084723 2097978 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2025-02-05 03:54:36.106438: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+INFO:speechbrain.utils.quirks:Applied quirks (see `speechbrain.utils.quirks`): [disable_jit_profiling, allow_tf32]
+INFO:speechbrain.utils.quirks:Excluded quirks specified by the `SB_DISABLE_QUIRKS` environment (comma-separated list): []
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/transformers/convert_slow_tokenizer.py:561: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+  warnings.warn(
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/transformers/convert_slow_tokenizer.py:561: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+  warnings.warn(
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/transformers/configuration_utils.py:306: UserWarning: Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the `Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`.
+  warnings.warn(
+Some weights of Wav2Vec2ForCTC were not initialized from the model checkpoint at ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition and are newly initialized: ['lm_head.bias', 'lm_head.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/transformers/convert_slow_tokenizer.py:561: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+  warnings.warn(
+/home/infres/amathur-23/DADA/src/SpeechCLR/models.py:122: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  state_dict = torch.load(path)
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/sklearn/metrics/_ranking.py:1174: UndefinedMetricWarning: No negative samples in y_true, false positive value should be meaningless
+  warnings.warn(
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/infres/amathur-23/DADA/src/mid_fusion/main.py", line 76, in <module>
+    trainer.train()
+  File "/home/infres/amathur-23/DADA/src/mid_fusion/utils/training.py", line 199, in train
+    self.log_init()
+  File "/home/infres/amathur-23/DADA/src/mid_fusion/utils/training.py", line 149, in log_init
+    train_info = self.validate(split="train", verbose=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/infres/amathur-23/DADA/src/mid_fusion/utils/training.py", line 260, in validate
+    eer = equal_error_rate(label.cpu().numpy(), output.cpu().numpy())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/infres/amathur-23/DADA/src/mid_fusion/utils/metrics.py", line 19, in equal_error_rate
+    eer_threshold = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/scipy/optimize/_zeros_py.py", line 806, in brentq
+    r = _zeros._brentq(f, a, b, xtol, rtol, maxiter, args, full_output, disp)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/scipy/optimize/_zeros_py.py", line 102, in f_raise
+    raise err
+ValueError: The function value at x=0.0 is NaN; solver cannot continue.
+Using GPU: 2
+Loaded Dataset - 
+Training Samples : 2677
+Validation Samples : 3
+Logging to mid_fusion/runs/trial_with_pretrained
+Using device: cuda
+Loaded text model from /data/amathur-23/DADA/models/text/Deberta/final
+Loaded speech model from /data/amathur-23/DADA/models/SpeechEmbedder/tricos_p35_10v8/best_model.pth
+Getting Inital Metrics
+Evaluation on train [1/335] loss: 0.693, acc: 0.625, eer: 1.000   Evaluation on train [2/335] loss: 0.693, acc: 0.625, eer: 0.583   Evaluation on train [3/335] loss: 0.692, acc: 0.625, eer: 0.589   Evaluation on train [4/335] loss: 0.693, acc: 0.562, eer: 0.442   Evaluation on train [5/335] loss: 0.692, acc: 0.575, eer: 0.387   Evaluation on train [6/335] loss: 0.692, acc: 0.583, eer: 0.389   Evaluation on train [7/335] loss: 0.693, acc: 0.554, eer: 0.429   Evaluation on train [8/335] loss: 0.693, acc: 0.562, eer: 0.400   
