@@ -26,7 +26,7 @@ from mid_fusion.utils.metrics import equal_error_rate
 from SpeechCLR.utils.logging import Logger
 from SpeechCLR.models import SpeechEmbedder
 from authorship_attribution.model import AuthorshipLLM
-from mid_fusion.models import MidFuse
+from mid_fusion.models import MidFuse, LateFuse
 from sklearn.metrics import f1_score
 
 class MidFusionTrainer:
@@ -93,24 +93,35 @@ class MidFusionTrainer:
             )
             self.text_model.load_state_dict(
                 checkpoint["model_state_dict"]
-            )  # TODO @abhaydmathur : ensure this is how Ivi loads the model
+            )  
             print(f"Loaded text model from {args.text_model_path}")
         if args.speech_model_path is not None:
             self.speech_model.load_(args.speech_model_path)
             print(f"Loaded speech model from {args.speech_model_path}")
 
-        self.model = MidFuse(
-            text_model=self.text_model,
-            speech_model=self.speech_model,
-            text_features=1024,
-            speech_features=256,
-        )
 
-        if self.args.load_checkpoint is not None:
-            self.model.load_(self.args.load_checkpoint)
-            print(f"Loaded mid-fusion model from {self.args.load_checkpoint}")
+        if args.fusion_strategy == "mid":
+            self.model = MidFuse(
+                text_model=self.text_model,
+                speech_model=self.speech_model,
+                text_features=1024,
+                speech_features=256,
+            )
 
-        self.optimizer = optim.Adam(self.model.classifier.parameters(), lr=args.learning_rate)
+            if self.args.load_checkpoint is not None:
+                self.model.load_(self.args.load_checkpoint)
+                print(f"Loaded mid-fusion model from {self.args.load_checkpoint}")
+
+        elif args.fusion_strategy == "late":
+            self.model = LateFuse(
+                text_model=self.text_model,
+                speech_model=self.speech_model,
+                text_features=1024,
+                speech_features=256,
+                alpha = 0.5
+            )
+
+        self.optimizer = optim.Adam(self.model.trainable_parameters(), lr=args.learning_rate)
         self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode="min", factor=0.5, patience=3, verbose=True
         )  # TODO @abhaydmathur : mod
@@ -167,7 +178,7 @@ class MidFusionTrainer:
         self.save_to_log(self.args.log_dir, self.logger, log_val_info, 0)
 
     def train_epoch(self, epoch, verbose=True):
-        self.model.train()
+        self.model.train_()
         losses = []
         accs = []
         n_steps = len(self.train_loader)
@@ -198,17 +209,22 @@ class MidFusionTrainer:
                 )
         print()
 
+
         info = {
             "loss": np.mean(losses),
             "acc": np.mean(accs),
             "lr": self.optimizer.param_groups[0]["lr"],
         }
 
+
+        if self.args.fusion_strategy == "late":
+            info['alpha'] = self.model.alpha.item()
+
         return info
 
     def train(self):
         self.log_init()
-        self.model.train()
+        self.model.train_()
 
         for epoch in range(self.args.epochs):
             epoch_info = self.train_epoch(epoch)
@@ -237,7 +253,14 @@ class MidFusionTrainer:
                 self.best_epoch = epoch
 
             if self.latest_model_path is not None:
-                os.remove(self.latest_model_path)
+                try:
+                    os.remove(self.latest_model_path)
+                except:
+                    try:
+                        self.model.remove(self.latest_model_path)
+                    except:
+                        print(".")
+                    print("Could not remove latest model")
             self.latest_model_path = os.path.join(
                 self.model_save_path, f"latest_model_{epoch+1}eps.pth"
             )
@@ -247,7 +270,7 @@ class MidFusionTrainer:
                 break
 
     def validate(self, split="val", verbose=True):
-        self.model.eval()
+        self.model.eval_()
         losses = []
         accs = []
 

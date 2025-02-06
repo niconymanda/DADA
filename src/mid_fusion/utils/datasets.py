@@ -3,7 +3,6 @@ Dataset classes for
 1. ASVspoof 2021 dataset : ASVSpoof21Dataset
 2. In the Wild dataset : InTheWildDataset
 """
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -50,7 +49,9 @@ def get_spoof_list(meta_dir, is_train=False, is_eval=False):
 
     if is_train:
         for line in l_meta:
-            _, key, _, _, label = line.strip().split(" ")
+            # _, key, _, _, label = line.strip().split(" ")
+
+            key, label = line.split(" ")[1], line.split(" ")[5]
             file_list.append(key)
             d_meta[key] = 1 if label == "bonafide" else 0
         return d_meta, file_list
@@ -59,10 +60,10 @@ def get_spoof_list(meta_dir, is_train=False, is_eval=False):
         for line in l_meta:
             key = line.strip()
             file_list.append(key)
-        return file_list
+        return None, file_list
     else:
         for line in l_meta:
-            _, key, _, _, label = line.strip().split(" ")
+            key, label = line.split(" ")[1], line.split(" ")[5]
             file_list.append(key)
             d_meta[key] = 1 if label == "bonafide" else 0
         return d_meta, file_list
@@ -77,15 +78,16 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         is_eval=False,
         sampling_rate=16000,
         max_duration=4,
+        get_transcription=False,
     ):
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
         self.cut = self.sampling_rate * self.max_duration  # padding
-        self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
+        self.meta, self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
         self.root_dir = root_dir
 
     def __len__(self):
-        return len(self.data)
+        return len(self.list_IDs)
 
     def load_audio_tensor(self, key):
         filename = os.path.join(self.root_dir, f"flac/{key}.flac")
@@ -94,8 +96,9 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         return audio_tensor
 
     def __getitem__(self, idx):
-        y = self.list_IDs[idx]
-        x = self.load_audio_tensor(y)
+        f = self.list_IDs[idx]
+        y = self.meta[f]
+        x = self.load_audio_tensor(f)
         return x, y
 
 
