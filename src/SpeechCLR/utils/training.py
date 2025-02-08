@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torch.nn import TripletMarginLoss, TripletMarginWithDistanceLoss
-from utils.datasets import InTheWildDataset, ASVSpoof21Dataset
+from utils.datasets import InTheWildDataset, ASVSpoof21Dataset, VoxCeleb2Dataset
 from torch.utils.tensorboard import SummaryWriter
 
 from torch.optim.lr_scheduler import (  # TODO @abhaydmathur : Add more schedulers, move all schedulers to callbacks somehow?
@@ -90,57 +90,96 @@ class SpeechCLRTrainerVanilla:
 
         self.data_mode = self.loss_to_data_mode[args.loss_fn]
 
-        self.train_dataset = InTheWildDataset(
-            root_dir=args.data_path,
-            metadata_file="meta.csv",
-            include_spoofs=False,
-            bonafide_label="bona-fide",
-            filename_col="file",
-            sampling_rate=args.sampling_rate,
-            max_duration=args.max_duration,
-            split="train",
-            config=args.dataset_config,
-            mode=self.data_mode,
-        )
+        if self.args.dataset == "inthewild":
 
-        self.val_dataset = InTheWildDataset(
-            root_dir=args.data_path,
-            metadata_file="meta.csv",
-            include_spoofs=False,
-            bonafide_label="bona-fide",
-            filename_col="file",
-            sampling_rate=args.sampling_rate,
-            max_duration=args.max_duration,
-            split="val",
-            config=args.dataset_config,
-            mode=self.data_mode,
-        )
+            self.train_dataset = InTheWildDataset(
+                root_dir=args.data_path,
+                metadata_file="meta.csv",
+                include_spoofs=False,
+                bonafide_label="bona-fide",
+                filename_col="file",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                split="train",
+                config=args.dataset_config,
+                mode=self.data_mode,
+            )
 
-        self.train_vis_dataset = InTheWildDataset(
-            root_dir=args.data_path,
-            metadata_file="meta.csv",
-            include_spoofs=False,
-            bonafide_label="bona-fide",
-            filename_col="file",
-            sampling_rate=args.sampling_rate,
-            max_duration=args.max_duration,
-            split="train",
-            config=args.dataset_config,
-            mode="classification",
-        )
+            self.val_dataset = InTheWildDataset(
+                root_dir=args.data_path,
+                metadata_file="meta.csv",
+                include_spoofs=False,
+                bonafide_label="bona-fide",
+                filename_col="file",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                split="val",
+                config=args.dataset_config,
+                mode=self.data_mode,
+            )
 
-        self.vis_dataset = InTheWildDataset(
-            root_dir=args.data_path,
-            metadata_file="meta.csv",
-            include_spoofs=False,
-            bonafide_label="bona-fide",
-            filename_col="file",
-            sampling_rate=args.sampling_rate,
-            max_duration=args.max_duration,
-            split="val",
-            config=args.dataset_config,
-            mode="classification",
-        )
+            self.train_vis_dataset = InTheWildDataset(
+                root_dir=args.data_path,
+                metadata_file="meta.csv",
+                include_spoofs=False,
+                bonafide_label="bona-fide",
+                filename_col="file",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                split="train",
+                config=args.dataset_config,
+                mode="classification",
+            )
+
+            self.vis_dataset = InTheWildDataset(
+                root_dir=args.data_path,
+                metadata_file="meta.csv",
+                include_spoofs=False,
+                bonafide_label="bona-fide",
+                filename_col="file",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                split="val",
+                config=args.dataset_config,
+                mode="classification",
+            )
+
+        elif self.args.dataset == "asvspoof":
+            raise NotImplementedError
+        
+        elif self.args.dataset == "voxceleb2":
+            self.train_dataset = VoxCeleb2Dataset(
+                root_dir=args.data_path,
+                split="train",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                mode=self.data_mode,
+            )
+
+            self.val_dataset = VoxCeleb2Dataset(
+                root_dir=args.data_path,
+                split="val",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                mode=self.data_mode,
+            )
+
+            self.train_vis_dataset = VoxCeleb2Dataset(
+                root_dir=args.data_path,
+                split="train",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                mode="classification",
+            )
+
+            self.vis_dataset = VoxCeleb2Dataset(
+                root_dir=args.data_path,
+                split="val",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                mode="classification",
+            )
+            
 
         self.train_loader = DataLoader(
             self.train_dataset, batch_size=args.batch_size, shuffle=True

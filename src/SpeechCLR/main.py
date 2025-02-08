@@ -23,6 +23,15 @@ def get_args():
     parser.add_argument(
         "--learning_rate", type=float, default=1e-5, help="Learning rate for optimizer"
     )
+
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="inthewild",
+        help="Dataset to use for training",
+        choices=["commonvoice", "voxceleb2", "inthewild", "asvspoof19"],
+    )
+
     parser.add_argument(
         "--data_path",
         type=str,
