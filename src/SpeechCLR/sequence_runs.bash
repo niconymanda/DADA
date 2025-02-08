@@ -4,4 +4,6 @@
 
 # python3 main.py --data_path /home/infres/amathur-23/DADA/datasets/InTheWild --model_save_path /home/infres/amathur-23/DADA/src/models --dataset_config configs/data/inthewild_10v8.yaml --loss_fn triplet_cosine --gpu_id 1 --epochs=10 --log_dir=runs/tricos_p35_10v8 --batch_size=16 --at_lambda=0 --margin=0.35 --lr_scheduler cosine --early_stopping_metric=accuracy 
 
-python3 main.py --data_path /home/infres/amathur-23/DADA/datasets/InTheWild --model_save_path /home/infres/amathur-23/DADA/src/models --dataset_config configs/data/inthewild_all.yaml --loss_fn triplet_cosine --gpu_id 2 --epochs=1 --log_dir=runs/jlt --batch_size=16 --at_lambda=0 --margin=0.35 --lr_scheduler plateau --early_stopping_metric=accuracy --save_visualisations=True
+# python3 main.py --data_path /home/infres/amathur-23/DADA/datasets/InTheWild --model_save_path /home/infres/amathur-23/DADA/src/models --dataset_config configs/data/inthewild_all.yaml --loss_fn triplet_cosine --gpu_id 2 --epochs=1 --log_dir=runs/jlt --batch_size=16 --at_lambda=0 --margin=0.35 --lr_scheduler plateau --early_stopping_metric=accuracy --save_visualisations=True
+
+python3 main.py --dataset voxceleb2 --data_path /home/infres/amathur-23/DADA/datasets/VoxCeleb2 --model_save_path /home/infres/amathur-23/DADA/src/models --dataset_config configs/data/inthewild_all.yaml --loss_fn triplet_cosine --gpu_id 2 --epochs=1 --log_dir=runs/voxceleb_run1 --batch_size=16 --at_lambda=0 --margin=0.35 --lr_scheduler plateau --early_stopping_metric=accuracy --save_visualisations=True

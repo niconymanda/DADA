@@ -241,12 +241,13 @@ class InTheWildDataset(torch.utils.data.Dataset):
             raise NotImplementedError(f"Mode {self.mode} not implemented")
 
 class VoxCeleb2Dataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir, split="train", sampling_rate=16000, max_duration=4):
+    def __init__(self, root_dir, split="train", sampling_rate=16000, max_duration=4, mode="classification"):
         self.root_dir = root_dir
         self.split = split
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
         self.cut = self.sampling_rate * self.max_duration
+        self.mode = mode
 
         self.parquet_file = os.path.join(root_dir, f"{split}.parquet")
 
@@ -276,19 +277,19 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
 
         return positive_id, np.random.choice(negative_ids)
     
-    def __getitem__(self, idx, mode="classification"):
+    def __getitem__(self, idx):
         x = self.load_audio_tensor(idx)
         author = self.id_to_author[idx]
         transcription = self.id_to_transcription[idx]
 
-        if mode == "classification":
+        if self.mode == "classification":
             return {
                 "x": x,
                 "author": author,
                 "transcription": transcription,
             }
         
-        elif mode == "triplet":
+        elif self.mode == "triplet":
             id_p, id_n = self.get_triplets_from_anchor(idx)
 
             x_p = self.load_audio_tensor(id_p)
@@ -296,7 +297,7 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
 
             return {"anchor": x, "positive": x_p, "negative": x_n}
     
-        elif mode == "pair":
+        elif self.mode == "pair":
             a = x
             a_label = author
 
@@ -309,6 +310,3 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
         
         else:
             raise NotImplementedError(f"Mode {mode} not implemented")
-
-
-        return x
