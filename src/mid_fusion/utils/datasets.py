@@ -74,17 +74,34 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         self,
         root_dir,
         meta_dir,
-        is_train=False,
+        is_train=True,
         is_eval=False,
+        split='train',
         sampling_rate=16000,
         max_duration=4,
         get_transcription=False,
+        transcription_file="/home/infres/amathur-23/DADA/src/mid_fusion/asvspoof21_df_eval_transcriptions.csv",
     ):
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
         self.cut = self.sampling_rate * self.max_duration  # padding
         self.meta, self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
         self.root_dir = root_dir
+
+        self.get_transcription = get_transcription  
+        self.transcription_file = transcription_file
+        if self.transcription_file is not None:
+            self.transcription_df = pd.read_csv(self.transcription_file)
+            self.id_to_transcription = dict(
+                zip(self.transcription_df["key"], self.transcription_df["transcription"])
+            )
+            self.list_IDs = list(self.id_to_transcription.keys())
+
+        self.split = split
+        if self.split=='train':
+            self.list_IDs = self.list_IDs[:int(0.8*len(self.list_IDs))]
+        elif self.split=='val':
+            self.list_IDs = self.list_IDs[int(0.8*len(self.list_IDs)):]
 
     def __len__(self):
         return len(self.list_IDs)
@@ -99,7 +116,17 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         f = self.list_IDs[idx]
         y = self.meta[f]
         x = self.load_audio_tensor(f)
-        return x, y
+        
+        transcription = None
+        if self.get_transcription:
+            transcription = self.id_to_transcription[f]
+
+        return {
+            "x": x,
+            "label": y,
+            "transcription": transcription,
+        }
+
 
 
 class InTheWildDataset(torch.utils.data.Dataset):

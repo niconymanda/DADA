@@ -21,44 +21,76 @@ import os
 from tqdm import tqdm
 from torch import autograd
 from torch.utils.data import DataLoader
-from mid_fusion.utils.datasets import InTheWildDataset
+
+from torch.utils.data import Dataset, ConcatDataset
+
+from mid_fusion.utils.datasets import InTheWildDataset, ASVSpoof21Dataset
 from mid_fusion.utils.metrics import equal_error_rate
 from SpeechCLR.utils.logging import Logger
 from SpeechCLR.models import SpeechEmbedder
 from authorship_attribution.model import AuthorshipLLM
-from mid_fusion.models import MidFuse, LateFuse
+from mid_fusion.models import MidFuse, LateFuse, AudioHead
 from sklearn.metrics import f1_score
 
 class MidFusionTrainer:
     def __init__(self, args):
         self.args = args
-        self.train_dataset = InTheWildDataset(
-            root_dir=args.data_path,
-            metadata_file="wild_transcription_meta.json",
-            include_spoofs=True,
-            bonafide_label="bona-fide",
-            filename_col="file",
-            sampling_rate=args.sampling_rate,
-            max_duration=args.max_duration,
-            split="train",
-            config=args.dataset_config,
-            text_tokenizer_name=self.args.text_model_name,
-            mode="classification",
-        )
 
-        self.val_dataset = InTheWildDataset(
-            root_dir=args.data_path,
-            metadata_file="wild_transcription_meta.json",
-            include_spoofs=True,
-            bonafide_label="bona-fide",
-            filename_col="file",
-            sampling_rate=args.sampling_rate,
-            max_duration=args.max_duration,
-            split="val",
-            config=args.dataset_config,
-            text_tokenizer_name=self.args.text_model_name,
-            mode="classification",
-        )
+        if args.dataset == "inthewild":
+            self.train_dataset = InTheWildDataset(
+                root_dir=args.data_path,
+                metadata_file="wild_transcription_meta.json",
+                include_spoofs=True,
+                bonafide_label="bona-fide",
+                filename_col="file",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                split="train",
+                config=args.dataset_config,
+                text_tokenizer_name=self.args.text_model_name,
+                mode="classification",
+            )
+
+            self.val_dataset = InTheWildDataset(
+                root_dir=args.data_path,
+                metadata_file="wild_transcription_meta.json",
+                include_spoofs=True,
+                bonafide_label="bona-fide",
+                filename_col="file",
+                sampling_rate=args.sampling_rate,
+                max_duration=args.max_duration,
+                split="val",
+                config=args.dataset_config,
+                text_tokenizer_name=self.args.text_model_name,
+                mode="classification",
+            )
+
+        elif args.dataset == "asvspoof":
+            self.train_dataset = ASVSpoof21Dataset(
+                    root_dir = args.asv_root_dir,
+                    meta_dir = args.asv_meta_dir,
+                    is_train=True,
+                    is_eval=False,
+                    split='train',
+                    sampling_rate=16000,
+                    max_duration=4,
+                    get_transcription=True,
+                    transcription_file="/home/infres/amathur-23/DADA/src/mid_fusion/asvspoof21_df_eval_transcriptions.csv",
+    
+            )
+
+            self.val_dataset = ASVSpoof21Dataset(
+                    root_dir = args.asv_root_dir,
+                    meta_dir = args.asv_meta_dir,
+                    is_train=True,
+                    is_eval=False,
+                    split='val',
+                    sampling_rate=16000,
+                    max_duration=4,
+                    get_transcription=True,
+                    transcription_file="/home/infres/amathur-23/DADA/src/mid_fusion/asvspoof21_df_eval_transcriptions.csv",
+            )
+
 
         print("Loaded Dataset - ")
         print(f"Training Samples : {len(self.train_dataset)}")
@@ -120,6 +152,13 @@ class MidFusionTrainer:
                 speech_features=256,
                 alpha = 0.5
             )
+
+        elif args.fusion_strategy == "audio":
+            self.model = AudioHead(
+                speech_model=self.speech_model,
+                speech_features=256
+            )
+
 
         self.optimizer = optim.Adam(self.model.trainable_parameters(), lr=args.learning_rate)
         self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(

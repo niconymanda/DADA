@@ -18,12 +18,12 @@ class MidFuse(nn.Module):
             nn.Sigmoid()
         )
 
-    def train(self):
+    def train_(self):
         self.text_model.eval()
         self.speech_model.eval()
         self.classifier.train()
 
-    def eval(self):
+    def eval_(self):
         self.text_model.eval()
         self.speech_model.eval()
         self.classifier.eval()
@@ -45,6 +45,9 @@ class MidFuse(nn.Module):
         x = self.classifier(features)
         return x
 
+class ConditionalLateFuse(nn.Module):
+    def __init__(self, text_model, speech_model, text_features, speech_features, alpha=0.5):
+        pass
 
 class LateFuse(nn.Module):
     def __init__(self, text_model, speech_model, text_features, speech_features, alpha=0.5):
@@ -112,6 +115,41 @@ class LateFuse(nn.Module):
 
         return y      
 
+class AudioHead(torch.nn.Module):
+    def __init__(self, speech_model, speech_features):
+        super(AudioHead, self).__init__()
+        self.speech_model = speech_model
+        self.speech_features = speech_features
+
+        self.audio_head = nn.Sequential(
+            nn.Linear(self.speech_features, 512),
+            nn.Linear(512, 256),
+            nn.Linear(256, 1),
+            nn.Sigmoid()
+        )
+
+    def trainable_parameters(self):
+        return self.audio_head.parameters()
+
+    def train_(self):
+        self.speech_model.eval()
+        self.audio_head.train()
+
+    def eval_(self):
+        self.speech_model.eval()
+        self.audio_head.eval()
+
+    def save_(self, path):
+        torch.save(self.audio_head.state_dict(), path)
+    
+    def load_(self, path):
+        self.audio_head.load_state_dict(torch.load(path, weights_only=True))
+
+    def forward(self, text_input, speech_input):
+        with torch.no_grad():
+            speech_features = self.speech_model(speech_input, mode='classification')
+        y_audio = self.audio_head(speech_features)
+        return y_audio
 
 
 

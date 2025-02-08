@@ -37,7 +37,10 @@ def get_args():
     parser.add_argument('--mlp_layers', type=int, default=2, help='Number of layers in MLP head')
     parser.add_argument('--hidden_layers', type=lambda s: [int(item) for item in s.split(',')], default="-1", help='List of hidden layer sizes for the model')
     # /home/infres/iivanova-23/DADA/iivanova-23/models/google-t5/final
-    parser.add_argument('--fusion_strategy', type=str, choices=['mid', 'late'], default='mid', help='Fusion strategy to use')
+    parser.add_argument('--fusion_strategy', type=str, choices=['mid', 'conditional_late', 'late', 'audio'], default='mid', help='Fusion strategy to use')
+    parser.add_argument('--dataset', type=str, choices=['asvspoof', 'inthewild'], default='inthewild', help='Dataset to use for training')
+    parser.add_argument('--asv_root_dir', type=str, default='/data/amathur-23/DADA/ASVspoof2021_DF_eval', help='Root directory for ASV data')
+    parser.add_argument('--asv_meta_dir', type=str, default='/data/amathur-23/DADA/ASVspoof2021_DF_eval/keys/DF/CM/trial_metadata.txt', help='Metadata directory for ASV data')
     return parser.parse_args()
 
 def load_config_text_model(args):
