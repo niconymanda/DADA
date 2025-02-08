@@ -34,7 +34,8 @@ class SquaredSimilarity(nn.Module):
             return loss.sum()
 
         return loss
-    
+
+
 class TripletSquaredSimilarity(nn.Module):
     """
     Squared Similarity Loss from
@@ -53,7 +54,7 @@ class TripletSquaredSimilarity(nn.Module):
         loss_same = pos_dist
         loss_diff = 1 - neg_dist
 
-        loss = (loss_same + loss_diff)/2
+        loss = (loss_same + loss_diff) / 2
 
         if self.reduction == "mean":
             return loss.mean()

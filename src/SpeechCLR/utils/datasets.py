@@ -65,7 +65,8 @@ def get_spoof_list19(meta_dir, is_train=False, is_eval=False):
             file_list.append(key)
             d_meta[key] = 1 if label == "bonafide" else 0
         return d_meta, file_list
-    
+
+
 def get_spoof_list(meta_dir, is_train=False, is_eval=False):
     d_meta = {}
     file_list = []
@@ -240,34 +241,46 @@ class InTheWildDataset(torch.utils.data.Dataset):
         else:
             raise NotImplementedError(f"Mode {self.mode} not implemented")
 
+
 class VoxCeleb2Dataset(torch.utils.data.Dataset):
-    def __init__(self, root_dir, split="train", sampling_rate=16000, max_duration=4, mode="classification"):
+    def __init__(
+        self,
+        root_dir,
+        split="train",
+        sampling_rate=16000,
+        max_duration=4,
+        mode="classification",
+        text_only=False,
+    ):
         self.root_dir = root_dir
         self.split = split
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
         self.cut = self.sampling_rate * self.max_duration
         self.mode = mode
+        self.text_only = text_only
 
         self.parquet_file = os.path.join(root_dir, f"{split}.parquet")
 
         self.df = pd.read_parquet(self.parquet_file)
 
-        self.id_to_audio = dict(zip(enumerate(self.df['audio_path'])))
-        self.id_to_author = dict(zip(enumerate(self.df['speaker_id'])))
-        self.id_to_transcription = dict(zip(enumerate(self.df['transcription'])))
+        self.id_to_audio = dict(zip(enumerate(self.df["audio_path"])))
+        self.id_to_author = dict(zip(enumerate(self.df["speaker_id"])))
+        self.id_to_transcription = dict(zip(enumerate(self.df["transcription"])))
 
     def __len__(self):
         return len(self.df)
 
     def load_audio_tensor(self, idx):
         audio_dict = self.id_to_audio[idx]
-        audio_arr = audio_dict['array']
-        sr = audio_dict['sampling_rate']
-        audio_arr = librosa.resample(audio_arr, orig_sr=sr, target_sr=self.sampling_rate)
+        audio_arr = audio_dict["array"]
+        sr = audio_dict["sampling_rate"]
+        audio_arr = librosa.resample(
+            audio_arr, orig_sr=sr, target_sr=self.sampling_rate
+        )
         audio_tensor = torch.tensor(pad(audio_arr, self.cut)).float()
         return audio_tensor
-    
+
     def get_triplets_from_anchor(self, anchor_idx):
         anchor_author = self.id_to_author[anchor_idx]
         positive_id = np.random.choice(
@@ -276,27 +289,35 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
         negative_ids = np.where(self.df["speaker_id"].values != anchor_author)[0]
 
         return positive_id, np.random.choice(negative_ids)
-    
+
     def __getitem__(self, idx):
-        x = self.load_audio_tensor(idx)
+        if not self.text_only:  
+            x = self.load_audio_tensor(idx)
         author = self.id_to_author[idx]
         transcription = self.id_to_transcription[idx]
 
         if self.mode == "classification":
             return {
-                "x": x,
+                "x": x if not self.text_only else np.array([]),
                 "author": author,
                 "transcription": transcription,
             }
-        
+
         elif self.mode == "triplet":
             id_p, id_n = self.get_triplets_from_anchor(idx)
+
+            if self.text_only:
+                return {
+                    "anchor": self.id_to_transcription[idx],
+                    "positive": self.id_to_transcription[id_p],
+                    "negative": self.id_to_transcription[id_n],
+                }
 
             x_p = self.load_audio_tensor(id_p)
             x_n = self.load_audio_tensor(id_n)
 
             return {"anchor": x, "positive": x_p, "negative": x_n}
-    
+
         elif self.mode == "pair":
             a = x
             a_label = author
@@ -307,6 +328,6 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
             b_label = self.id_to_author[idx2]
 
             return {"a": a, "b": b, "a_label": a_label, "b_label": b_label}
-        
+
         else:
-            raise NotImplementedError(f"Mode {mode} not implemented")
+            raise NotImplementedError(f"Mode {self.mode} not implemented")

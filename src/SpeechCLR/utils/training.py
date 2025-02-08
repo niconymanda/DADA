@@ -24,7 +24,7 @@ from utils.datasets import InTheWildDataset, ASVSpoof21Dataset, VoxCeleb2Dataset
 from torch.utils.tensorboard import SummaryWriter
 
 from torch.optim.lr_scheduler import (  # TODO @abhaydmathur : Add more schedulers, move all schedulers to callbacks somehow?
-    ReduceLROnPlateau, 
+    ReduceLROnPlateau,
     CosineAnnealingWarmRestarts,
     StepLR,
 )
@@ -54,19 +54,23 @@ class SpeechCLRTrainerVanilla:
 
         if self.args.load_path is not None:
             print(f"Loading {self.args.model_name} weights from {self.args.load_path}")
-            if self.args.load_checkpoint == 'best':
-                load_ckpt = os.path.join(self.args.load_path, 'best_model.pth')
-            elif self.args.load_checkpoint == 'latest':
-                if self.args.load_path[-1] == '/':
+            if self.args.load_checkpoint == "best":
+                load_ckpt = os.path.join(self.args.load_path, "best_model.pth")
+            elif self.args.load_checkpoint == "latest":
+                if self.args.load_path[-1] == "/":
                     self.args.load_path = self.args.load_path[:-1]
-                load_ckpts = glob.glob(f'{self.args.load_path}/latest_model_*.pth')
+                load_ckpts = glob.glob(f"{self.args.load_path}/latest_model_*.pth")
                 if len(load_ckpts) == 0:
-                    raise FileNotFoundError(f"No checkpoints found in {self.args.load_path}")
+                    raise FileNotFoundError(
+                        f"No checkpoints found in {self.args.load_path}"
+                    )
                 load_ckpt = load_ckpts[0]
             else:
-                raise NotImplementedError(f"Checkpoint {self.args.load_checkpoint} not implemented")
+                raise NotImplementedError(
+                    f"Checkpoint {self.args.load_checkpoint} not implemented"
+                )
             self.model.load_(load_ckpt)
-        
+
         self.loss_to_data_mode = {
             "triplet": "triplet",
             "triplet_cosine": "triplet",
@@ -146,7 +150,7 @@ class SpeechCLRTrainerVanilla:
 
         elif self.args.dataset == "asvspoof":
             raise NotImplementedError
-        
+
         elif self.args.dataset == "voxceleb2":
             self.train_dataset = VoxCeleb2Dataset(
                 root_dir=args.data_path,
@@ -179,7 +183,6 @@ class SpeechCLRTrainerVanilla:
                 max_duration=args.max_duration,
                 mode="classification",
             )
-            
 
         self.train_loader = DataLoader(
             self.train_dataset, batch_size=args.batch_size, shuffle=True
@@ -193,7 +196,6 @@ class SpeechCLRTrainerVanilla:
         self.vis_loader = DataLoader(
             self.vis_dataset, batch_size=args.batch_size, shuffle=True
         )
-
 
         self.logger = Logger(log_dir=args.log_dir)
 
@@ -210,21 +212,21 @@ class SpeechCLRTrainerVanilla:
             )
         elif self.args.lr_scheduler == "cosine":
             self.lr_scheduler = CosineAnnealingWarmRestarts(
-                self.optimizer, T_0=10, T_mult=2                
-            )  
-        elif self.args.lr_scheduler == "step": 
-            self.lr_scheduler = StepLR(
-                self.optimizer, step_size=10, gamma=0.1
+                self.optimizer, T_0=10, T_mult=2
             )
+        elif self.args.lr_scheduler == "step":
+            self.lr_scheduler = StepLR(self.optimizer, step_size=10, gamma=0.1)
         else:
-            raise NotImplementedError(f"LR scheduler {args.lr_scheduler} not implemented")
-
+            raise NotImplementedError(
+                f"LR scheduler {args.lr_scheduler} not implemented"
+            )
 
         # Ensure self.args.model_save_path exists
         self.model_name = self.args.model_name
-        self.model_save_path = os.path.join(self.args.model_save_path, self.model_name, self.args.log_dir.split("/")[-1])    
+        self.model_save_path = os.path.join(
+            self.args.model_save_path, self.model_name, self.args.log_dir.split("/")[-1]
+        )
         os.makedirs(self.model_save_path, exist_ok=True)
-
 
         self.best_model_path = None
         self.latest_model_path = None
@@ -242,7 +244,7 @@ class SpeechCLRTrainerVanilla:
     def log_init(self):
 
         print("Getting initial metrics.")
-        
+
         train_info = self.validate(split="train", verbose=True, limit_samples=True)
 
         if isinstance(self.criterion, AdaTriplet):
@@ -254,7 +256,7 @@ class SpeechCLRTrainerVanilla:
 
         val_info = self.validate(split="val", verbose=True, limit_samples=True)
 
-        log_val_info = {f"val/{k}": v for k, v in val_info.items()} 
+        log_val_info = {f"val/{k}": v for k, v in val_info.items()}
         self.save_to_log(self.args.log_dir, self.logger, log_val_info, 0)
 
         self.training_history[0] = {
@@ -263,8 +265,8 @@ class SpeechCLRTrainerVanilla:
         }
 
         if self.args.save_visualisations:
-            self.log_cluster_visualisation(0, split='val', n_samples=1000)
-            self.log_cluster_visualisation(0, split='train', n_samples=1000)
+            self.log_cluster_visualisation(0, split="val", n_samples=1000)
+            self.log_cluster_visualisation(0, split="train", n_samples=1000)
 
     def train(self):
         self.log_init()
@@ -272,18 +274,18 @@ class SpeechCLRTrainerVanilla:
         for epoch in range(self.args.epochs):
             epoch_info = self.train_epoch(epoch)
             log_epoch_info = {f"train/{k}": v for k, v in epoch_info.items()}
-            self.save_to_log(self.args.log_dir, self.logger, log_epoch_info, epoch+1)
+            self.save_to_log(self.args.log_dir, self.logger, log_epoch_info, epoch + 1)
 
             val_info = self.validate()
             log_val_info = {f"val/{k}": v for k, v in val_info.items()}
-            self.save_to_log(self.args.log_dir, self.logger, log_val_info, epoch+1)
+            self.save_to_log(self.args.log_dir, self.logger, log_val_info, epoch + 1)
 
             if self.args.lr_scheduler == "plateau":
                 self.lr_scheduler.step(val_info["loss"])
             elif self.args.lr_scheduler == "step":
                 self.lr_scheduler.step()
 
-            self.training_history[epoch+1] = {
+            self.training_history[epoch + 1] = {
                 "train": epoch_info,
                 "val": val_info,
             }
@@ -291,22 +293,28 @@ class SpeechCLRTrainerVanilla:
             # Save best and latest models
 
             if self.best_model_path is None or self.is_best_model(val_info):
-                self.best_model_path = os.path.join(self.model_save_path, "best_model.pth")
+                self.best_model_path = os.path.join(
+                    self.model_save_path, "best_model.pth"
+                )
                 self.save(self.best_model_path)
                 self.best_epoch = epoch
-            
+
             if self.latest_model_path is not None:
-                try: os.remove(self.latest_model_path)
-                except Exception as e: print(e)
-            self.latest_model_path = os.path.join(self.model_save_path, f"latest_model_{epoch+1}eps.pth")
+                try:
+                    os.remove(self.latest_model_path)
+                except Exception as e:
+                    print(e)
+            self.latest_model_path = os.path.join(
+                self.model_save_path, f"latest_model_{epoch+1}eps.pth"
+            )
             self.save(self.latest_model_path)
 
             if self.execute_callbacks(epoch):
                 break
 
             if self.args.save_visualisations:
-                self.log_cluster_visualisation(epoch+1, split='train', n_samples=1000)
-                self.log_cluster_visualisation(epoch+1, split='val', n_samples=1000)
+                self.log_cluster_visualisation(epoch + 1, split="train", n_samples=1000)
+                self.log_cluster_visualisation(epoch + 1, split="val", n_samples=1000)
 
     # @staticmethod
     def save_to_log(self, logdir, logger, info, epoch, w_summary=False, model=None):
@@ -341,16 +349,19 @@ class SpeechCLRTrainerVanilla:
             loss = self.criterion(
                 output["anchor"], output["positive"], output["negative"]
             )
-                
+
             loss.backward(retain_graph=self.args.loss_fn == "ada_triplet")
 
             self.optimizer.step()
-            
+
             if self.args.lr_scheduler == "cosine":
                 self.lr_scheduler.step(epoch + i / n_steps)
 
             losses.append(loss.item())
-            print(f"\rEpoch {epoch + 1} [{i + 1}/{n_steps}] loss: {np.mean(losses):.3f}    ", end="")
+            print(
+                f"\rEpoch {epoch + 1} [{i + 1}/{n_steps}] loss: {np.mean(losses):.3f}    ",
+                end="",
+            )
         print()
 
         info = {
@@ -364,14 +375,14 @@ class SpeechCLRTrainerVanilla:
 
         return info
 
-    def validate(self, split="val", verbose=True, limit_samples = False):
+    def validate(self, split="val", verbose=True, limit_samples=False):
         self.model.eval()
         losses = []
         accs = []
 
-        if split=="train":
+        if split == "train":
             loader = self.train_loader
-        elif split=='val':
+        elif split == "val":
             loader = self.val_loader
         else:
             raise ValueError("Invalid split")
@@ -379,17 +390,17 @@ class SpeechCLRTrainerVanilla:
         if limit_samples:
             n_samples = 1000
             n_batches = n_samples // loader.batch_size
-        
+
         with torch.no_grad():
             for i, input in enumerate(loader):
                 if self.data_mode == "triplet":
                     input = {k: v.to(self.device) for k, v in input.items()}
                 elif self.data_mode == "classification":
-                    input['x'] = input['x'].to(self.device)
-                    input['label'] = input['label'].to(self.device)
+                    input["x"] = input["x"].to(self.device)
+                    input["label"] = input["label"].to(self.device)
                 elif self.data_mode == "pair":
-                    input['a'] = input['a'].to(self.device)
-                    input['b'] = input['b'].to(self.device)
+                    input["a"] = input["a"].to(self.device)
+                    input["b"] = input["b"].to(self.device)
                 output = self.model(input)
                 loss = self.criterion(
                     output["anchor"], output["positive"], output["negative"], eval=True
@@ -405,25 +416,26 @@ class SpeechCLRTrainerVanilla:
                         f"\rEvaluation on {split} [{i+1}/{n_batches}]: loss: {np.mean(losses):.3f}, abx_acc: {np.mean(accs):.3f}     ",
                         end="",
                     )
-                if limit_samples and (i+1) >= n_batches:
+                if limit_samples and (i + 1) >= n_batches:
                     break
-        if verbose: print()
+        if verbose:
+            print()
         return {"loss": np.mean(losses), "abx_acc": np.mean(accs)}
-    
-    def log_cluster_visualisation(self, epoch, split = 'val', n_samples=1000):
+
+    def log_cluster_visualisation(self, epoch, split="val", n_samples=1000):
         self.model.eval()
         feats = []
         labels = []
-        if split == 'train':
+        if split == "train":
             loader = self.train_vis_loader
-        elif split == 'val':
+        elif split == "val":
             loader = self.vis_loader
         n_batches = n_samples // loader.batch_size
         with torch.no_grad():
             for i, input in enumerate(loader):
-                input['x'] = input['x'].to(self.device)
-                batch_feats = self.model(input, mode='classification')
-                batch_labels = input['author']
+                input["x"] = input["x"].to(self.device)
+                batch_feats = self.model(input, mode="classification")
+                batch_labels = input["author"]
                 feats.append(batch_feats)
                 labels.extend(batch_labels)
                 print(f"\rGetting embeddings for {split} [{i+1}/{n_batches}]", end="")
@@ -449,7 +461,7 @@ class SpeechCLRTrainerVanilla:
                 print(f"Early Stopping after {epoch} epochs")
                 return True
         return False
-    
+
     def is_best_model(self, val_info):
         if self.args.early_stopping_metric == "loss":
             k = val_info["loss"] < self.best_loss

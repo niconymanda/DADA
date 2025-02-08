@@ -9,8 +9,8 @@ def split_by_samples(dataset, max_train_samples, max_val_samples):
     dataset = dataset.sample(frac=1).reset_index(drop=True)  # Shuffle the dataset
 
     train_data = dataset[:max_train_samples]
-    val_data = dataset[max_train_samples:max_train_samples + max_val_samples]
-    test_data = dataset[max_train_samples + max_val_samples:]
+    val_data = dataset[max_train_samples : max_train_samples + max_val_samples]
+    test_data = dataset[max_train_samples + max_val_samples :]
 
     train_files = train_data["file"].values
     val_files = val_data["file"].values
@@ -133,11 +133,10 @@ def main():
 
     dataset = pd.read_csv(os.path.join(args.data_path, "meta.csv"))
 
-
     if args.max_train_samples is None:
         args.max_train_samples = int(args.train_ratio * len(dataset))
         args.max_val_samples = int(args.val_ratio * len(dataset))
-    else :
+    else:
         if args.max_val_samples is None:
             args.max_val_samples = int(args.val_ratio * len(dataset))
 
