@@ -25,11 +25,18 @@ def get_args():
     )
 
     parser.add_argument(
-        "--dataset",
+        "--datasets",
         type=str,
-        default="inthewild",
-        help="Dataset to use for training",
-        choices=["commonvoice", "voxceleb2", "inthewild", "asvspoof19"],
+        nargs="+",
+        default=["inthewild"],
+        help="List of datasets to use for training",
+        choices=[
+            "commonvoice",
+            "voxceleb2",
+            "inthewild",
+            "asvspoof19",
+            "ravdess",
+        ],
     )
 
     parser.add_argument(
@@ -77,9 +84,7 @@ def get_args():
         default=0.01,
         help="Threshold for early stopping",
     )
-    parser.add_argument(
-        "--triplet_margin", type=float, default=1.0, help="Margin for triplet loss"
-    )
+    
     parser.add_argument(
         "--loss_fn",
         type=str,

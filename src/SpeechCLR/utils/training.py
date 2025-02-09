@@ -18,9 +18,16 @@ from torch import autograd
 import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, ConcatDataset
 from torch.nn import TripletMarginLoss, TripletMarginWithDistanceLoss
-from utils.datasets import InTheWildDataset, ASVSpoof21Dataset, VoxCeleb2Dataset
+from utils.datasets import (
+    InTheWildDataset,
+    ASVSpoof21Dataset,
+    VoxCeleb2Dataset,
+    CommonVoiceDataset,
+    RAVDESSDataset,
+)
+
 from torch.utils.tensorboard import SummaryWriter
 
 from torch.optim.lr_scheduler import (  # TODO @abhaydmathur : Add more schedulers, move all schedulers to callbacks somehow?
@@ -42,6 +49,7 @@ from utils.logging import Logger
 from utils.visualisation import get_tsne_img, get_tsne_fig
 
 from models import SpeechEmbedder
+import yaml
 
 
 class SpeechCLRTrainerVanilla:
@@ -94,95 +102,210 @@ class SpeechCLRTrainerVanilla:
 
         self.data_mode = self.loss_to_data_mode[args.loss_fn]
 
-        if self.args.dataset == "inthewild":
+        self.train_datasets_list = []
+        self.train_vis_datasets_list = []
+        self.val_datasets_list = []
+        self.vis_datasets_list = []
 
-            self.train_dataset = InTheWildDataset(
-                root_dir=args.data_path,
-                metadata_file="meta.csv",
-                include_spoofs=False,
-                bonafide_label="bona-fide",
-                filename_col="file",
-                sampling_rate=args.sampling_rate,
-                max_duration=args.max_duration,
-                split="train",
-                config=args.dataset_config,
-                mode=self.data_mode,
+        if "inthewild" in self.args.datasets:
+
+            self.train_datasets.append(
+                InTheWildDataset(
+                    root_dir=os.path.join(args.data_path, "InTheWild"),
+                    metadata_file="meta.csv",
+                    include_spoofs=False,
+                    bonafide_label="bona-fide",
+                    filename_col="file",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    split="train",
+                    config=args.dataset_config,
+                    mode=self.data_mode,
+                )
             )
 
-            self.val_dataset = InTheWildDataset(
-                root_dir=args.data_path,
-                metadata_file="meta.csv",
-                include_spoofs=False,
-                bonafide_label="bona-fide",
-                filename_col="file",
-                sampling_rate=args.sampling_rate,
-                max_duration=args.max_duration,
-                split="val",
-                config=args.dataset_config,
-                mode=self.data_mode,
+            self.val_datasets_list.append(
+                InTheWildDataset(
+                    root_dir=os.path.join(args.data_path, "InTheWild"),
+                    metadata_file="meta.csv",
+                    include_spoofs=False,
+                    bonafide_label="bona-fide",
+                    filename_col="file",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    split="val",
+                    config=args.dataset_config,
+                    mode=self.data_mode,
+                )
             )
 
-            self.train_vis_dataset = InTheWildDataset(
-                root_dir=args.data_path,
-                metadata_file="meta.csv",
-                include_spoofs=False,
-                bonafide_label="bona-fide",
-                filename_col="file",
-                sampling_rate=args.sampling_rate,
-                max_duration=args.max_duration,
-                split="train",
-                config=args.dataset_config,
-                mode="classification",
+            self.train_vis_datasets_list.append(
+                InTheWildDataset(
+                    root_dir=os.path.join(args.data_path, "InTheWild"),
+                    metadata_file="meta.csv",
+                    include_spoofs=False,
+                    bonafide_label="bona-fide",
+                    filename_col="file",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    split="train",
+                    config=args.dataset_config,
+                    mode="classification",
+                )
             )
 
-            self.vis_dataset = InTheWildDataset(
-                root_dir=args.data_path,
-                metadata_file="meta.csv",
-                include_spoofs=False,
-                bonafide_label="bona-fide",
-                filename_col="file",
-                sampling_rate=args.sampling_rate,
-                max_duration=args.max_duration,
-                split="val",
-                config=args.dataset_config,
-                mode="classification",
+            self.vis_datasets_list.append(
+                InTheWildDataset(
+                    root_dir=os.path.join(args.data_path, "InTheWild"),
+                    metadata_file="meta.csv",
+                    include_spoofs=False,
+                    bonafide_label="bona-fide",
+                    filename_col="file",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    split="val",
+                    config=args.dataset_config,
+                    mode="classification",
+                )
             )
 
-        elif self.args.dataset == "asvspoof":
+        if "asvspoof" in self.args.datasets:
             raise NotImplementedError
 
-        elif self.args.dataset == "voxceleb2":
-            self.train_dataset = VoxCeleb2Dataset(
-                root_dir=args.data_path,
-                split="train",
-                sampling_rate=args.sampling_rate,
-                max_duration=args.max_duration,
-                mode=self.data_mode,
+        if "voxceleb2" in self.args.datasets:
+            self.train_datasets_list.append(
+                VoxCeleb2Dataset(
+                    root_dir=os.path.join(args.data_path, 'VoxCeleb2'),
+                    split="train",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode=self.data_mode,
+                    max_samples=3000,
+                )
             )
 
-            self.val_dataset = VoxCeleb2Dataset(
-                root_dir=args.data_path,
-                split="val",
-                sampling_rate=args.sampling_rate,
-                max_duration=args.max_duration,
-                mode=self.data_mode,
+            self.val_datasets_list.append(
+                VoxCeleb2Dataset(
+                    root_dir=os.path.join(args.data_path, 'VoxCeleb2'),
+                    split="val",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode=self.data_mode,
+                    max_samples=1000,
+                )
             )
 
-            self.train_vis_dataset = VoxCeleb2Dataset(
-                root_dir=args.data_path,
-                split="train",
-                sampling_rate=args.sampling_rate,
-                max_duration=args.max_duration,
-                mode="classification",
+            self.train_vis_datasets_list.append(
+                VoxCeleb2Dataset(
+                    root_dir=os.path.join(args.data_path, 'VoxCeleb2'),
+                    split="train",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode="classification",
+                    max_samples=1000,
+                )
             )
 
-            self.vis_dataset = VoxCeleb2Dataset(
-                root_dir=args.data_path,
-                split="val",
-                sampling_rate=args.sampling_rate,
-                max_duration=args.max_duration,
-                mode="classification",
+            self.vis_datasets_list.append(
+                VoxCeleb2Dataset(
+                    root_dir=os.path.join(args.data_path, 'VoxCeleb2'),
+                    split="val",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode="classification",
+                    max_samples=1000,
+                )
             )
+
+        if "commonvoice" in self.args.datasets:
+            self.train_datasets_list.append(
+                CommonVoiceDataset(
+                    root_dir=os.path.join(args.data_path, "CommonVoice"),
+                    split="train",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode=self.data_mode,
+                )
+            )
+
+            self.val_datasets_list.append(
+                CommonVoiceDataset(
+                    root_dir=os.path.join(args.data_path, "CommonVoice"),
+                    split="val",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode=self.data_mode,
+                )
+            )
+
+            self.train_vis_datasets_list.append(
+                CommonVoiceDataset(
+                    root_dir=os.path.join(args.data_path, "CommonVoice"),
+                    split="train",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode="classification",
+                )
+            )
+
+            self.vis_datasets_list.append(
+                CommonVoiceDataset(
+                    root_dir=os.path.join(args.data_path, "CommonVoice"),
+                    split="val",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode="classification",
+                )
+            )
+
+        if "ravdess" in self.args.datasets:
+            self.train_datasets_list.append(
+                RAVDESSDataset(
+                    root_dir=os.path.join(args.data_path, "RAVDESS"),
+                    split="train",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode=self.data_mode,
+                )
+            )
+
+            self.val_datasets_list.append(
+                RAVDESSDataset(
+                    root_dir=os.path.join(args.data_path, "RAVDESS"),
+                    split="val",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode=self.data_mode,
+                )
+            )
+
+            self.train_vis_datasets_list.append(
+                RAVDESSDataset(
+                    root_dir=os.path.join(args.data_path, "RAVDESS"),
+                    split="train",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode="classification",
+                )
+            )
+
+            self.vis_datasets_list.append(
+                RAVDESSDataset(
+                    root_dir=os.path.join(args.data_path, "RAVDESS"),
+                    split="val",
+                    sampling_rate=args.sampling_rate,
+                    max_duration=args.max_duration,
+                    mode="classification",
+                )
+            )
+
+        if len(self.train_datasets_list) == 0:
+            raise ValueError("No datasets found")
+        
+        self.train_dataset = ConcatDataset(self.train_datasets_list)
+        self.val_dataset = ConcatDataset(self.val_datasets_list)
+        self.train_vis_dataset = ConcatDataset(self.train_vis_datasets_list)
+        self.vis_dataset = ConcatDataset(self.vis_datasets_list)
 
         self.train_loader = DataLoader(
             self.train_dataset, batch_size=args.batch_size, shuffle=True
@@ -240,6 +363,11 @@ class SpeechCLRTrainerVanilla:
         print(f"Loss function: {args.loss_fn}")
         print(f"Training Samples : {len(self.train_dataset)}")
         print(f"Validation Samples : {len(self.val_dataset)}")
+
+        args_dict = vars(self.args)
+        args_save_path = os.path.join(self.model_save_path, "config.yaml")
+        with open(args_save_path, 'w') as file:
+            yaml.dump(args_dict, file)
 
     def log_init(self):
 
