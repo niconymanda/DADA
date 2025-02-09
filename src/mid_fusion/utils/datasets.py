@@ -3,7 +3,6 @@ Dataset classes for
 1. ASVspoof 2021 dataset : ASVSpoof21Dataset
 2. In the Wild dataset : InTheWildDataset
 """
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -50,7 +49,9 @@ def get_spoof_list(meta_dir, is_train=False, is_eval=False):
 
     if is_train:
         for line in l_meta:
-            _, key, _, _, label = line.strip().split(" ")
+            # _, key, _, _, label = line.strip().split(" ")
+
+            key, label = line.split(" ")[1], line.split(" ")[5]
             file_list.append(key)
             d_meta[key] = 1 if label == "bonafide" else 0
         return d_meta, file_list
@@ -59,10 +60,10 @@ def get_spoof_list(meta_dir, is_train=False, is_eval=False):
         for line in l_meta:
             key = line.strip()
             file_list.append(key)
-        return file_list
+        return None, file_list
     else:
         for line in l_meta:
-            _, key, _, _, label = line.strip().split(" ")
+            key, label = line.split(" ")[1], line.split(" ")[5]
             file_list.append(key)
             d_meta[key] = 1 if label == "bonafide" else 0
         return d_meta, file_list
@@ -73,19 +74,37 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         self,
         root_dir,
         meta_dir,
-        is_train=False,
+        is_train=True,
         is_eval=False,
+        split='train',
         sampling_rate=16000,
         max_duration=4,
+        get_transcription=False,
+        transcription_file="/home/infres/amathur-23/DADA/src/mid_fusion/asvspoof21_df_eval_transcriptions.csv",
     ):
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
         self.cut = self.sampling_rate * self.max_duration  # padding
-        self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
+        self.meta, self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
         self.root_dir = root_dir
 
+        self.get_transcription = get_transcription  
+        self.transcription_file = transcription_file
+        if self.transcription_file is not None:
+            self.transcription_df = pd.read_csv(self.transcription_file)
+            self.id_to_transcription = dict(
+                zip(self.transcription_df["key"], self.transcription_df["transcription"])
+            )
+            self.list_IDs = list(self.id_to_transcription.keys())
+
+        self.split = split
+        if self.split=='train':
+            self.list_IDs = self.list_IDs[:int(0.8*len(self.list_IDs))]
+        elif self.split=='val':
+            self.list_IDs = self.list_IDs[int(0.8*len(self.list_IDs)):]
+
     def __len__(self):
-        return len(self.data)
+        return len(self.list_IDs)
 
     def load_audio_tensor(self, key):
         filename = os.path.join(self.root_dir, f"flac/{key}.flac")
@@ -94,9 +113,21 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         return audio_tensor
 
     def __getitem__(self, idx):
-        y = self.list_IDs[idx]
-        x = self.load_audio_tensor(y)
-        return x, y
+        f = self.list_IDs[idx]
+        y = self.meta[f]
+        x = self.load_audio_tensor(f)
+        
+        transcription = None
+        if self.get_transcription:
+            transcription = self.id_to_transcription[f]
+
+        return {
+            "x": x,
+            "label": y,
+            "transcription": transcription,
+        }
+
+
 
 class InTheWildDataset(torch.utils.data.Dataset):
     def __init__(
@@ -106,14 +137,14 @@ class InTheWildDataset(torch.utils.data.Dataset):
         include_spoofs=False,
         bonafide_label="bona-fide",
         filename_col="file",
-        transcription_col='content',
+        transcription_col="content",
         sampling_rate=16000,
         max_duration=4,
         split="train",
         config=None,
-        max_text_length = 64,
+        max_text_length=64,
         mode="classification",
-        text_tokenizer_name = None,
+        text_tokenizer_name=None,
     ):
         """
         Args:
@@ -130,7 +161,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
 
         if text_tokenizer_name is None:
             raise NotImplementedError("Text tokenizer is required for this dataset")
-        
+
         self.text_tokenizer = AutoTokenizer.from_pretrained(text_tokenizer_name)
         self.max_text_length = max_text_length
 
@@ -215,7 +246,12 @@ class InTheWildDataset(torch.utils.data.Dataset):
         transcription = self.id_to_transcription[idx]
 
         if self.mode == "classification":
-            return {"x": x, "label": y, "author": author, "transcription": transcription}
+            return {
+                "x": x,
+                "label": y,
+                "author": author,
+                "transcription": transcription,
+            }
 
         elif self.mode == "triplet":
             id_p, id_n = self.get_triplets_from_anchor(idx)
@@ -224,7 +260,7 @@ class InTheWildDataset(torch.utils.data.Dataset):
             x_n = self.load_audio_tensor(id_n)
 
             return {"anchor": x, "positive": x_p, "negative": x_n}
-        
+
         elif self.mode == "pair":
             a = x
             a_label = author

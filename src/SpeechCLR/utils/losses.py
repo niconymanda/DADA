@@ -6,16 +6,17 @@ import os
 import torch.nn as nn
 from torch.nn.functional import cosine_similarity
 
+
 class SquaredSimilarity(nn.Module):
     """
     Squared Similarity Loss from
     G. Synnaeve, T. Schatz and E. Dupoux, 'Phonetics embedding learning with side information'
     """
 
-    def __init__(self, reduction = 'mean'):
+    def __init__(self, reduction="mean"):
         super(SquaredSimilarity, self).__init__()
         self.reduction = reduction
-        self.sq_cos = lambda x, y : F.cosine_similarity(x, y) ** 2
+        self.sq_cos = lambda x, y: F.cosine_similarity(x, y) ** 2
 
     def forward(self, x, y, x_label, y_label, **kwargs):
         batch_size = x.size(0)
@@ -27,29 +28,58 @@ class SquaredSimilarity(nn.Module):
         loss[same_mask] = self.sq_cos(x[same_mask], y[same_mask])
         loss[diff_mask] = 1 - self.sq_cos(x[diff_mask], y[diff_mask])
 
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             return loss.mean()
-        elif self.reduction == 'sum':
+        elif self.reduction == "sum":
             return loss.sum()
 
         return loss
 
 
-class NormalisedEuclideanDistance(nn.Module): # Doesn't work, may not need to implement
+class TripletSquaredSimilarity(nn.Module):
+    """
+    Squared Similarity Loss from
+    G. Synnaeve, T. Schatz and E. Dupoux, 'Phonetics embedding learning with side information'
+    """
+
+    def __init__(self, reduction="mean"):
+        super(TripletSquaredSimilarity, self).__init__()
+        self.reduction = reduction
+        self.sq_cos = lambda x, y: F.cosine_similarity(x, y) ** 2
+
+    def forward(self, anchor, positive, negative, **kwargs):
+        pos_dist = self.sq_cos(anchor, positive)
+        neg_dist = self.sq_cos(anchor, negative)
+
+        loss_same = pos_dist
+        loss_diff = 1 - neg_dist
+
+        loss = (loss_same + loss_diff) / 2
+
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+
+        return loss
+
+
+class NormalisedEuclideanDistance(nn.Module):  # Doesn't work, may not need to implement
     def __init__(self):
         super(NormalisedEuclideanDistance, self).__init__()
 
     def forward(self, x, y):
         pass
 
+
 class TripletMarginCosineLoss(nn.Module):
-    def __init__(self, margin=1.0, reduction='mean'):
+    def __init__(self, margin=1.0, reduction="mean"):
         super(TripletMarginCosineLoss, self).__init__()
         self.margin = margin
         self.counter = 0
         self.reduction = reduction
 
-    def update(self):   
+    def update(self):
         self.counter += 1
 
     def forward(self, anchor, positive, negative, **kwargs):
@@ -58,22 +88,23 @@ class TripletMarginCosineLoss(nn.Module):
 
         loss = F.relu(pos_dist - neg_dist + self.margin)
 
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             return loss.mean()
-        elif self.reduction == 'sum':
+        elif self.reduction == "sum":
             return loss.sum()
         return loss
+
 
 class AdaTriplet(nn.Module):
     """
     Adaptive Triplet Loss from
-    Nyugen et al. 'AdaTriplet: Adaptive Gradient Triplet Loss with Automatic Margin Learning 
+    Nyugen et al. 'AdaTriplet: Adaptive Gradient Triplet Loss with Automatic Margin Learning
                    for Forensic Medical Image Matching'
     """
 
-    def __init__(self, K_d=2, K_an=2, eps=0, beta=0, lambda_=1, reduction='mean'):
+    def __init__(self, K_d=2, K_an=2, eps=0, beta=0, lambda_=1, reduction="mean"):
         super(AdaTriplet, self).__init__()
-        self.K_d = K_d  
+        self.K_d = K_d
         self.K_an = K_an
         self.eps = eps
         self.beta = beta
@@ -113,12 +144,12 @@ class AdaTriplet(nn.Module):
                 self.update_stats(phi_ap, phi_an)
                 self.update_margins()
 
-        loss = torch.clamp_min(phi_an - phi_ap + self.eps, 0) 
+        loss = torch.clamp_min(phi_an - phi_ap + self.eps, 0)
         loss = loss + self.lambda_ * torch.clamp_min(phi_an - self.beta, 0)
-        
-        if self.reduction == 'mean':
+
+        if self.reduction == "mean":
             return loss.mean()
-        elif self.reduction == 'sum':
+        elif self.reduction == "sum":
             return loss.sum()
 
         return loss

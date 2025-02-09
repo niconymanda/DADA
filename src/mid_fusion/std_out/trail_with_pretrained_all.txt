@@ -1,0 +1,71 @@
+2025-02-05 05:32:46.483164: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1738729966.505264 2149283 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1738729966.512227 2149283 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2025-02-05 05:32:46.534976: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+INFO:speechbrain.utils.quirks:Applied quirks (see `speechbrain.utils.quirks`): [allow_tf32, disable_jit_profiling]
+INFO:speechbrain.utils.quirks:Excluded quirks specified by the `SB_DISABLE_QUIRKS` environment (comma-separated list): []
+Using GPU: 2
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/transformers/convert_slow_tokenizer.py:561: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+  warnings.warn(
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/transformers/convert_slow_tokenizer.py:561: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+  warnings.warn(
+Loaded Dataset - 
+Training Samples : 1868
+Validation Samples : 527
+Logging to mid_fusion/runs/trial_with_pretrained_all
+Using device: cuda
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/transformers/configuration_utils.py:306: UserWarning: Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the `Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`.
+  warnings.warn(
+Some weights of Wav2Vec2ForCTC were not initialized from the model checkpoint at ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition and are newly initialized: ['lm_head.bias', 'lm_head.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+/home/infres/amathur-23/DADA/dada/lib/python3.12/site-packages/transformers/convert_slow_tokenizer.py:561: UserWarning: The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option which is not implemented in the fast tokenizers. In practice this means that the fast version of the tokenizer can produce unknown tokens whereas the sentencepiece version would have converted these unknown tokens into a sequence of byte tokens matching the original piece of text.
+  warnings.warn(
+Loaded text model from /data/amathur-23/DADA/models/text/Deberta/final
+/home/infres/amathur-23/DADA/src/SpeechCLR/models.py:122: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  state_dict = torch.load(path)
+Loaded speech model from /data/amathur-23/DADA/models/SpeechEmbedder/tricos_p35_10v8/best_model.pth
+Getting Inital Metrics
+Evaluation on train [467/467] loss: 0.692, acc: 0.621, eer: 0.537   
+Evaluation on val [132/132] loss: 0.692, acc: 0.610, eer: 0.556   
+Epoch 1 [467/467] loss: 0.663, acc: 0.635   
+Evaluation on val [132/132] loss: 0.630, acc: 0.655, eer: 0.284   
+Epoch 2 [467/467] loss: 0.568, acc: 0.721   
+Evaluation on val [132/132] loss: 0.528, acc: 0.783, eer: 0.215   
+Epoch 3 [467/467] loss: 0.445, acc: 0.844   
+Evaluation on val [132/132] loss: 0.407, acc: 0.854, eer: 0.151   
+Epoch 4 [467/467] loss: 0.332, acc: 0.895   
+Evaluation on val [132/132] loss: 0.321, acc: 0.890, eer: 0.106   
+Epoch 5 [467/467] loss: 0.258, acc: 0.925   
+Evaluation on val [132/132] loss: 0.270, acc: 0.917, eer: 0.115   
+Epoch 6 [467/467] loss: 0.203, acc: 0.949   
+Evaluation on val [132/132] loss: 0.229, acc: 0.941, eer: 0.091   
+Epoch 7 [467/467] loss: 0.163, acc: 0.960   
+Evaluation on val [132/132] loss: 0.199, acc: 0.941, eer: 0.085   
+Epoch 8 [467/467] loss: 0.138, acc: 0.964   
+Evaluation on val [132/132] loss: 0.168, acc: 0.953, eer: 0.051   
+Epoch 9 [467/467] loss: 0.122, acc: 0.971   
+Evaluation on val [132/132] loss: 0.154, acc: 0.960, eer: 0.057   
+Epoch 10 [467/467] loss: 0.105, acc: 0.973   
+Evaluation on val [132/132] loss: 0.151, acc: 0.953, eer: 0.042   
+Epoch 11 [467/467] loss: 0.101, acc: 0.974   
+Evaluation on val [132/132] loss: 0.136, acc: 0.964, eer: 0.024   
+Epoch 12 [467/467] loss: 0.089, acc: 0.979   
+Evaluation on val [132/132] loss: 0.145, acc: 0.966, eer: 0.051   
+Epoch 13 [467/467] loss: 0.083, acc: 0.980   
+Evaluation on val [132/132] loss: 0.123, acc: 0.970, eer: 0.042   
+Epoch 14 [467/467] loss: 0.077, acc: 0.983   
+Evaluation on val [132/132] loss: 0.116, acc: 0.979, eer: 0.051   
+Epoch 15 [467/467] loss: 0.071, acc: 0.981   
+Evaluation on val [132/132] loss: 0.120, acc: 0.973, eer: 0.018   
+Epoch 16 [467/467] loss: 0.071, acc: 0.983   
+Evaluation on val [132/132] loss: 0.124, acc: 0.966, eer: 0.039   
+Epoch 17 [467/467] loss: 0.070, acc: 0.984   
+Evaluation on val [132/132] loss: 0.110, acc: 0.973, eer: 0.024   
+Epoch 18 [467/467] loss: 0.063, acc: 0.986   
+Evaluation on val [132/132] loss: 0.126, acc: 0.966, eer: 0.057   
+Epoch 19 [467/467] loss: 0.058, acc: 0.987   
+Evaluation on val [132/132] loss: 0.117, acc: 0.973, eer: 0.030   
+Epoch 20 [467/467] loss: 0.062, acc: 0.984   
+Evaluation on val [132/132] loss: 0.115, acc: 0.973, eer: 0.018  

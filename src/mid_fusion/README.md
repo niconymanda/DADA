@@ -5,26 +5,28 @@
 **Note : Ensure you are in this folder's parent directory (`src`)**
 
 ```txt
-$ python3 -m mid_fusion.main [-h] [--batch_size BATCH_SIZE] [--epochs EPOCHS]
-               [--learning_rate LEARNING_RATE] [--data_path DATA_PATH]
-               [--model_save_path MODEL_SAVE_PATH]
+$ python3 -m mid_fusion.main [-h] [--model_name MODEL_NAME] [--batch_size BATCH_SIZE]
+               [--epochs EPOCHS] [--learning_rate LEARNING_RATE]
+               [--data_path DATA_PATH] [--model_save_path MODEL_SAVE_PATH]
                [--log_interval LOG_INTERVAL] [--dataset_config DATASET_CONFIG]
                [--log_dir LOG_DIR] [--max_duration MAX_DURATION]
                [--sampling_rate SAMPLING_RATE]
                [--early_stopping_patience EARLY_STOPPING_PATIENCE]
-               [--early_stopping_threshold EARLY_STOPPING_THRESHOLD]
-               [--gpu_id GPU_ID] [--seed SEED]
+               [--early_stopping_threshold EARLY_STOPPING_THRESHOLD] --gpu_id
+               GPU_ID [--seed SEED]
                [--save_visualisations SAVE_VISUALISATIONS]
                [--text_model_name TEXT_MODEL_NAME]
                [--text_model_path TEXT_MODEL_PATH]
-               [--audio_model_name AUDIO_MODEL_NAME]
-               [--audio_model_path AUDIO_MODEL_PATH]
+               [--speech_model_name SPEECH_MODEL_NAME]
+               [--speech_model_path SPEECH_MODEL_PATH]
                [--load_checkpoint LOAD_CHECKPOINT]
 
 Train Mid Fusion model
 
 options:
   -h, --help            show this help message and exit
+  --model_name MODEL_NAME
+                        Name of the model to train
   --batch_size BATCH_SIZE
                         Batch size for training
   --epochs EPOCHS       Number of epochs to train
@@ -55,10 +57,10 @@ options:
                         Name of the text model to use
   --text_model_path TEXT_MODEL_PATH
                         Path to the text model
-  --audio_model_name AUDIO_MODEL_NAME
-                        Name of the audio model to use
-  --audio_model_path AUDIO_MODEL_PATH
-                        Path to the audio model
+  --speech_model_name SPEECH_MODEL_NAME
+                        Name of the speech model to use
+  --speech_model_path SPEECH_MODEL_PATH
+                        Path to the speech model
   --load_checkpoint LOAD_CHECKPOINT
                         Path to the checkpoint to load
 ```

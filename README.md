@@ -10,7 +10,6 @@ The increasing use of generative AI models to create realistic deepfakes poses s
 | AASIST []  | ASVSpoof21 | _     | ...      | ...      | ... |
 | RawNet2 [] | ASVSpoof21 | _     | ...      | ...      | ... |
 | SLIM []    | ASVSpoof21 | _     | ...      | ...      | ... |
-The increasing use of generative AI models to create realistic deepfakes poses significant challenges to information security, particularly in the realm of audio manipulation. This code addresses the pressing need for improved detection of audio deepfakes by proposing a novel approach that incorporates context awareness. 
 
 ## Authorship authentication model 
 ### How to build 

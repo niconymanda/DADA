@@ -1,42 +1,11 @@
 import torch
 import torch.nn as nn
 from speechbrain.lobes.models.ECAPA_TDNN import AttentiveStatisticsPooling
-
+from utils.losses import SelfContrastiveLoss
 from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
 
 STYLE_MODEL = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
 LINGUISTICS_MODEL = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
-
-
-class SelfContrastiveLoss(nn.Module):
-    def __init__(self, lambda_=0.1):
-        super(SelfContrastiveLoss, self).__init__()
-        self.lambda_ = lambda_
-
-    def forward(self, x_style, x_linguistics):
-        # Define the custom loss computation
-        # Normalize embeddings
-        B = x_style.size(0)
-        x_style_norm = nn.BatchNorm1d(x_style, affine=False) / B
-        x_linguistics_norm = nn.BatchNorm1d(x_linguistics, affine=False) / B
-
-        # Compute cross-subspace loss
-        D = torch.linalg.norm(x_style_norm - x_linguistics_norm, ord="fro")
-        D = torch.pow(D, 2)
-
-        # Compute intra-subspace redundancy loss
-        v_linguistic = torch.mm(x_linguistics_norm.T, x_linguistics_norm)
-        C_linguistic = torch.linalg.norm(v_linguistic - torch.eye(v_linguistic.size(1)))
-        C_linguistic = torch.pow(C_linguistic, 2)
-
-        v_style = torch.mm(x_style_norm.T, x_style_norm)
-        C_style = torch.linalg.norm(v_style - torch.eye(v_style.size(1)))
-        C_style = torch.pow(C_style, 2)
-
-        # Composite Loss
-        loss = D = self.lambda_ * (C_linguistic + C_style)
-
-        return loss
 
 
 class CompressionModule(nn.Module):
@@ -103,21 +72,54 @@ class SLIMStage1(nn.Module):
 
         self.self_contrastive_loss = SelfContrastiveLoss()
 
-    def forward(self, x):
-        out_style = self.style_model(x, output_hidden_states=True, return_dict=True)
-        out_linguistics = self.linguistics_model(
-            x, output_hidden_states=True, return_dict=True
+    def load_(self, path):
+        # self.style_model.load_state_dict(torch.load(f"{dir}/style_model.pth"))
+        # self.linguistics_model.load_state_dict(
+        #     torch.load(f"{dir}/linguistics_model.pth")
+        # )
+        # self.style_compression.load_state_dict(
+        #     torch.load(f"{dir}/style_compression.pth")
+        # )
+        self.linguistics_compression.load_state_dict(torch.load(path))
+
+    def save_(self, dir):
+        torch.save(self.style_model.state_dict(), f"{dir}/style_model.pth")
+        torch.save(self.linguistics_model.state_dict(), f"{dir}/linguistics_model.pth")
+        torch.save(self.style_compression.state_dict(), f"{dir}/style_compression.pth")
+        torch.save(
+            self.linguistics_compression.state_dict(),
+            f"{dir}/linguistics_compression.pth",
         )
 
-        x_style = torch.cat(
-            out_style.hidden_states[self.style_layers[0] : self.style_layers[1]], dim=-1
-        )
-        x_linguistics = torch.cat(
-            out_linguistics.hidden_states[
-                self.linguistics_layers[0] : self.linguistics_layers[1]
-            ],
-            dim=-1,
-        )
+    def train_(self):
+        self.style_model.eval()
+        self.linguistics_model.eval()
+        self.style_compression.train()
+        self.linguistics_compression.train()
+    
+    def eval_(self):
+        self.style_model.eval()
+        self.linguistics_model.eval()
+        self.style_compression.eval()
+        self.linguistics_compression.eval()
+
+    def forward(self, x):
+        with torch.no_grad():
+            print(x.size())
+            out_style = self.style_model(x, output_hidden_states=True, return_dict=True)
+            out_linguistics = self.linguistics_model(
+                x, output_hidden_states=True, return_dict=True
+            )
+
+            x_style = torch.cat(
+                out_style.hidden_states[self.style_layers[0] : self.style_layers[1]], dim=-1
+            )
+            x_linguistics = torch.cat(
+                out_linguistics.hidden_states[
+                    self.linguistics_layers[0] : self.linguistics_layers[1]
+                ],
+                dim=-1,
+            )
 
         x_style = self.style_compression(x_style)
         x_linguistics = self.linguistics_compression(x_linguistics)
@@ -168,6 +170,9 @@ class SLIMStage2(nn.Module):
         self.head = nn.Sequential(
             [nn.Linear(1024, 256), nn.LeakyReLU(), nn.Linear(256, 2), nn.Sigmoid()]
         )
+
+    def load_(self):
+        pass
 
     def forward():
         pass

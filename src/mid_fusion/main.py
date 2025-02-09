@@ -17,8 +17,8 @@ def get_args():
     parser.add_argument('--data_path', type=str, default = '/data/amathur-23/DADA/InTheWild/release_in_the_wild/', help='Path to the training data')
     parser.add_argument('--model_save_path', type=str, default='./models', help='Path to save the trained model')
     parser.add_argument('--log_interval', type=int, default=1, help='Interval for logging training status')
-    parser.add_argument('--dataset_config', type=str, default='/home/infres/iivanova-23/DADA/src/mid_fusion/configs/inthewild_full.yaml', help='Path to the dataset configuration file')
-    parser.add_argument('--log_dir', type=str, default='/data/iivanova-23/runs', help='Path to save logs')
+    parser.add_argument('--dataset_config', type=str, default='mid_fusion/configs/inthewild_full.yaml', help='Path to the dataset configuration file')
+    parser.add_argument('--log_dir', type=str, default='./runs', help='Path to save logs')
     parser.add_argument('--max_duration', type=int, default=4, help='Maximum duration of audio files')
     parser.add_argument('--sampling_rate', type=int, default=16000, help='Sampling rate of audio files')
     parser.add_argument('--early_stopping_patience', type=int, default=3, help='Number of epochs to wait before early stopping')
@@ -37,6 +37,10 @@ def get_args():
     parser.add_argument('--mlp_layers', type=int, default=2, help='Number of layers in MLP head')
     parser.add_argument('--hidden_layers', type=lambda s: [int(item) for item in s.split(',')], default="-1", help='List of hidden layer sizes for the model')
     # /home/infres/iivanova-23/DADA/iivanova-23/models/google-t5/final
+    parser.add_argument('--fusion_strategy', type=str, choices=['mid', 'conditional_late', 'late', 'audio'], default='mid', help='Fusion strategy to use')
+    parser.add_argument('--dataset', type=str, choices=['asvspoof', 'inthewild'], default='inthewild', help='Dataset to use for training')
+    parser.add_argument('--asv_root_dir', type=str, default='/data/amathur-23/DADA/ASVspoof2021_DF_eval', help='Root directory for ASV data')
+    parser.add_argument('--asv_meta_dir', type=str, default='/data/amathur-23/DADA/ASVspoof2021_DF_eval/keys/DF/CM/trial_metadata.txt', help='Metadata directory for ASV data')
     return parser.parse_args()
 
 def load_config_text_model(args):
