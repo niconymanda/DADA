@@ -61,7 +61,6 @@ class TrainerAuthorshipAttribution:
         self.repository_id = repository_id
         self.output_dir = f"{repository_id}/logs"
         self.author_id_map = author_id_map
-        self.num_labels = len(self.author_id_map.keys())
         self.early_stopping = early_stopping
         self.save_model = save_model
         self.model_weights = self.args.text_model_path
@@ -74,7 +73,7 @@ class TrainerAuthorshipAttribution:
             self.optimizer = self.get_optimizer() if optimizer is None else optimizer
             self.lr_scheduler = self.get_lr_scheduler(self.optimizer) if lr_scheduler is None  else lr_scheduler
             self.criterion.to(self.device)
-
+        self.num_labels = len(self.author_id_map.keys()) if self.args.loss_function != 'bce' else 2
         self.model.to(self.device)
         self.distance_function = cfg.get_distance_function(args.distance_function)
 
@@ -267,32 +266,32 @@ class TrainerAuthorshipAttribution:
         all_labels =[]        
         iters = len(self.train_dataloader)
         for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs}")):
-            
-            # batch = {k: v.to(self.device) for k, v in batch.items()}
-            embeddings = self.model(batch)
-            all_feats.append(embeddings['anchor'].detach().cpu().numpy())
-            all_labels.extend(batch['label'].detach().cpu().numpy())
+            labels = batch['label'].to(torch.float32).to(self.device)
             self.optimizer.zero_grad()
-
-            loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
+            if self.args.loss_function == 'bce':
+                embeddings = self.model(batch['text'], mode = 'classification_train').squeeze()
+                loss_value = self.criterion(embeddings, labels)
+            else:
+                embeddings = self.model(batch, mode = 'triplet')
+                all_feats.append(embeddings['anchor'].detach().cpu().numpy())
+                all_labels.extend(labels.detach().cpu().numpy())
+                loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
+            
             loss_value.backward()
-
             total_loss += loss_value.item()
             current_loss += loss_value.item()
 
-            # total_norm = 0
-            # for p in self.model.parameters():
-            #     param_norm = p.grad.detach().data.norm(2)
-            #     total_norm += param_norm.item() ** 2
-            # total_norm = total_norm ** (1. / 2)
-            # torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.args.clip_grad)
             self.optimizer.step()
             self.lr_scheduler.step(epoch_n + i / iters)
-            self.optimizer.zero_grad()
+            
             # Accuracy calculation
-            distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
-            distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
-            correct_count += torch.sum(distance_positive < distance_negative).item()
+            if self.args.loss_function == 'bce':
+                preds = embeddings.argmax(dim=1)
+                correct_count += (preds == labels).sum().item()
+            else:
+                distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
+                distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
+                correct_count += torch.sum(distance_positive < distance_negative).item()
             
             if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
@@ -311,13 +310,14 @@ class TrainerAuthorshipAttribution:
             "epoch": epoch_n,
         }
         self.logger._log_metrics(metrics, phase='Train_epoch')
-        if self.log_plots:
+        if self.log_plots and self.args.loss_function != 'bce':
             all_feats = np.vstack(all_feats)
             all_labels = np.array(all_labels)
             print(f"Getting t-SNE plot for train set")
             fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on train : Epoch {epoch_n}")
             plt.savefig(f"{self.repository_id}/tsne_train.png")
             self.logger.log_figure(fig, f"t-SNE on train", epoch_n)
+            
         return total_loss / len(self.train_dataloader)
     
     @torch.no_grad()
@@ -339,20 +339,30 @@ class TrainerAuthorshipAttribution:
         all_labels = []
         with torch.no_grad():
             for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
-                embeddings = self.model(batch)
-                features = embeddings['anchor']
-                labels = batch['label']
-                all_feats.append(features)
-                all_labels.extend(labels)
-                loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
+                labels = batch['label'].to(self.device)
+                if self.args.loss_function == 'bce':
+                    embeddings = self.model(batch['text'], mode = 'classification_train')
+                    loss_value = self.criterion(embeddings, labels)
+                else:
+                    embeddings = self.model(batch)
+                    features = embeddings['anchor']
+                    all_feats.append(features)
+                    all_labels.extend(labels.detach().cpu().numpy())
+                    loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
+                    
                 total_loss += loss_value.item()
                 current_loss += loss_value.item()
                 
                 # Accuracy calculation
-                distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
-                distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
-                correct_count += torch.sum(distance_positive < distance_negative).item()
-                total += len(batch['anchor'])
+                if self.args.loss_function == 'bce':
+                    preds = embeddings.argmax(dim=1)
+                    correct_count += (preds == labels).sum().item()
+                else:   
+                    distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
+                    distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
+                    correct_count += torch.sum(distance_positive < distance_negative).item()
+                    
+                total += len(batch['label'])
 
                 if i % self.args.logging_step == self.args.logging_step - 1:
                     metrics = {
@@ -371,7 +381,7 @@ class TrainerAuthorshipAttribution:
                 "epoch": epoch_n,
                 }
         self.logger._log_metrics(metrics, phase='Val_epoch')
-        if self.log_plots:
+        if self.log_plots and self.args.loss_function != 'bce':
             all_feats = torch.cat(all_feats, dim=0).cpu().numpy()
             all_labels = np.array(all_labels)
             print(f"Getting t-SNE plot for validation set")
@@ -381,7 +391,7 @@ class TrainerAuthorshipAttribution:
         return val_loss, correct_count / total
     
 
-    def get_criterion(self, margin=None):
+    def get_criterion(self, margin=0.5):
         margin = self.args.margin if margin is None else margin
         if self.args.loss_function == 'triplet':
             return TripletLoss(margin=margin, distance_function=self.args.distance_function)
@@ -393,6 +403,8 @@ class TrainerAuthorshipAttribution:
             return SquaredCosineSimilarityLoss()
         elif self.args.loss_function == 'triplet_temperature':
             return TripletLossTemperature()
+        elif self.args.loss_function == 'bce':
+            return nn.BCELoss()
         else:
             raise ValueError("Invalid loss_function value. Must be 'triplet', 'contrastive', or 'cos2'")
     
@@ -417,8 +429,8 @@ class TrainerAuthorshipAttribution:
         elif self.args.lr_scheduler == 'cosine_warmup':
             return optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=30, T_mult=2, eta_min=1e-7, last_epoch=-1)
         elif self.args.lr_scheduler == 'plateau':
-            return optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
+            return optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
         else:
-            raise ValueError("Invalid lr_scheduler value. Must be 'linear_warmup', 'linear', or 'cosine'")
+            raise ValueError("Invalid lr_scheduler value. Must be 'linear_warmup', 'linear', 'cosine', 'cosine_warmup' or 'plateau'")
 
 

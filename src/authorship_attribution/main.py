@@ -4,7 +4,7 @@ from loss_functions import TripletLoss
 import torch
 import os
 import config as cfg
-from dataset import AuthorTripletLossDataset
+from dataset import AuthorTripletLossDataset, AuthorClassificationDataset, VoxCeleb2Dataset
 from test_model import TesterAuthorshipAttribution
 from train import TrainerAuthorshipAttribution
 from model import AuthorshipLLM
@@ -12,23 +12,20 @@ import time
 import pandas as pd
 
 def main(args):
-    print(args.model_name)
-    print(args.hidden_layers)
-    print(args.epochs)
     cfg.init_env(args)
-    data, rest_of_data, author_id_map = cfg.load_data(args)
+    # data, rest_of_data, author_id_map = cfg.load_data(args)
     current_time = time.strftime("%Y%m%d-%H%M%S")
-    repository_id = f"/data/iivanova-23/output/paper_sets/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
+    # repository_id = f"/data/iivanova-23/output/wiki/n_authors_{len(author_id_map.keys())}/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
+    repository_id = f"/data/iivanova-23/output/voxceleb2/{args.model_name}_{args.batch_size}_{args.epochs}_{current_time}"
     os.makedirs(repository_id, exist_ok=True)
     print(f"Repository ID: {repository_id}")
-    index_set = "/data/iivanova-23/data/index_wiki.json"
-    # _, val_rest = train_test_split(rest_of_data, test_size=0.3, stratify=rest_of_data['label'], random_state=args.seed)
-    # train_data, val_data = train_test_split(data, test_size=0.3, stratify=data['label'], random_state=args.seed)
-    # train_dataset = AuthorTripletLossDataset(train_data, args.model_name, train=True, predefined_set=None)
-    # # val_data = pd.concat([val_data, val_rest])
-    train_dataset = AuthorTripletLossDataset(data, args.model_name, train=True, predefined_set=index_set)
-    val_dataset = AuthorTripletLossDataset(data, args.model_name, train=False, predefined_set=index_set)
-    spoofed_test_dataset = AuthorTripletLossDataset(data, args.model_name, mode = 'spoof')
+    # index_set = "/data/iivanova-23/data/inthewild/index_wiki.json"
+    # train_dataset = AuthorTripletLossDataset(data, train=True, predefined_set=index_set)
+    # val_dataset = AuthorTripletLossDataset(data, train=False, predefined_set=index_set)
+    # spoofed_test_dataset = AuthorTripletLossDataset(data, mode = 'spoof')
+    
+    train_dataset = VoxCeleb2Dataset(args.data, split="train")
+    val_dataset = VoxCeleb2Dataset(args.data, split="val")
     
     # in_the_wild = pd.read_csv("/data/iivanova-23/data/wild_transcription_meta.csv")
     # index_wild = "/data/iivanova-23/data/index_10_authors_wild.json"
@@ -37,14 +34,16 @@ def main(args):
     # train_dataset = AuthorTripletLossDataset(in_the_wild, args.model_name, train=True, predefined_set=index_wild)
     # val_dataset = AuthorTripletLossDataset(in_the_wild, args.model_name, train=False, predefined_set=index_wild)
     
-    
+    # train, test = train_test_split(data, test_size=0.3, stratify=data['type'], random_state=args.seed, shuffle=True)
+    # train_dataset = AuthorClassificationDataset(train)
+    # val_dataset = AuthorClassificationDataset(test)
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Val dataset size: {len(val_dataset)}")
             
     
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+    # spoofed_data_loader = DataLoader(spoofed_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     # real_in_the_wild_loader = DataLoader(real_in_the_wild, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     # spoof_in_the_wild_loader = DataLoader(spoof_in_the_wild, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     # lora_config = LoraConfig(
@@ -56,8 +55,8 @@ def main(args):
 
     model = AuthorshipLLM(args.model_name, 
                           dropout_rate=0.1, 
-                          out_features=1024, 
-                          max_length=64, 
+                          out_features=512, 
+                          max_length=24, 
                           num_layers=args.mlp_layers, 
                           freeze_encoder=False, 
                           use_layers=args.hidden_layers)
@@ -71,18 +70,19 @@ def main(args):
                                            report_to='tensorboard',
                                            early_stopping=True,
                                            save_model=True,
-                                           additional_training=True
-                                           )
-    model, classification_model = trainer.train(classification_head=False)
+                                           additional_training=True,
+                                           log_plots=False)
+    model, classification_model = trainer.train(classification_head=True)
     # loaded_model.load_state_dict(torch.load("output/n_authors_3/microsoft/deberta-v3-small_16_10_20241128-150757/final.pth"))
     print("Training finished")
     tester = TesterAuthorshipAttribution(model=model, 
                     classification_model=classification_model,
                     repository_id=repository_id, 
                     author_id_map=author_id_map,
-                    args=args)
+                    args=args, 
+                    classification=False)
     
-    tester.test(val_dataloader,spoofed_data_loader)
+    tester.test(val_dataloader,spoofed_test_dataset)
     # print("Test In the Wild")
     # tester.test(real_in_the_wild_loader, spoof_in_the_wild_loader, 'In the Wild')
 

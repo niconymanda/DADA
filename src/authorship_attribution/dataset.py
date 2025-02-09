@@ -4,13 +4,14 @@ from transformers import AutoTokenizer, DebertaV2Tokenizer
 import random 
 import json
 import pandas as pd 
+import os
+import numpy as np
+
 class AuthorClassificationDataset(Dataset):
     """
     A custom dataset class for author classification tasks using Hugging Face tokenizers.
     Args:
         data (pd.DataFrame): A pandas DataFrame containing the text and label columns.
-        tokenizer (str): The name or path of the pre-trained tokenizer to use.
-        max_length (int, optional): The maximum length of the tokenized sequences. Defaults to 128.
     Attributes:
         texts (list): A list of texts from the DataFrame.
         labels (list): A list of labels corresponding to the texts.
@@ -21,11 +22,9 @@ class AuthorClassificationDataset(Dataset):
         __getitem__(idx): Returns a dictionary containing the tokenized input_ids, attention_mask, and label for the given index.
     """
     
-    def __init__(self, data, tokenizer, max_length=128):
-        self.texts = data['text'].tolist()
-        self.labels = data['label'].tolist()
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
-        self.max_length = max_length
+    def __init__(self, data):
+        self.texts = data['transcription'].tolist()
+        self.labels = data['type'].tolist()
 
     def __len__(self):
         return len(self.texts)
@@ -33,50 +32,62 @@ class AuthorClassificationDataset(Dataset):
     def __getitem__(self, idx):
         text = self.texts[idx]
         label = self.labels[idx]
+        label = 1 if label == 'spoof' else 0  
 
-        inputs = self.tokenizer(
-            f"Identify author: \"{text}\"",
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt"
-        )
-
-        input_ids = inputs["input_ids"].squeeze()
-        attention_mask = inputs["attention_mask"].squeeze()
         return {
-            "input_ids": input_ids.to(dtype=torch.long),
-            "attention_mask": attention_mask.to(dtype=torch.long),
+            "text": text,
             "label": torch.tensor(label, dtype=torch.long)
         }
+        
+# class ASVSpoof21Dataset(Dataset):
+#     """
+#     A custom dataset class for handling ASVSpoof 2021 dataset.
+#     Args:
+#         data (pd.DataFrame): A pandas DataFrame containing the text and label columns.
+#     Attributes:
+#         texts (list): A list of texts from the DataFrame.
+#         labels (list): A list of labels corresponding to the texts.
+#     Methods:
+#         __len__(): Returns the number of samples in the dataset.
+#         __getitem__(idx): Returns a dictionary containing the text and the label.
+#     """
+    
+#     def __init__(self, data):
+#         self.texts = data['transcription'].tolist()
+#         self.labels = data['type'].tolist()
+        
+#     def __len__(self):
+#         return len(self.texts)
+
+#     def __getitem__(self, idx):
+#         text = self.texts.iloc[idx]
+#         label = self.labels.iloc[idx]
+        
+#         return {
+#             "text": text,
+#             "label": label
+#         }
         
         
 class AuthorTripletLossDataset(Dataset):
     """
-    A PyTorch Dataset class for generating triplets of (anchor, positive, negative) samples for training
-    a triplet loss model in the context of authorship attribution.
+    A PyTorch Dataset class for generating triplets of text data for training a triplet loss model for authorship attribution.
     Attributes:
-        data (pd.DataFrame): The dataset containing text samples and their corresponding labels.
-        tokenizer (AutoTokenizer): The tokenizer used to preprocess the text samples.
-        max_length (int): The maximum length of the tokenized sequences.
-        train (bool): A flag indicating whether the dataset is used for training or evaluation.
-        texts_by_author (dict): A dictionary mapping author labels to lists of their text samples.
-        labels (list): A list of unique author labels.
+        data (pd.DataFrame): The dataset containing text data and labels.
+        train (bool): A flag indicating whether the dataset is for training or testing.
+        predefined_set (str): Path to a JSON file containing predefined triplets.
+        mode (str): The mode of the dataset, either 'train' or 'test'.
     Methods:
-        __len__(): Returns the number of samples in the dataset.
-        __getitem__(idx): Returns a dictionary containing tokenized anchor, positive, and negative samples
-                          along with their attention masks and labels for the given index.
-        _get_positive_example(label): Returns a positive example (text) for the given author label.
-        _get_negative_example(label): Returns a negative example (text) and its label for the given author label.
-        _get_negative_examples_all_authors(anchor_label): Returns negative examples (texts) and their labels
-                                                          for all authors except the given anchor label.
+        __len__(): Returns the length of the dataset.
+        __getitem__(idx): Returns a triplet of text data (anchor, positive, negative) and their labels for the given index.
+        _get_positive_example(label): Returns a positive example for the given label.
+        _get_negative_example(label): Returns a negative example and its label for the given label.
+        _get_negative_examples_all_authors(anchor_label): Returns negative examples and their labels for all authors except the given anchor label.
     """
-    
-    def __init__(self, data, tokenizer_name, max_length=64, train=True, predefined_set=None, mode=None):
-        self.data = data
-        # self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
 
-        # self.max_length = max_length
+    
+    def __init__(self, data, train=True, predefined_set=None, mode=None):
+        self.data = data
         self.train = train
         self.texts_by_author = data.groupby('label')['text'].apply(list).to_dict()
         self.labels = list(self.texts_by_author.keys())
@@ -172,4 +183,3 @@ class AuthorTripletLossDataset(Dataset):
             return len(self.data)
         
         
-

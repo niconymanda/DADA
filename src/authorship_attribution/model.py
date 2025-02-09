@@ -13,7 +13,7 @@ class AuthorshipClassificationLLM(nn.Module):
         self.max_length = model.max_length
         self.device = model.device
 
-        hidden_size = self.model.model.config.hidden_size
+        hidden_size = self.model.model.out_features
         self.head_type = head_type
         if head_type == 'linear':
             self.classifier = nn.Linear(hidden_size, num_labels)
@@ -106,7 +106,7 @@ class MLP(nn.Module):
             in_dim = out_features_layer
 
         self.layers.append(torch.nn.Linear(in_dim, out_features))
-        self.layers.append(torch.nn.Dropout(dropout_rate))
+        # self.layers.append(torch.nn.Dropout(dropout_rate))
         self.mlp = nn.Sequential(*self.layers)
         
     def forward(self, x):
@@ -133,7 +133,8 @@ class AuthorshipLLM(nn.Module):
         self.pooler = MeanPooling(self.use_layers)
         input_size = self._get_hidden_size() * len(self.use_layers)
         self.MLP = MLP(num_layers, dropout_rate=dropout_rate, in_features=input_size, out_features=out_features)
-
+        
+        
     def _get_model(self, model_name):
         
         if 't5' in model_name:
@@ -184,7 +185,6 @@ class AuthorshipLLM(nn.Module):
                 self.MLP(x_a_output),
                 self.MLP(x_p_output),
                 self.MLP(x_n_output))
-
             x_a_output, x_p_output, x_n_output = (
                 F.normalize(x_a_output, p=2, dim=-1),
                 F.normalize(x_p_output, p=2, dim=-1),
@@ -194,10 +194,14 @@ class AuthorshipLLM(nn.Module):
                 "positive": x_p_output,
                 "negative": x_n_output,
             }
-        elif mode == 'classification':
+        elif 'classification' in mode:
+            input = input['text'] if isinstance(input, dict) else input
             x = self.get_features(input)
             x_output = self.model(input_ids=x['input_ids'], attention_mask=x['attention_mask'], return_dict=True)
             x_output = self.pooler(x_output.hidden_states[-1], x['attention_mask'])
-            x_output = F.normalize(x_output, p=2, dim=-1)
-            return x_output
+            x_output = self.MLP(x_output)
+            # x_output = F.normalize(x_output, p=2, dim=-1)
+            
+            return x_output 
+        
         

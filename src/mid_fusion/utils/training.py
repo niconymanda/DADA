@@ -77,22 +77,24 @@ class MidFusionTrainer():
         print(F"Using device: {self.device}")
 
         self.speech_model = SpeechEmbedder()
+        print(self.args.text_model_name, self.args.mlp_layers, self.args.hidden_layers)
         self.text_model = AuthorshipLLM(self.args.text_model_name, 
                           num_layers=self.args.mlp_layers, 
-                          use_layers=self.args.hidden_layers)
+                          use_layers=self.args.hidden_layers,
+                          out_features=512)
         
         if args.text_model_path is not None:
             checkpoint = torch.load(args.text_model_path, map_location=torch.device('cpu'), weights_only=True)
             self.text_model.load_state_dict(checkpoint['model_state_dict']) # TODO @abhaydmathur : ensure this is how Ivi loads the model
             print(f"Loaded text model from {args.text_model_path}")
         if args.speech_model_path is not None:
-            self.speech_model.load_(torch.load(args.speech_model_path))
+            self.speech_model.load_(args.speech_model_path)
             print(f"Loaded speech model from {args.speech_model_path}")
 
         self.model = MidFuse(
             text_model=self.text_model,
             speech_model=self.speech_model,
-            text_features=1024,
+            text_features=512,
             speech_features=256,
         )
 

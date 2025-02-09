@@ -32,7 +32,8 @@ class TesterAuthorshipAttribution:
                  author_id_map, 
                  mode: Optional[Literal['min_negatives', 'random']] = 'random', 
                  classification_model=None, 
-                 args=None ):
+                 args=None,
+                 classification = True):
         self.model = model
         self.repository_id = repository_id
         self.author_id_map = author_id_map
@@ -42,6 +43,7 @@ class TesterAuthorshipAttribution:
         self.all_cosine_distances_negative = []
         self.args = args
         self.mode = mode
+        self.classification = classification
 
         self.distance_function = config.get_distance_function(self.args.distance_function)
         
@@ -69,43 +71,48 @@ class TesterAuthorshipAttribution:
 
         results = {}
         results_spoofed = {}
-
-        # Test results test_dataloader
-        acc = self.test_abx_accuracy(test_dataloader, self.model)
-        results['abx_accuracy'] = acc
-        print(f"Test ABX Accuracy : {acc:.4f}")
         
-        self.plot_cosine_distence_distribution(f'test_{dataset_name}')
+        # If the dataset is not In the Wild, we're doing binary classification
+        if self.classification:
+            results = self.test_classification(test_dataloader, self.model)
+           
+        else:
+            # Test results test_dataloader
+            acc = self.test_abx_accuracy(test_dataloader, self.model)
+            results['abx_accuracy'] = acc
+            print(f"Test ABX Accuracy : {acc:.4f}")
 
-        # Test results spoofed_dataloader
-        acc_sp = self.test_abx_accuracy(spoofed_dataloader, self.model)
-        print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
-        results_spoofed['abx_accuracy'] = acc_sp
-        self.plot_cosine_distence_distribution(f'spoofed_{dataset_name}')
+            self.plot_cosine_distence_distribution(f'test_{dataset_name}')
 
-        all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
+            # Test results spoofed_dataloader
+            acc_sp = self.test_abx_accuracy(spoofed_dataloader, self.model)
+            print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
+            results_spoofed['abx_accuracy'] = acc_sp
+            self.plot_cosine_distence_distribution(f'spoofed_{dataset_name}')
 
-        #Test results on classification model
-        if self.classification_model is not None:
+            all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
 
-            if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
-                predictions, classif_results = self.predict(self.classification_model, all_embeddings, all_labels)
-                all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
-                _, classif_results_spoofed = self.predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
-            else:   
-                classif_results, predictions = self.test_classification(test_dataloader)
-                classif_results_spoofed, predictions_spoofed = self.test_classification(spoofed_dataloader)
+            #Test results on classification model
+            if self.classification_model is not None:
 
-            name = f't-SNE_{self.args.classification_head}_{dataset_name}'
-            self.plot_tsne_for_authors(all_embeddings, predictions, name)
+                if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
+                    predictions, classif_results = self.predict(self.classification_model, all_embeddings, all_labels)
+                    all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
+                    _, classif_results_spoofed = self.predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
+                else:   
+                    classif_results, predictions = self.test_classification(test_dataloader, self.classification_model)
+                    classif_results_spoofed, predictions_spoofed = self.test_classification(spoofed_dataloader, self.classification_model)
 
-            results.update(classif_results)
-            config.write_results_to_file(results, './output/results.txt', self.args, self.repository_id)
+                name = f't-SNE_{self.args.classification_head}_{dataset_name}'
+                self.plot_tsne_for_authors(all_embeddings, predictions, name)
 
-            results_spoofed.update(classif_results_spoofed)
-            config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args, self.repository_id)
+                results.update(classif_results)
+                config.write_results_to_file(results, './output/results.txt', self.args, self.repository_id)
 
-        self.plot_tsne_for_authors(all_embeddings, all_labels, f't-SNE_{dataset_name}')
+                results_spoofed.update(classif_results_spoofed)
+                config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args, self.repository_id)
+
+            self.plot_tsne_for_authors(all_embeddings, all_labels, f't-SNE_{dataset_name}')
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
 
 
@@ -197,7 +204,7 @@ class TesterAuthorshipAttribution:
         return accuracy
 
 
-    def test_classification(self, test_dataloader):
+    def test_classification(self, test_dataloader, model):
         """
         Evaluates the classification model on the provided test data.
         Args:
@@ -211,11 +218,8 @@ class TesterAuthorshipAttribution:
                 - 'confusion_matrix' (ndarray): The confusion matrix of the model's predictions.
                 - 'auc' (float): The area under the ROC curve (AUC) of the model on the test dataset.
         """
-        if self.classification_model is None:
-            print("Classification model not provided for testing.")
-            return None 
-
-        self.classification_model.eval()
+        
+        model.eval()
         all_preds = []
         all_labels = []
 
@@ -223,8 +227,7 @@ class TesterAuthorshipAttribution:
             for batch in tqdm(test_dataloader):
                 
                 labels = batch['label']
-
-                outputs = self.classification_model(batch)
+                outputs = model(batch, mode = 'classification_train')
                 preds = outputs.argmax(dim=1)
 
                 all_preds.extend(preds.cpu().numpy())

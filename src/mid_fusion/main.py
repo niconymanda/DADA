@@ -18,19 +18,19 @@ def get_args():
     parser.add_argument('--model_save_path', type=str, default='./models', help='Path to save the trained model')
     parser.add_argument('--log_interval', type=int, default=1, help='Interval for logging training status')
     parser.add_argument('--dataset_config', type=str, default='/home/infres/iivanova-23/DADA/src/mid_fusion/configs/inthewild_full.yaml', help='Path to the dataset configuration file')
-    parser.add_argument('--log_dir', type=str, default='./runs', help='Path to save logs')
+    parser.add_argument('--log_dir', type=str, default='/data/iivanova-23/runs', help='Path to save logs')
     parser.add_argument('--max_duration', type=int, default=4, help='Maximum duration of audio files')
     parser.add_argument('--sampling_rate', type=int, default=16000, help='Sampling rate of audio files')
     parser.add_argument('--early_stopping_patience', type=int, default=3, help='Number of epochs to wait before early stopping')
     parser.add_argument('--early_stopping_threshold', type=float, default=0.01, help='Threshold for early stopping')
     # parser.add_argument('--loss_fn', type=str, default='triplet_cosine', help='Loss function to use for training', choices=['triplet', 'triplet_cosine', 'ada_triplet'])
-    parser.add_argument('--gpu_id', type=int, default=1, help='ID of the GPU to use for training')
+    parser.add_argument('--gpu_id', type=int, default=2, help='ID of the GPU to use for training')
     # parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
     # parser.add_argument('--at_lambda', type=float, default=0.5, help='Lambda for AdaTriplet loss')
     parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility')
     parser.add_argument('--save_visualisations', type=bool, default=False, help='Save visualizations of embeddings')
     parser.add_argument('--text_model_name', type=str, default='google-t5/t5-large', help='Name of the text model to use')
-    parser.add_argument('--text_model_path', type=str, default=None, help='Path to the text model')
+    parser.add_argument('--text_model_path', type=str, default='/home/infres/iivanova-23/DADA/iivanova-23/output/paper_sets/n_authors_51/google-t5/t5-large_16_20_20250203-234528/final.pth', help='Path to the text model')
     parser.add_argument('--speech_model_name', type=str, default=None, help='Name of the speech model to use')
     parser.add_argument('--speech_model_path', type=str, default='/data/amathur-23/DADA/models/SpeechEmbedder/triplet_cosine_epsP35_51v2/best_model.pth', help='Path to the speech model')
     parser.add_argument('--load_checkpoint', type=str, default=None, help='Path to the checkpoint to load')
@@ -41,7 +41,7 @@ def get_args():
 
 def load_config_text_model(args):
     if args.text_model_path is not None:
-        config_path = args.text_model_path.replace('final', 'model_config.json')
+        config_path = args.text_model_path.replace('final.pth', 'model_config.json')
         with open(config_path, 'r') as f:
             config = json.load(f)
         args.text_model_name = config['architecture']['args']['model_name']
