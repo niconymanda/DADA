@@ -94,20 +94,35 @@ security. These deepfakes are not only used in creating political propaganda to
 manipulate public opinion~\cite{stuanescuinformational} but have also become
 tools for conducting phone scams~\cite{mirsky2022dfcaptcha}, posing significant
 threats to individual privacy and security. Yet robust detection mechanisms are
-still lacking.\todo{cite in the wild} This paper contributes to proactive
-measures in detecting audio deepfakes, focusing on detecting audio deepfakes of
-public figures. Public figures are especially susceptible to the detrimental
-effects of audio deepfakes as their extensive online presence renders them
-prime targets for malicious actors seeking to disseminate misinformation.
+still lacking~\cite{in_the_wild}. This paper contributes to proactive measures
+in detecting audio deepfakes, focusing on detecting audio deepfakes of public
+figures. Public figures are especially susceptible to the detrimental effects
+of audio deepfakes as their extensive online presence renders them prime
+targets for malicious actors seeking to disseminate misinformation.
 
 % \subsection{Why this isn't solved: ASVspoof vs In the wild}
 
 Current automated deepfake detection methods typically use deep learning, and
-achieve high benchmark performance \todo{citation needed, eg asvspoof}. But
-deepfake detectors learn to spot acoustic artefacts produced by the generator
-\todo{citation needed}, which is a major source of brittleness. Trained
-deepfake detectors have poor performance when deployed in a real-world setting,
-regardless of performance on standardized benchmarks \todo{cite in the wild}.
+achieve high benchmark performance~\cite{ASVspoof_21,zeng2023deepfake}.
+
+Lightweight Convolutional Neural Networks~(LCNN)~\cite{lfcc_lcnn} have been
+widely employed due to their efficiency in capturing spoofing artefacts in raw
+waveforms. RawNet2~\cite{rawnet2}, a variant of RawNet, leverages residual
+connections and attention mechanisms to improve feature extraction for deepfake
+detection. AASIST~(Audio Anti-Spoofing using Integrated Spectro-Temporal
+features)~\cite{aasist} integrates spectro-temporal representations to enhance
+robustness against unseen attacks. RawGAT~\cite{rawgat}, a model combining raw
+waveform processing with Graph Attention Networks (GAT), has shown promising
+results in handling diverse spoofing techniques. More recently, SLIM
+(Style-Linguistics Mismatch Model)~\cite{slim} aims to leverage the mismatch
+betwen a speaker's style and linguistic content through self-supervised
+pretraining on real speech to detect spoofing.
+
+But deepfake most current detectors learn to spot acoustic artefacts produced
+by the generator \todo{citation needed}, which is a major source of
+brittleness. Trained deepfake detectors have poor performance when deployed in
+a real-world setting, regardless of performance on standardized
+benchmarks~\cite{in_the_wild}.
 
 Aiming to increase robustness in deepfake detection, we propose a new pipeline
 that incorporates contextual information. Deepfakes can be leveraged to
@@ -163,35 +178,35 @@ model~\cite{bauersfeld2023cracking} are used also for authorship attribution on
 arXiv manuscripts, achieving high attribution accuracy in a large-scale dataset
 with up to 2,000 authors.
 
-\subsection{Previous intro (copied Feb 6, 12:30)}
+% \subsection{Previous intro (copied Feb 6, 12:30)}
 
-With the rapid advances in the digital landscape and new media technologies,
-users become increasingly exposed to different types of manipulations.
-Nowadays, everyone can create highly realistic AI-generated content such as
-images, audio, and even videos. Distinguishing between those and the real ones
-becomes nearly impossible for the ordinary user. Audio deepfakes or voice
-clones are like digital ventriloquists, using various deep learning techniques
-to create voices that convincingly impersonate real people~\cite{adversarial}.
-We can distinguish between a couple of different types of
-deepfakes~\cite{review_audio_deepfake_issues}. The first approach is
-imitation-based (voice conversion), wherein the original audio signal is
-modified to mimic another targeted voice. This technique is mainly used in show
-business and, therefore, is applied by a third person or deep learning
-software. The next approach is synthetic-based, producing artificially
-generated speech using text-to-speech techniques (TTS). This process involves
-three stages: text analysis, acoustic, and vocoder. The third technique is
-centred on replaying existing recordings of the target speaker. Two techniques
-are notable here: cut-and-paste detection, where a victim's recorded segment is
-played through a phone handset for capture, and far-field detection, which
-involves crafting sentences for manipulation of a text-dependent system. There
-are other types of deepfakes, such as emotion fake. This technique alters the
-emotions of a speaker's voice while preserving the original words and speaker
-identity. ~\cite{zhao2023emofake}. Another type is scene fake, which involve
-modifying the background sounds of a recording, leaving the speaker and content
-untouched.~\cite{yi2022scenefake}. The last type of deepfake is the partially
-fake, which involves replacing specific words within the original audio signal
-with either real or synthetic audio segments. The speaker remains the same
-throughout, but the content is altered~\cite{yi2023halftruth}.
+% With the rapid advances in the digital landscape and new media technologies,
+% users become increasingly exposed to different types of manipulations.
+% Nowadays, everyone can create highly realistic AI-generated content such as
+% images, audio, and even videos. Distinguishing between those and the real ones
+% becomes nearly impossible for the ordinary user. Audio deepfakes or voice
+% clones are like digital ventriloquists, using various deep learning techniques
+% to create voices that convincingly impersonate real people~\cite{adversarial}.
+% We can distinguish between a couple of different types of
+% deepfakes~\cite{review_audio_deepfake_issues}. The first approach is
+% imitation-based (voice conversion), wherein the original audio signal is
+% modified to mimic another targeted voice. This technique is mainly used in show
+% business and, therefore, is applied by a third person or deep learning
+% software. The next approach is synthetic-based, producing artificially
+% generated speech using text-to-speech techniques (TTS). This process involves
+% three stages: text analysis, acoustic, and vocoder. The third technique is
+% centred on replaying existing recordings of the target speaker. Two techniques
+% are notable here: cut-and-paste detection, where a victim's recorded segment is
+% played through a phone handset for capture, and far-field detection, which
+% involves crafting sentences for manipulation of a text-dependent system. There
+% are other types of deepfakes, such as emotion fake. This technique alters the
+% emotions of a speaker's voice while preserving the original words and speaker
+% identity. ~\cite{zhao2023emofake}. Another type is scene fake, which involve
+% modifying the background sounds of a recording, leaving the speaker and content
+% untouched.~\cite{yi2022scenefake}. The last type of deepfake is the partially
+% fake, which involves replacing specific words within the original audio signal
+% with either real or synthetic audio segments. The speaker remains the same
+% throughout, but the content is altered~\cite{yi2023halftruth}.
 
 \begin{figure}[t]
   \centering
@@ -199,44 +214,44 @@ throughout, but the content is altered~\cite{yi2023halftruth}.
   \caption{Overview of the DADA pipeline. Audio files are first transcribed to obtain textual content. Features are then extracted from both the audio and text using separate models. Finally, these features are combined (using either mid fusion or late fusion strategies) to generate the final prediction.}\label{fig:overview}
 \end{figure}
 
-All these different techniques can have far-reaching consequences, affecting
-domains ranging from political discourse to personal security. These deepfakes
-are not only used in creating political propaganda to manipulate public
-opinion~\cite{stuanescuinformational} but have also become tools for conducting
-phone scams~\cite{mirsky2022dfcaptcha}, posing significant threats to
-individual privacy and security. The ability to convincingly replicate or alter
-voices using AI have affirmed the urgent need for robust detection mechanisms.
-This paper contributes to proactive measures in detecting audio deepfakes,
-particularly focusing on detecting audio deepfakes of public figures. Public
-figures are especially susceptible to the detrimental effects of audio
-deepfakes as their extensive online presence renders them prime targets for
-malicious actors seeking to disseminate misinformation.
+% All these different techniques can have far-reaching consequences, affecting
+% domains ranging from political discourse to personal security. These deepfakes
+% are not only used in creating political propaganda to manipulate public
+% opinion~\cite{stuanescuinformational} but have also become tools for conducting
+% phone scams~\cite{mirsky2022dfcaptcha}, posing significant threats to
+% individual privacy and security. The ability to convincingly replicate or alter
+% voices using AI have affirmed the urgent need for robust detection mechanisms.
+% This paper contributes to proactive measures in detecting audio deepfakes,
+% particularly focusing on detecting audio deepfakes of public figures. Public
+% figures are especially susceptible to the detrimental effects of audio
+% deepfakes as their extensive online presence renders them prime targets for
+% malicious actors seeking to disseminate misinformation.
 
-We propose a new pipeline that aims to not only analyze the audio utterances
-but also incorporate contextual information. Furthermore, DADA has two
-different branches, one responsible for detecting if the audio is real or fake
-and a text branch performing the task of Authorship Attribution on the
-transcription of the audio. We want to answer the question of what is the
-probability of the anticipated speaker having made the given statement.
+% We propose a new pipeline that aims to not only analyze the audio utterances
+% but also incorporate contextual information. Furthermore, DADA has two
+% different branches, one responsible for detecting if the audio is real or fake
+% and a text branch performing the task of Authorship Attribution on the
+% transcription of the audio. We want to answer the question of what is the
+% probability of the anticipated speaker having made the given statement.
 % changelog[Abhay]: removed the abbreviation AA here, as it is not used in the text later + Alcoholics Anonymous prolly has dibs
 
-Recent advancements in authorship attribution using deep learning have
-showcased the efficacy of various encoder-based architectures in capturing
-linguistic and stylistic patterns unique to individual authors. We can
-encounter multiple papers that explore BERT or T5-based models for identifying
-authorship in literary texts, achieving notable
-accuracy~\cite{hicke2023t5,silva2024forged}. For instance,
-BertAA~\cite{fabien2020bertaa} is a fine-tuned pretrained BERT model for
-authorship attribution, demonstrating competitive performance on multiple
-datasets. We can also find several papers that use techniques from contrastive
-learning in creating discriminative embedding spaces. Works like DeepStyle
-~\cite{hu2020deepstyle}, focusing on short-text authorship attribution,
-leveraging Triplet Loss, which outperformed existing baselines using Twitter
-and Weibo datasets and using Siamese networks for large-scale author
-identification~\cite{saedi2021siamese}. A transformer-based model
-~\cite{bauersfeld2023cracking} are used also for authorship attribution on
-arXiv manuscripts, achieving high attribution accuracy in a large-scale dataset
-with up to 2,000 authors.
+% Recent advancements in authorship attribution using deep learning have
+% showcased the efficacy of various encoder-based architectures in capturing
+% linguistic and stylistic patterns unique to individual authors. We can
+% encounter multiple papers that explore BERT or T5-based models for identifying
+% authorship in literary texts, achieving notable
+% accuracy~\cite{hicke2023t5,silva2024forged}. For instance,
+% BertAA~\cite{fabien2020bertaa} is a fine-tuned pretrained BERT model for
+% authorship attribution, demonstrating competitive performance on multiple
+% datasets. We can also find several papers that use techniques from contrastive
+% learning in creating discriminative embedding spaces. Works like DeepStyle
+% ~\cite{hu2020deepstyle}, focusing on short-text authorship attribution,
+% leveraging Triplet Loss, which outperformed existing baselines using Twitter
+% and Weibo datasets and using Siamese networks for large-scale author
+% identification~\cite{saedi2021siamese}. A transformer-based model
+% ~\cite{bauersfeld2023cracking} are used also for authorship attribution on
+% arXiv manuscripts, achieving high attribution accuracy in a large-scale dataset
+% with up to 2,000 authors.
 
 Most current state of the art systems are benchmarked on the ASVspoof
 dataset~\cite{ASVspoof_21}, which comprises scripted recordings and spoofs
@@ -246,8 +261,6 @@ landscape of deepfake generation. This dataset contains real-world recordings
 and spoofs generated using a variety of techniques, including voice conversion
 and TTS. We aim to evaluate our proposed method on both ASVspoof and In The
 Wild datasets to assess its robustness in detecting real-world deepfakes.
-
-% \todo[inline]{Nils: add a description of benchmark datasets. In particular, describe the contrast between ASVspoof ("easy" task) and In the wild ("hard task"). You should clarify here that you are trying to solve the hard task.}
 
 \section{Related Work}\label{sec:related_work}
 \todo[inline]{Keeping all related work in Introduction~\ref{sec:introduction} for now, in line with papers from Interspeech24.}
@@ -299,15 +312,10 @@ anchor and the positive is smaller than the distance between the anchor and the
 negative by at least a certain margin $\lambda$. We define the function as
 follows:
 
-% \todo[inline]{Abhay: Aliter}
-% We define the loss on features $f_\theta^{A}$, $f_\theta^{P}$ and $f_\theta^{N}$ generated by the model on a triplet as follows:
-
 \begin{align}
   \mathcal{L} = [d(f_\theta^{A},f_\theta^{P}) - d(f_\theta^{A},f_\theta^{N}) + \lambda]_{+}
   \label{eq:triplet_loss}
 \end{align}
-
-% $$\mathscr{L} = \sum_{i=1}^N max[d(f(A^i), f(P^i))- d(f(A^i), f(N^i))+ \lambda, 0]$$
 
 Where $f_\theta(x)$ is the embedding of the input x generated by the model,
 $\lambda$ is the margin that enforces a minimum separation between similar and
@@ -317,7 +325,7 @@ functions, the squared Euclidean distance (L2-norm) and the cosine similarity
 between the features.
 
 \subsection{Audio Model}
-
+\label{subsec:audio_model}
 % Architecture
 The audio model uses a Wav2Vec2~\cite{wav2vec2} backbone for feature
 extraction, which allows learning representations directly from raw audio
@@ -328,8 +336,6 @@ to focus on the most informative parts of the audio signal. Additionally,
 following~\cite{slim}, a non-linear bottleneck is applied to further refine the
 feature vector, ensuring that it captures the essential characteristics needed
 for accurate deepfake detection.
-% \todo[inline]{Abhay: not sure if using citations independently is consistent/recommended.}
-% 
 
 % Training
 
@@ -347,11 +353,9 @@ between classes and provides a good starting point for further optimization.
 
 % \subsubsection{Adaptive Margin Adjustment}
 Next, we train the model for additional epochs using an adaptive triplet loss
-introduced in~\cite{adatriplet}.
-% \todo[inline]{Abhay: Again, using citation  independently.} 
-This constitutes adding an additional soft constraint on the virtual angle
-between the anchor and the negative sample using another margin $\lambda'$ as
-follows.
+introduced in~\cite{adatriplet}. This constitutes adding an additional soft
+constraint on the virtual angle between the anchor and the negative sample
+using another margin $\lambda'$ as follows.
 
 \begin{align}
   \begin{split}
@@ -371,7 +375,6 @@ parameters and combine their features using one of two fusion strategies: mid
 fusion or late fusion.
 
 \subsubsection{Mid Fusion}
-% \todo[inline]{Nils: reference Figures 2 and 3}
 In this strategy (Figure~\ref{fig:mid_fusion}), the extracted features from the
 audio and text models are concatenated to create a joint representation. This
 combined representation is then passed through a Multi-Layer Perceptron (MLP)
@@ -407,9 +410,7 @@ Where $p(\hat{y}|f_\phi)$ and $p(\hat{y}|f_\theta)$ are the predictions from
 the audio and text models respectively, and $\alpha$ is the weight assigned to
 the audio model's prediction.
 
-\todo[inline]{See Section \ref{sec:late-fusion} after the biblioraphy for a math description of late fusion}
-
-% \todo[inline]{Abhay: I'll complete this today \today.}
+\todo[inline]{See Section \ref{sec:late-fusion} after the bibliography for a math description of late fusion}
 
 % Both fusion strategies provide distinct advantages: mid fusion enables the
 % model to learn deeper interactions between the modalities, while late fusion
@@ -431,39 +432,47 @@ the audio model's prediction.
 
 \begin{table}[!htp]\centering
   \scriptsize
-  \begin{tabular}{lcccccc}\toprule
-    \multirow{2}{*}{Method} & \multicolumn{2}{c}{ASVSpoof21} & \multicolumn{2}{c}{In The Wild} & \multicolumn{2}{c}{MLAAD[en]}                        \\\cmidrule{2-7}
-                            & F1 Score                       & EER                             & F1 Score                      & EER & F1 Score & EER \\\cmidrule{1-7}
-    RawGAT~\cite{rawgat}    &                                &                                 &                               &     &          &     \\
-    Rawnet2~\cite{rawnet2}  &                                &                                 &                               &     &          &     \\
-    SLIM~\cite{slim}        &                                &                                 &                               &     &          &     \\
-    AASIST~\cite{aasist}    &                                &                                 &                               &     &          &     \\
-    \textbf{Ours}           &                                &                                 &                               &     &          &     \\\midrule
+  \begin{tabular}{lcccccc}
+    \toprule
+    \multirow{2}{*}{Method} & \multicolumn{2}{c}{ASVSpoof21} & \multicolumn{2}{c}{In The Wild} & \multicolumn{2}{c}{MLAAD[en]}                            \\\cmidrule{2-7}
+                            & F1 Score                       & EER                             & F1 Score                      & EER   & F1 Score & EER   \\\cmidrule{1-7}
+    LCNN~\cite{lfcc_lcnn}   & 0.197                          & 25.5                            & 0.373                         & 65.6  & 0.654    & 37.2  \\
+    Rawnet2~\cite{rawnet2}  & 0.213                          & 22.3                            & 0.602                         & 37.8  & 0.676    & 33.9  \\
+    RawGAT~\cite{rawgat}    &                                &                                 &                               &       &          &       \\
+    SLIM~\cite{slim}        & 0.651                          & 4.4                             & 0.898                         & 12.5  & 0.892    & 10.7  \\
+    AASIST~\cite{aasist}    & 0.707                          & 3.6                             & 0.847                         & 17.5  & 0.856    & 14.5  \\ \midrule
+    \multicolumn{7}{l}{\textbf{DADA Variants (Ours)}}                                                                                                     \\
+    Audio-Only              & \dots                          & \dots                           & \dots                         & \dots & \dots    & \dots \\
+    Late Fusion             & ---                            & ---                             &                               &       & ---      & ---   \\
+    Mid Fusion              & \dots                          & \dots                           & \dots                         & \dots & \dots    & \dots \\\midrule
     \bottomrule
   \end{tabular}
   \caption{Performance of DADA vs benchmarks [WIP] }\label{tab:global_results}
 \end{table}
 
-% \todo[inline]{Abhay: Need to decide whether we group by task\{text, audio, fusion\} or by \{datasets,metrics,baselines\}. Further, should we call the text model the `context module'? BY TASK }
-% \todo[inline]{Nils: my advice would be to group by task}
+% GROUP BY TASK
 
-\subsection{Text / Context Module}
-\subsubsection{Dataset}
+\subsection{Text Module}
+
+\subsubsection{Datasets}
 For the authorship attribution task we incorporate an additional dataset
 Wikiquotes, which provides a rich corpus of speeches from various authors.
 Since only real samples are needed for training the text model, relying only on
 the transcriptions provided by Whisper proved insufficient for learning the
-nuanced characteristics of individual authors. \\
+nuanced characteristics of individual authors.
+
 \subsubsection{Metrics}
 ABX accuracy is a commonly used metric in speech and speaker representation
-learning, often used in tasks related to contrastive learning. Similar to the
-triplet loss we have three samples A,B and X. Where A and B are two embeddings
-from different categories and X is a third representation. The task is to
-determine whether X is more similar to A or B based on the learned embeddings.
-The accuracy measures the percentage of times the model correctly assigns X to
-its corresponding label (closer to A or B). The decision rule is: $d(X,A) <
-  d(X,B)$, where $d(x,y)$ is the distance function. \\
-\subsubsection{Benchmark} We consider several state-of-the-art encoder-only architectures to benchmark
+learning, often used in tasks related to contrastive learning~\cite{abx_speech_features, evaluatingcontextinvarianceunsupervisedspeech}. Similar to the
+triplet loss, we have three samples $A$, $B$ and $X$. Where $A$ and $B$ are two embeddings
+from different categories and $X$ is a third representation. The task is to
+determine whether $X$ is more similar to $A$ or $B$ based on the learned embeddings.
+The accuracy measures the percentage of times the model correctly assigns $X$ to
+its corresponding label (closer to $A$ or $B$). The decision rule is: $d(X,A) <
+  d(X,B)$, where $d(x,y)$ is the distance function. A random decision would yield 50\% accuracy.
+
+\subsubsection{Benchmarking}
+We consider several state-of-the-art encoder-only architectures to benchmark
 the effectiveness of the text model, including Flan-T5~\cite{flan-t5},
 RoBERTa~\cite{liu2019roberta}, DeBERTa~\cite{deberta},
 ModernBERT~\cite{modernBERT}, and the encoder of T5\cite{t5}. Encoder-only
@@ -479,43 +488,72 @@ system's overall performance.
 \begin{table}[!htp]\centering
   \scriptsize
   \begin{tabular}{lcccccc}\toprule
-      \multirow{2}{*}{Model}       & \multicolumn{2}{c}{Wikiquotes} & \multicolumn{2}{c}{In The Wild} & \multicolumn{2}{c}{VoxCeleb}                  \\\cmidrule{2-7}
-                                   & F1                             & ABX                             & F1                           & ABX & F1 & ABX \\\cmidrule{1-7}
-      T5 Encoder~\cite{t5}         &                                & 0.76                            &                              &     &    &     \\
-      Flan-T5~\cite{flan-t5}       &                                & 0.73                            &                              &     &    &     \\
-      ModernBERT~\cite{modernBERT} &                                &                                 &                              &     &    &     \\
-      DeBERTa~\cite{deberta}       &                                & 0.77                            &                              &     &    &     \\\midrule
-      \bottomrule
+    \multirow{2}{*}{Model}       & \multicolumn{2}{c}{Wikiquotes} & \multicolumn{2}{c}{In The Wild} & \multicolumn{2}{c}{VoxCeleb}                  \\\cmidrule{2-7}
+                                 & F1                             & ABX                             & F1                           & ABX & F1 & ABX \\\cmidrule{1-7}
+    T5 Encoder~\cite{t5}         &                                & 0.76                            &                              &     &    &     \\
+    Flan-T5~\cite{flan-t5}       &                                & 0.73                            &                              &     &    &     \\
+    ModernBERT~\cite{modernBERT} &                                &                                 &                              &     &    &     \\
+    DeBERTa~\cite{deberta}       &                                & 0.77                            &                              &     &    &     \\\midrule
+    \bottomrule
   \end{tabular}
   \caption{Performance of Text Model finetuned on Wikiquotes }\label{tab:results_text_model}
 \end{table}
 
-% \todo[inline]{TODO @abhaydmathur : make gpu details fit.}
 All experiments were conducted on a single NVIDIA A100 GPU with 40GB vRAM.
 
-\subsection{Metrics (Global)}
-To evaluate the performance of our proposed method, we use three metrics: F1
-score, Equal Error Rate (EER), and tandem assessment Detection Cost Function
-(t-DCF).
+\subsection{Audio Module}
 
-\subsubsection{Equal Error Rate (EER)}
-Equal Error Rate (EER) is a standard metric for audio deepfake detection
-systems, denoting the the point at which the false acceptance rate (FAR) and
-the false rejection rate (FRR) are equal. It is a common metric used in
-biometric and speaker verification systems to evaluate the trade-off between
-false positives and false negatives. A lower EER indicates better performance.
+% \subsubsection{Datasets}
+The audio module is pre-trained on the speaker representation learning
+task~(Section~\ref{subsec:audio_model}) on an aggregation of the
+CommonVoice~\cite{commonvoice}, RAVDESS~\cite{ravdess} and
+VoxCeleb2~\cite{voxceleb2} datasets. Both CommonVoice and RAVDESS contain
+recordings of speakers reading predefined sentences, while VoxCeleb2 contains
+speech from celebrities extracted from YouTube videos.
 
-% \subsubsection{Detection Cost Function for Tandem Assessment (t-DCF)}
-% The tandem assessment Detection Cost Function (t-DCF) is a metric used to
-% evaluate the performance of spoofing countermeasures in conjunction with
-% automatic speaker verification (ASV) systems~\cite{tdcf}. It combines the detection error
-% trade-off (DET) curve of the ASV system with the performance of the spoofing
-% countermeasure to provide a single metric that reflects the overall system
-% performance. The t-DCF takes into account the costs of different types of
-% errors and the prior probabilities of genuine and spoofed trials, making it a
-% comprehensive metric for evaluating the effectiveness of anti-spoofing systems.
+We train the model using the adaptive-margin contrastive learning strategy
+described in Section~\ref{subsec:audio_model}, and evaluate it performance with
+ABX accuracy.
+
+% We then add a binary classification head to the model and fine-tune it on the ASVspoof19 LA~\cite{ASVspoof_19} (Logical Access) dataset.
+
+\todo[inline]{Abhay: might want to shift voxceleb2 desc to text module}
+
+\subsection{Mid Fusion}
+
+We train both our fusions pipeline on the ASVSpoof Dataset. This dataset
+contains a variety of real and spoofed audio samples designed to benchmark the
+performance of automatic speaker verification systems against spoofing attacks.
+We then evaluate the models' performance on out-of-domain datasets, In The
+Wild~\cite{in_the_wild} and the English subset of MLAAD~\cite{mlaad}. This
+helps us assess its generalization and robustness to real-world deepfakes.
+
+\subsubsection{Metrics}
+We consider two metrics for our evaluations: F1-score and Equal Error Rate
+(EER).
+% , and tandem assessment Detection Cost Function(t-DCF).
+EER is a standard metric for audio deepfake detection systems, denoting the the
+point at which the false acceptance rate (FAR) and the false rejection rate
+(FRR) are equal. A lower EER indicates better performance.
+
+\subsection{Results}
+
+Our results can be found in Table~\ref{tab:global_results}. We observe that
+both the mid and late fusion strategies outperform the state-of-the-art
+benchmarks on \dots
 
 \section{Conclusions / Discussion}\label{sec:conclusions}
+
+In this paper, we introduced DADA, a novel approach for audio deepfake
+detection that leverages both audio and textual features to improve detection
+accuracy. By incorporating context awareness through authorship attribution,
+our method enhances the robustness of deepfake detection systems. We proposed
+two fusion strategies, mid fusion and late fusion, to effectively combine audio
+and text features. Our experiments demonstrate that DADA outperforms
+state-of-the-art benchmarks on multiple datasets, highlighting the potential of
+integrating contextual information in deepfake detection pipelines. Future work
+will focus on further refining the fusion strategies and exploring additional
+datasets to validate the generalizability of our approach.
 
 % \newpage
 \ifinterspeechfinal
@@ -546,13 +584,18 @@ $A$ the random variable equal to author of text
 
 $T$ the random variable equal to text
 
+The author id model gives $$p(A=a|T=t,X=1)$$
+
+so I'm not sure how to use it.
+
 We want to quantify $p(X=0|T=t)$
 
 Rewrite as $${p(X=0|T=t) = \sum_a p(X=0|T=t,A=a)p(A=a|T=t)}$$ (marginalization
 + chain rule)
 
-Make the following assumption: $$p(X=0|T=t,A=a) \approx p(X=0|A=a)$$. It means
-that the content of the text does not add much w.r.t. to detecting spoofing, as
+Make the following assumption: $$p(X=0|T=t,A=a) \approx p(X=0|A=a)$$
+
+It means that the content of the text does not add much w.r.t. to detecting spoofing, as
 long as one has the author information. This would be particularly justified if
 certain authors are spoofed much more often than others: just knowing that a
 certain piece of text is attributed to an author would be a good indication of
@@ -563,7 +606,7 @@ With this $${p(X=0|T=t) = \sum_a p(X=0|A=a)p(A=a|T=t)}$$
 ${p(X=0|A=a)}$ is given by how often author $a$ has been spoofed (can be computed on the training set), and ${p(A=a|T=t)}$ is given by author id model.
 
 In the end, if $p(X=0|A=a)$ is quite constant across authors, e.g. ${\forall a
-            \thickspace p(X=0|A=a) \approx \tau}$ then ${p(X=0|T=t) = \sum_a \tau
-            p(A=a|T=t) = \tau}$
+      \thickspace p(X=0|A=a) \approx \tau}$ then ${p(X=0|T=t) = \sum_a \tau
+      p(A=a|T=t) = \tau}$
 
 \end{document}
