@@ -1,0 +1,67 @@
+{
+    "train authors": 51,
+    "test authors": 51,
+    "architecture": {
+        "name": "AuthorshipLLM",
+        "args": {
+            "model_name": "microsoft/deberta-v3-large",
+            "epochs": 20,
+            "learning_rate": 1e-05,
+            "weight_decay": 0.1,
+            "early_stopping_patience": 5,
+            "num_mlp_layers": 1,
+            "hidden_layers mean pool": [
+                -1
+            ]
+        }
+    },
+    "architecture_classifier": {
+        "name": "AuthorshipClassificationLLM",
+        "args": {
+            "model_name": "linear",
+            "epochs": 10,
+            "learning_rate": 0.0001,
+            "weight_decay": 0.1,
+            "early_stopping_patience": 5,
+            "logging_step": 10
+        }
+    },
+    "loss_function": {
+        "name": "triplet",
+        "args": {
+            "margin": 0.5,
+            "distance_function": "l2",
+            "reduction": "mean",
+            "at_lambda": 0.5
+        }
+    },
+    "data_loader": {
+        "type": "AuthorTripletLossDataset",
+        "args": {
+            "data": "/data/iivanova-23/data/wiki_train.csv",
+            "batch_size": 16,
+            "shuffle": true,
+            "validation_split": 0.3,
+            "num_workers": 2
+        }
+    },
+    "optimizer_LLM_model": {
+        "type": "AdamW",
+        "args": {
+            "lr": 1e-05,
+            "weight_decay": 0.1
+        }
+    },
+    "lr_scheduler": {
+        "type": "cosine",
+        "args": {}
+    },
+    "trainer": {
+        "epochs": 20,
+        "save_dir": "output/",
+        "monitor": "min val_loss",
+        "early_stop": 5,
+        "report_to": "tensorboard"
+    },
+    "seed": 42
+}

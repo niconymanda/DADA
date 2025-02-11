@@ -1,0 +1,34 @@
+model_name: "late_fusion3" # Name of the model to train
+batch_size: 16 # Batch size for training
+epochs: 30 # Number of epochs to train
+learning_rate: 1e-5 # Learning rate for optimizer
+data_path: "/data/amathur-23/DADA/InTheWild/release_in_the_wild/" # Path to the training data
+model_save_path: "/data/amathur-23/DADA/models/late_fusion" # Path to save the trained model
+log_interval: 1 # Interval for logging training status
+dataset_config: "mid_fusion/configs/data/inthewild_all.yaml" # Path to the dataset configuration file
+log_dir: "mid_fusion/runs/" # Path to save logs
+max_duration: 4 # Maximum duration of audio files
+sampling_rate: 16000 # Sampling rate of audio files
+early_stopping_patience: 3 # Number of epochs to wait before early stopping
+early_stopping_threshold: 0.01 # Threshold for early stopping
+gpu_id: 2  # ID of the GPU to use for training
+seed: 42 # Seed for reproducibility
+save_visualisations: false # Save visualizations of embeddings
+text_model_name: "microsoft/deberta-v3-large" # Name of the text model to use
+text_model_path: "/data/amathur-23/DADA/models/text/deberta-v3-large-best/final.pth" # Path to the text model
+speech_model_name: null # Name of the speech model to use
+speech_model_path: "/data/amathur-23/DADA/models/SpeechEmbedder/voxceleb_tune_ada/best_model.pth" # Path to the speech model
+load_checkpoint: "/data/amathur-23/DADA/models/late_fusion/late_fusion2/best_model.pth" # Path to the checkpoint to load
+mlp_layers: 2 # Number of layers in MLP head
+hidden_layers: "-1" # List of hidden layer sizes for the model
+fusion_strategy: "late" # Fusion strategy to use
+train_datasets: 
+  "asvspoof19" : "/data/amathur-23/DADA/ASVspoof2019/LA" # Dataset to use for training
+test_datasets:
+  "asvspoof19" : "/data/amathur-23/DADA/ASVspoof2019/LA" # Dataset to use for testing"
+  "asvspoof21" : "/data/amathur-23/DADA/ASVspoof2021_DF_eval" # Dataset to use for testing
+  "mlaad_en" : "/data/amathur-23/DADA/MLAADv5"
+test_freq: 10 # Frequency of testing by epochs
+test_at_launch: false # Test at launch
+asv_root_dir: "/data/amathur-23/DADA/ASVspoof2021_DF_eval" # Root directory for ASV data
+asv_meta_dir: "/data/amathur-23/DADA/ASVspoof2021_DF_eval/keys/DF/CM/trial_metadata.txt" # Metadata directory for ASV data

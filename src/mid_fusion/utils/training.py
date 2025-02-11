@@ -29,18 +29,21 @@ from mid_fusion.utils.datasets import (
     ASVSpoof21Dataset,
     ASVSpoof19LADataset,
     MLAADEnDataset,
+    custom_collate
 )
 from mid_fusion.utils.metrics import equal_error_rate
 from SpeechCLR.utils.logging import Logger
 from SpeechCLR.models import SpeechEmbedder
 from authorship_attribution.model import AuthorshipLLM
-from mid_fusion.models import MidFuse, LateFuse, AudioHead
+from mid_fusion.models import MidFuse, LateFuse, EarWorm, BookWorm
 from sklearn.metrics import f1_score
 
 
 class MidFusionTrainer:
     def __init__(self, args):
         self.args = args
+
+        self.args.learning_rate = float(self.args.learning_rate)
 
         self.train_datasets_list = []
         self.val_datasets_list = []
@@ -49,7 +52,7 @@ class MidFusionTrainer:
         if "inthewild" in args.train_datasets:
             self.train_datasets_list.append(
                 InTheWildDataset(
-                    root_dir=args.data_path,
+                    root_dir=args.train_datasets["inthewild"],
                     metadata_file="wild_transcription_meta.json",
                     include_spoofs=True,
                     bonafide_label="bona-fide",
@@ -65,7 +68,7 @@ class MidFusionTrainer:
 
             self.val_datasets_list.append(
                 InTheWildDataset(
-                    root_dir=args.data_path,
+                    root_dir=args.train_datasets["inthewild"],
                     metadata_file="wild_transcription_meta.json",
                     include_spoofs=True,
                     bonafide_label="bona-fide",
@@ -82,8 +85,7 @@ class MidFusionTrainer:
         if "asvspoof21" in args.train_datasets:
             self.train_datasets_list.append(
                 ASVSpoof21Dataset(
-                    root_dir=args.asv_root_dir,
-                    meta_dir=args.asv_meta_dir,
+                    root_dir=args.train_datasets["asvspoof21"],
                     is_train=True,
                     is_eval=False,
                     split="train",
@@ -96,8 +98,7 @@ class MidFusionTrainer:
 
             self.val_datasets_list.append(
                 ASVSpoof21Dataset(
-                    root_dir=args.asv_root_dir,
-                    meta_dir=args.asv_meta_dir,
+                    root_dir=args.train_datasets["asvspoof21"],
                     is_train=True,
                     is_eval=False,
                     split="val",
@@ -111,7 +112,7 @@ class MidFusionTrainer:
         if "asvspoof19" in args.train_datasets:
             self.train_datasets_list.append(
                 ASVSpoof19LADataset(
-                    root_dir=args.asv_root_dir,
+                    root_dir=args.train_datasets["asvspoof19"],
                     split="train",
                     sampling_rate=16000,
                     max_duration=4,
@@ -121,7 +122,7 @@ class MidFusionTrainer:
 
             self.val_datasets_list.append(
                 ASVSpoof19LADataset(
-                    root_dir=args.asv_root_dir,
+                    root_dir=args.train_datasets["asvspoof19"],
                     split="val",
                     sampling_rate=16000,
                     max_duration=4,
@@ -132,14 +133,14 @@ class MidFusionTrainer:
         if "inthewild" in args.test_datasets:
             self.test_datasets_list.append(
                 InTheWildDataset(
-                    root_dir=args.data_path,
+                    root_dir=args.test_datasets["inthewild"],
                     metadata_file="wild_transcription_meta.json",
                     include_spoofs=True,
                     bonafide_label="bona-fide",
                     filename_col="file",
                     sampling_rate=args.sampling_rate,
                     max_duration=args.max_duration,
-                    split="test",
+                    split="val",
                     config=args.dataset_config,
                     text_tokenizer_name=self.args.text_model_name,
                     mode="classification",
@@ -149,11 +150,11 @@ class MidFusionTrainer:
         if "asvspoof21" in args.test_datasets:
             self.test_datasets_list.append(
                 ASVSpoof21Dataset(
-                    root_dir=args.asv_root_dir,
+                    root_dir=args.test_datasets["asvspoof21"],
                     meta_dir=args.asv_meta_dir,
                     is_train=False,
                     is_eval=True,
-                    split="test",
+                    split="val",
                     sampling_rate=16000,
                     max_duration=4,
                     get_transcription=True,
@@ -164,8 +165,8 @@ class MidFusionTrainer:
         if "asvspoof19" in args.test_datasets:
             self.test_datasets_list.append(
                 ASVSpoof19LADataset(
-                    root_dir=args.asv_root_dir,
-                    split="test",
+                    root_dir=args.test_datasets["asvspoof19"],
+                    split="val",
                     sampling_rate=16000,
                     max_duration=4,
                     get_transcription=True,
@@ -175,46 +176,54 @@ class MidFusionTrainer:
         if "mlaad_en" in args.test_datasets:
             self.test_datasets_list.append(
                 MLAADEnDataset(
-                    root_dir=args.mlaad_root_dir,
-                    split="test",
+                    root_dir=args.test_datasets["mlaad_en"],
+                    split="val",
                     sampling_rate=16000,
                     max_duration=4,
-                    get_transcription=True,
                 )
             )
 
-        self.train_dataset = ConcatDataset([self.train_datasets_list])
-        self.val_dataset = ConcatDataset([self.val_datasets_list])
+        print("Loaded Train Datasets - ", self.train_datasets_list)
+        print("Loaded Val Datasets - ", self.val_datasets_list)
+
+        self.train_dataset = ConcatDataset(self.train_datasets_list)
+        self.val_dataset = ConcatDataset(self.val_datasets_list)
 
         print("Loaded Dataset - ")
-        print(f"Training Samples : {len(self.train_dataset)}")
-        print(f"Validation Samples : {len(self.val_dataset)}")
 
         self.train_loader = DataLoader(
-            self.train_dataset, batch_size=args.batch_size, shuffle=True
+            self.train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate
         )
         self.val_loader = DataLoader(
-            self.val_dataset, batch_size=args.batch_size, shuffle=True
+            self.val_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate
         )
 
-        self.test_loaders = {
+        print(f"Training Samples : {len(self.train_loader)*args.batch_size}")
+        print(f"Validation Samples : {len(self.val_loader)*args.batch_size}")
+
+        self.test_loaders = dict(
             zip(
-                self.args.test_datasets, 
-                [DataLoader(ds, batch_size=args.batch_size, shuffle=True) for ds in self.test_datasets_list])
-        }
+                self.args.test_datasets,
+                [
+                    DataLoader(ds, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate)
+                    for ds in self.test_datasets_list
+                ],
+            )
+        )
 
         self.log_path = os.path.join(args.log_dir, args.model_name)
         self.logger = Logger(log_dir=self.log_path)
         print(f"Logging to {self.log_path}")
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = self.args.device
         print(f"Using device: {self.device}")
 
-        self.speech_model = SpeechEmbedder()
+        self.speech_model = SpeechEmbedder(device=self.device)
         self.text_model = AuthorshipLLM(
             self.args.text_model_name,
             num_layers=self.args.mlp_layers,
             use_layers=self.args.hidden_layers,
+            device=self.device
         )
 
         if args.text_model_path is not None:
@@ -251,7 +260,10 @@ class MidFusionTrainer:
             )
 
         elif args.fusion_strategy == "audio":
-            self.model = AudioHead(speech_model=self.speech_model, speech_features=256)
+            self.model = EarWorm(speech_model=self.speech_model, speech_features=256)
+
+        elif args.fusion_strategy == "text":
+            self.model = BookWorm(text_model=self.text_model, text_features=1024)
 
         self.optimizer = optim.Adam(
             self.model.trainable_parameters(), lr=args.learning_rate
@@ -261,7 +273,7 @@ class MidFusionTrainer:
         )  # TODO @abhaydmathur : mod
 
         self.criterion = nn.BCELoss()
-        self.model.to(self.device)
+        self.model = self.model.to(self.device)
 
         # Ensure self.args.model_save_path exists
         self.model_name = self.args.model_name
@@ -300,8 +312,16 @@ class MidFusionTrainer:
 
     def log_init(self):
         print("Getting Inital Metrics")
+
+        if self.args.test_at_launch:
+            test_info = self.test(verbose=True)
+            for loader_name in test_info.keys():
+                log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
+                self.save_to_log(self.args.log_dir, self.logger, log_test_info, 0)
+
         train_info = self.validate(split="train", verbose=True)
         val_info = self.validate(split="val", verbose=True)
+
 
         self.lr_scheduler.step(val_info["loss"])
 
@@ -311,6 +331,8 @@ class MidFusionTrainer:
         log_val_info = {f"val/{k}": v for k, v in val_info.items()}
         self.save_to_log(self.args.log_dir, self.logger, log_val_info, 0)
 
+
+
     def train_epoch(self, epoch, verbose=True):
         self.model.train_()
         losses = []
@@ -318,10 +340,9 @@ class MidFusionTrainer:
         n_steps = len(self.train_loader)
         for i, batch in enumerate(self.train_loader):
             text = batch["transcription"]
-            label = batch["label"].squeeze().float().to("cuda")
+            label = batch["label"].squeeze().float().to(self.device)
 
-            # text = {k: v.to('cuda') for k, v in text.items()}
-            batch["x"] = batch["x"].to("cuda")
+            batch["x"] = batch["x"].to(self.device)
 
             self.optimizer.zero_grad()
 
@@ -400,10 +421,17 @@ class MidFusionTrainer:
 
             if self.execute_callbacks(epoch):
                 break
-        test_info = self.test(self)
-        log_test_info = {f"test/{k}": v for k, v in val_info.items()}
-        self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch + 1)
 
+            if (epoch + 1) % self.args.test_freq == 0:
+                test_info = self.test(self)
+                for loader_name in test_info.keys():
+                    log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
+                    self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch+1)
+
+        test_info = self.test(self)
+        for loader_name in test_info.keys():
+            log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
+            self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch+1)
 
     def validate(self, split="val", verbose=True):
         self.model.eval_()
@@ -423,10 +451,9 @@ class MidFusionTrainer:
         with torch.no_grad():
             for i, batch in enumerate(loader):
                 text = batch["transcription"]
-                label = batch["label"].squeeze().float().to("cuda")
+                label = batch["label"].squeeze().float().to(self.device)
 
-                # text = {k: v.to('cuda') for k, v in text.items()}
-                batch["x"] = batch["x"].to("cuda")
+                batch["x"] = batch["x"].to(self.device)
 
                 output = self.model(text_input=text, speech_input=batch).squeeze()
                 loss = self.criterion(output, label)
@@ -461,21 +488,21 @@ class MidFusionTrainer:
             "f1_score": f1,
         }
 
-    def test(self):
-       test_dict = {}
+    def test(self, verbose=True):
+        test_dict = {}
 
-       for loader_name in self.test_loaders.keys():
-           loader = self.test_loaders[loader_name]
-           losses = []
-           acc = []
+        for loader_name in self.test_loaders.keys():
+            loader = self.test_loaders[loader_name]
+            losses = []
+            accs = []
+            labels = []
+            preds = []
 
-           with torch.no_grad():
-               for i, batch in enumerate(loader):
+            with torch.no_grad():
+                for i, batch in enumerate(loader):
                     text = batch["transcription"]
-                    label = batch["label"].squeeze().float().to("cuda")
-
-                    # text = {k: v.to('cuda') for k, v in text.items()}
-                    batch["x"] = batch["x"].to("cuda")
+                    label = batch["label"].squeeze().float().to(self.device)
+                    batch["x"] = batch["x"].to(self.device)
 
                     output = self.model(text_input=text, speech_input=batch).squeeze()
                     loss = self.criterion(output, label)
@@ -486,31 +513,30 @@ class MidFusionTrainer:
 
                     labels.extend(np.atleast_1d(label.cpu().numpy()))
                     preds.extend(np.atleast_1d(output.cpu().numpy()))
-    
+
                     if verbose:
                         print(
-                            f"\rEvaluation on {split} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}   ",
+                            f"\rEvaluation on {loader_name} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}   ",
                             end="",
-                     )
+                        )
 
-           labels = np.array(labels)
-           preds = np.array(preds)
+            labels = np.array(labels)
+            preds = np.array(preds)
 
-           eer = equal_error_rate(labels, preds)
-           f1 = f1_score(labels, preds.round())
+            eer = equal_error_rate(labels, preds)
+            f1 = f1_score(labels, preds.round())
 
-           if verbose:
-               print(
-                   f"\rEvaluation on {split} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}, eer: {eer:.3f}, f1_score: {f1:.3f}   ",
-               )
-           test_dict[loader_name] = {
-               "loss": np.mean(losses),
-               "acc": np.mean(accs),
-               "eer": eer,
-               "f1_score": f1,
-           }
-       return test_dict
-
+            if verbose:
+                print(
+                    f"\rEvaluation on {loader_name} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}, eer: {eer:.3f}, f1_score: {f1:.3f}   ",
+                )
+            test_dict[loader_name] = {
+                "loss": np.mean(losses),
+                "acc": np.mean(accs),
+                "eer": eer,
+                "f1_score": f1,
+            }
+        return test_dict
 
     def save(self, path):
         self.model.save_(path)

@@ -163,13 +163,16 @@ def get_args():
     args = parser.parse_args()
     with open(args.config_file, "r") as f:
         config = yaml.safe_load(f)
-
-    return config
+    # for key, value in config.items():
+    #     setattr(args, key, value)
+    return argparse.Namespace(**config)
 
 
 def load_config_text_model(args):
     if args.text_model_path is not None:
-        config_path = args.text_model_path.replace("final", "model_config.json")
+        config_path = os.path.join(
+            "/".join(args.text_model_path.split("/")[:-1]), "model_config.json"
+        )
         with open(config_path, "r") as f:
             config = json.load(f)
         args.text_model_name = config["architecture"]["args"]["model_name"]
@@ -195,13 +198,13 @@ if __name__ == "__main__":
     args = get_args()
     args = load_config_text_model(args)
     print(f"Using GPU: {args.gpu_id}")
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
     # Set huggingface cache
     os.environ["HF_HOME"] = "/data/iivanova-23/cache/"
 
     seed_everything(args.seed)
-    # args.device = f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu"
+    args.device = f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu"
     trainer = MidFusionTrainer(args)
     trainer.train()
     # trainer.validate()

@@ -125,4 +125,5 @@ cython_debug/
 
 
 # Folders
-runs/
+runs
+std_out/

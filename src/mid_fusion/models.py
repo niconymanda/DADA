@@ -63,6 +63,7 @@ class ConditionalLateFuse(nn.Module):
         self.speech_model = speech_model
         self.text_features = text_features
         self.speech_features = speech_features
+        self.tune_classifiers = tune_classifiers
 
         self.text_head = nn.Sequential(
             nn.Linear(self.text_features, 512),
@@ -74,8 +75,8 @@ class ConditionalLateFuse(nn.Module):
         self.audio_head = nn.Sequential(
             nn.Linear(self.speech_features, 512),
             nn.Linear(512, 256),
-            nn.Linear(256, num_classes),
-            nn.Softmax(dim=1),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
         )
 
         self.alpha = nn.Parameter(torch.tensor(alpha))
@@ -127,11 +128,11 @@ class ConditionalLateFuse(nn.Module):
             speech_features = self.speech_model(speech_input, mode="classification")
             if not self.tune_classifiers:
                 y_text = self.text_head(text_features)[:, class_idx]
-                y_audio = self.audio_head(speech_features)[:, class_idx]
+                y_audio = self.audio_head(speech_features)
 
         if self.tune_classifiers:
             y_text = self.text_head(text_features)[:, class_idx]
-            y_audio = self.audio_head(speech_features)[:, class_idx]
+            y_audio = self.audio_head(speech_features)
 
         y = self.alpha * y_audio + (1 - self.alpha) * y_text
 
@@ -213,9 +214,9 @@ class LateFuse(nn.Module):
         return y
 
 
-class AudioHead(torch.nn.Module):
+class EarWorm(torch.nn.Module):
     def __init__(self, speech_model, speech_features):
-        super(AudioHead, self).__init__()
+        super(EarWorm, self).__init__()
         self.speech_model = speech_model
         self.speech_features = speech_features
 
@@ -248,3 +249,41 @@ class AudioHead(torch.nn.Module):
             speech_features = self.speech_model(speech_input, mode="classification")
         y_audio = self.audio_head(speech_features)
         return y_audio
+
+class BookWorm(torch.nn.Module):
+    def __init__(self, text_model, text_features):
+        super(BookWorm, self).__init__()
+        self.text_model = text_model
+        self.text_features = text_features
+
+        self.text_head = nn.Sequential(
+            nn.Linear(self.text_features, 512),
+            nn.Linear(512, 256),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
+        )
+        
+    def trainable_parameters(self):
+        return self.text_head.parameters()
+    
+    def train_(self):
+        self.text_model.eval()
+        self.text_head.train()
+
+    def eval_(self):
+        self.text_model.eval()
+        self.text_head.eval()
+
+    def save_(self, path):
+        torch.save(self.text_head.state_dict(), path)
+
+    def load_(self, path):
+        self.text_head.load_state_dict(torch.load(path, weights_only=True))
+
+    def forward(self, text_input, speech_input):
+        with torch.no_grad():
+            text_features = self.text_model(text_input, mode="classification")
+        y_text = self.text_head(text_features)
+        return y_text
+    
+    

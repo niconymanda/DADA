@@ -18,6 +18,18 @@ import random
 SUPPORTED_FORMATS = ["wav", "mp3", "flac"]
 
 
+def custom_collate(batch):  
+    batch_x = torch.stack([item['x'] for item in batch])
+    batch_labels = torch.tensor([item['label'] for item in batch])
+    batch_transcriptions = [item['transcription'] for item in batch]
+    batch_authors = [item['author'] for item in batch]
+    return {
+        "x": batch_x,
+        "label": batch_labels,
+        "transcription": batch_transcriptions,
+        "author": batch_authors,
+    }
+
 def load_audio(filename, sampling_rate=None):
     # Load audio file
     assert os.path.exists(filename), f"File {filename} does not exist"
@@ -62,26 +74,15 @@ def get_spoof_list(meta_dir, is_train=False, is_eval=False):
     with open(meta_dir, "r") as f:
         l_meta = f.readlines()
 
-    if is_train:
-        for line in l_meta:
-            # _, key, _, _, label = line.strip().split(" ")
+    # if is_train:
+    for line in l_meta:
+        # _, key, _, _, label = line.strip().split(" ")
 
-            key, label = line.split(" ")[1], line.split(" ")[5]
-            file_list.append(key)
-            d_meta[key] = 1 if label == "bonafide" else 0
-        return d_meta, file_list
+        key, label = line.split(" ")[1], line.split(" ")[5]
+        file_list.append(key)
+        d_meta[key] = 1 if label == "bonafide" else 0
 
-    elif is_eval:
-        for line in l_meta:
-            key = line.strip()
-            file_list.append(key)
-        return None, file_list
-    else:
-        for line in l_meta:
-            key, label = line.split(" ")[1], line.split(" ")[5]
-            file_list.append(key)
-            d_meta[key] = 1 if label == "bonafide" else 0
-        return d_meta, file_list
+    return d_meta, file_list
 
 
 class ASVSpoof21Dataset(torch.utils.data.Dataset):
@@ -100,7 +101,11 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
         self.cut = self.sampling_rate * self.max_duration  # padding
+
         self.meta, self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
+
+        assert self.meta is not None, "Meta is None"
+
         self.root_dir = root_dir
 
         self.get_transcription = get_transcription
@@ -142,6 +147,7 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
             "x": x,
             "label": y,
             "transcription": transcription,
+            "author": "unk",  # no author
         }
 
 
@@ -153,6 +159,7 @@ class ASVSpoof19LADataset(torch.utils.data.Dataset):
         sampling_rate=16000,
         max_duration=4,
         max_samples=None,
+        get_transcription=True,
     ):
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
@@ -161,18 +168,18 @@ class ASVSpoof19LADataset(torch.utils.data.Dataset):
         if self.split == "val":
             self.split = "eval"
 
-        if self.split == "train":
-            self.mid_ext = "trn"
-        else:
-            self.mid_ext = "trl"
+        # if self.split == "train":
+        #     self.mid_ext = "trn"
+        # else:
+        #     self.mid_ext = "trl"
 
         self.root_dir = os.path.join(root_dir, f"ASVspoof2019_LA_{self.split}")
-        self.meta_file = os.path.join(
-            root_dir,
-            f"ASVspoof2019_LA_cm_protocols",
-            f"ASVspoof2019.LA.cm.{self.split}.{self.mid_ext}.txt",
-        )
-        
+        # self.meta_file = os.path.join(
+        #     root_dir,
+        #     f"ASVspoof2019_LA_cm_protocols",
+        #     f"ASVspoof2019.LA.cm.{self.split}.{self.mid_ext}.txt",
+        # )
+
         self.meta_file = os.path.join(root_dir, f"asvspoof19_la_{split}_meta.csv")
 
         # self.key_to_label = get_spoof_list19(self.meta_file)
@@ -180,17 +187,18 @@ class ASVSpoof19LADataset(torch.utils.data.Dataset):
         self.df = pd.read_csv(self.meta_file)
 
         if max_samples is not None:
-            #keys = list(self.key_to_label.keys())
-            #random.shuffle(keys)
-            #keys = keys[:max_samples]
-            #self.key_to_label = {k: self.key_to_label[k] for k in keys}
+            # keys = list(self.key_to_label.keys())
+            # random.shuffle(keys)
+            # keys = keys[:max_samples]
+            # self.key_to_label = {k: self.key_to_label[k] for k in keys}
 
             self.df = self.df[:max_samples]
 
+        self.id_to_key = dict(enumerate(self.df["key"]))
+        self.id_to_label = dict(enumerate(self.df["label"]))
+        self.id_to_transcription = dict(enumerate(self.df["transcription"]))
 
-        self.id_to_key = dict(enumerate(self.df['key']))
-        self.id_to_label = dict(enumerate(self.df['label']))
-        self.id_to_transcription = dict(enumerate(self.df['transcription']))
+        print(f"Loaded {len(self)} samples from ASVspoof19 LA {self.split}")
 
     def __len__(self):
         return len(self.id_to_key)
@@ -210,7 +218,7 @@ class ASVSpoof19LADataset(torch.utils.data.Dataset):
             "x": x,
             "label": label,
             "transcription": transcription,
-            "author": 'unk', # no author
+            "author": "unk",  # no author
         }
 
 
@@ -218,7 +226,7 @@ class MLAADEnDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         root_dir,
-        split="train",
+        split="val",
         sampling_rate=16000,
         max_duration=4,
         max_samples=None,
@@ -230,22 +238,36 @@ class MLAADEnDataset(torch.utils.data.Dataset):
         self.split = split
         self.max_samples = max_samples
 
-    def __len__(self):
-        return len(self.id_to_key)
+        self.meta_path = os.path.join(self.root_dir, "meta_global.csv")
+        self.df = pd.read_csv(self.meta_path)
 
-    def load_audio_tensor(self, key):
-        filename = os.path.join(self.root_dir, f"flac/{key}.flac")
+        if self.max_samples is not None:
+            self.df = self.df[: self.max_samples]
+
+        self.id_to_label = dict(enumerate(self.df["label"]))
+        self.id_to_file = dict(enumerate(self.df["path"]))
+        self.id_to_author = dict(enumerate(self.df["model_name"]))
+        self.id_to_transcription = dict(enumerate(self.df["transcript"]))
+
+    def __len__(self):
+        return len(self.id_to_label)
+
+    def load_audio_tensor(self, idx):
+        filename = os.path.join(self.root_dir, self.id_to_file[idx])
         audio_arr, _ = load_audio(filename, self.sampling_rate)
         audio_tensor = torch.tensor(pad(audio_arr, self.cut)).float()
         return audio_tensor
 
     def __getitem__(self, idx):
-        key = self.id_to_key[idx]
         label = self.id_to_label[idx]
-        x = self.load_audio_tensor(key)
+        transcription = self.id_to_transcription[idx]
+        author = self.id_to_author[idx]
+        x = self.load_audio_tensor(idx)
         return {
             "x": x,
             "label": label,
+            "transcription": transcription,
+            "author": author,
         }
 
 
