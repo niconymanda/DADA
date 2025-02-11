@@ -9,14 +9,13 @@ import numpy as np
 
 class AuthorClassificationDataset(Dataset):
     """
-    A custom dataset class for author classification tasks using Hugging Face tokenizers.
+    A custom dataset class for author classification tasks.
     Args:
         data (pd.DataFrame): A pandas DataFrame containing the text and label columns.
     Attributes:
         texts (list): A list of texts from the DataFrame.
         labels (list): A list of labels corresponding to the texts.
-        tokenizer (AutoTokenizer): The tokenizer instance loaded from the pre-trained model.
-        max_length (int): The maximum length of the tokenized sequences.
+        
     Methods:
         __len__(): Returns the number of samples in the dataset.
         __getitem__(idx): Returns a dictionary containing the tokenized input_ids, attention_mask, and label for the given index.
@@ -39,34 +38,6 @@ class AuthorClassificationDataset(Dataset):
             "label": torch.tensor(label, dtype=torch.long)
         }
         
-# class ASVSpoof21Dataset(Dataset):
-#     """
-#     A custom dataset class for handling ASVSpoof 2021 dataset.
-#     Args:
-#         data (pd.DataFrame): A pandas DataFrame containing the text and label columns.
-#     Attributes:
-#         texts (list): A list of texts from the DataFrame.
-#         labels (list): A list of labels corresponding to the texts.
-#     Methods:
-#         __len__(): Returns the number of samples in the dataset.
-#         __getitem__(idx): Returns a dictionary containing the text and the label.
-#     """
-    
-#     def __init__(self, data):
-#         self.texts = data['transcription'].tolist()
-#         self.labels = data['type'].tolist()
-        
-#     def __len__(self):
-#         return len(self.texts)
-
-#     def __getitem__(self, idx):
-#         text = self.texts.iloc[idx]
-#         label = self.labels.iloc[idx]
-        
-#         return {
-#             "text": text,
-#             "label": label
-#         }
         
         
 class AuthorTripletLossDataset(Dataset):
@@ -76,7 +47,7 @@ class AuthorTripletLossDataset(Dataset):
         data (pd.DataFrame): The dataset containing text data and labels.
         train (bool): A flag indicating whether the dataset is for training or testing.
         predefined_set (str): Path to a JSON file containing predefined triplets.
-        mode (str): The mode of the dataset, either 'train' or 'test'.
+        mode (str): The mode of the dataset, either 'train', 'test', 'spoof'.
     Methods:
         __len__(): Returns the length of the dataset.
         __getitem__(idx): Returns a triplet of text data (anchor, positive, negative) and their labels for the given index.
@@ -89,7 +60,7 @@ class AuthorTripletLossDataset(Dataset):
     def __init__(self, data, train=True, predefined_set=None, mode=None):
         self.data = data
         self.train = train
-        self.texts_by_author = data.groupby('label')['text'].apply(list).to_dict()
+        self.texts_by_author = self.data.groupby('label')['text'].apply(list).to_dict()
         self.labels = list(self.texts_by_author.keys())
         self.predefined_set = predefined_set
         self.mode = mode
@@ -151,6 +122,8 @@ class AuthorTripletLossDataset(Dataset):
                 "negative_labels": negative_labels
             }
             
+    def __repr__(self):
+        return f'AuthorTripletLossDataset_{'train' if self.train else 'val'}'
         
     def _get_positive_example(self, label):
         positive_samples = self.texts_by_author[label]

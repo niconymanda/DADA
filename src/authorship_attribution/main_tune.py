@@ -81,13 +81,8 @@ def main(args):
                     author_id_map=author_id_map)
         acc = tester.test_abx_accuracy(test_dataloader)
         print("Best trial test set accuracy: {}".format(acc))
-        tester.plot_tsne_for_authors(test_dataloader)
-        acc_sp = tester.test_abx_accuracy(spoofed_data_loader)
-        print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
 
-    
-    #Test results on classification model
-    # tester.test_classification(test_dataloader)
+
 if __name__ == '__main__':
     args = config.get_args()
     main(args)

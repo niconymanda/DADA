@@ -47,13 +47,13 @@ class TesterAuthorshipAttribution:
 
         self.distance_function = config.get_distance_function(self.args.distance_function)
         
-    def test(self, test_dataloader, spoofed_dataloader, dataset_name='test'):
+    def test(self, test_dataloader, dataset_name='test'):
         """
         Tests the model using the provided dataloaders and generates various evaluation metrics.
 
         Args:
             test_dataloader (DataLoader): DataLoader for the test dataset.
-            spoofed_dataloader (DataLoader): DataLoader for the spoofed dataset.
+            dataset_name (str): Name of the dataset being tested (default is 'test').
 
         Returns:
             None
@@ -62,15 +62,11 @@ class TesterAuthorshipAttribution:
         1. Computes ABX accuracy for the test dataset and prints the result.
         2. Plots t-SNE for authors using the test dataset.
         3. Plots cosine distance distribution for the test dataset.
-        4. Computes ABX accuracy for the spoofed dataset and prints the result.
-        5. Plots cosine distance distribution for the spoofed dataset.
-        6. Computes classification results for the test dataset and writes them to a file.
-        7. Computes classification results for the spoofed dataset and writes them to a file.
-        8. Saves the model configuration to a JSON file.
+        4. Computes classification results for the test dataset and writes them to a file.
+        5. Saves the model configuration to a JSON file.
         """
 
         results = {}
-        results_spoofed = {}
         
         # If the dataset is not In the Wild, we're doing binary classification
         if self.classification:
@@ -80,15 +76,9 @@ class TesterAuthorshipAttribution:
             # Test results test_dataloader
             acc = self.test_abx_accuracy(test_dataloader, self.model)
             results['abx_accuracy'] = acc
-            print(f"Test ABX Accuracy : {acc:.4f}")
+            print(f"Test ABX Accuracy {dataset_name}: {acc:.4f}")
 
-            self.plot_cosine_distence_distribution(f'test_{dataset_name}')
-
-            # Test results spoofed_dataloader
-            acc_sp = self.test_abx_accuracy(spoofed_dataloader, self.model)
-            print(f"Spoofed Test ABX Accuracy : {acc_sp:.4f}")
-            results_spoofed['abx_accuracy'] = acc_sp
-            self.plot_cosine_distence_distribution(f'spoofed_{dataset_name}')
+            self.plot_cosine_distence_distribution(f'{dataset_name}')
 
             all_embeddings, all_labels = self.extract_embeddings(test_dataloader)
 
@@ -97,20 +87,14 @@ class TesterAuthorshipAttribution:
 
                 if self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
                     predictions, classif_results = self.predict(self.classification_model, all_embeddings, all_labels)
-                    all_embeddings_spoofed, all_labels_spoofed = self.extract_embeddings(spoofed_dataloader)
-                    _, classif_results_spoofed = self.predict(self.classification_model, all_embeddings_spoofed, all_labels_spoofed)
                 else:   
                     classif_results, predictions = self.test_classification(test_dataloader, self.classification_model)
-                    classif_results_spoofed, predictions_spoofed = self.test_classification(spoofed_dataloader, self.classification_model)
 
                 name = f't-SNE_{self.args.classification_head}_{dataset_name}'
                 self.plot_tsne_for_authors(all_embeddings, predictions, name)
 
                 results.update(classif_results)
-                config.write_results_to_file(results, './output/results.txt', self.args, self.repository_id)
-
-                results_spoofed.update(classif_results_spoofed)
-                config.write_results_to_file(results_spoofed, './output/results_spoofed.txt', self.args, self.repository_id)
+                config.write_results_to_file(results, f'./output/results_{dataset_name}.txt', self.args, self.repository_id)
 
             self.plot_tsne_for_authors(all_embeddings, all_labels, f't-SNE_{dataset_name}')
         config.save_model_config(self.args, output_path=f"{self.repository_id}/model_config.json")
@@ -118,20 +102,8 @@ class TesterAuthorshipAttribution:
 
     def test_abx_accuracy(self, test_dataloader, model):
         """
-        Evaluate the ABX accuracy of the model using the provided test dataloader (can be bona-fide and spoofed).
-        Test the model by comparing the distance between the anchor and positive examples with the distance between the anchor and minimum of negative examples.
-        Args:
-            test_dataloader (DataLoader): A DataLoader object that provides batches of test data. Each batch should be a dictionary containing:
-                - 'anchor_input_ids': Tensor of input IDs for anchor examples.
-                - 'anchor_attention_mask': Tensor of attention masks for anchor examples.
-                - 'positive_input_ids': Tensor of input IDs for positive examples.
-                - 'positive_attention_mask': Tensor of attention masks for positive examples.
-                - 'label': Tensor of labels for anchor examples.
-                - 'negative_labels': Tensor of labels for negative examples.
-                - 'negative_input_ids': Tensor of input IDs for negative examples.
-                - 'negative_attention_mask': Tensor of attention masks for negative examples.
-        Returns:
-            float: The accuracy of the model on the test set.
+        Evaluate the ABX accuracy of the model using the provided test dataloader and model.
+        Test the model by comparing the distance between the anchor and positive examples with the distance between the anchor and negative example.
         """
         
         model.eval() 
@@ -209,14 +181,10 @@ class TesterAuthorshipAttribution:
         Evaluates the classification model on the provided test data.
         Args:
             test_dataloader (DataLoader): DataLoader containing the test dataset.
+            model (torch.nn.Module): The classification model to evaluate.
         Returns:
-            dict: A dictionary containing the following evaluation metrics:
-                - 'accuracy' (float): The accuracy of the model on the test dataset.
-                - 'precision' (float): The weighted precision of the model on the test dataset.
-                - 'recall' (float): The weighted recall of the model on the test dataset.
-                - 'f1_score' (float): The weighted F1 score of the model on the test dataset.
-                - 'confusion_matrix' (ndarray): The confusion matrix of the model's predictions.
-                - 'auc' (float): The area under the ROC curve (AUC) of the model on the test dataset.
+            dict: A dictionary containing the evaluation results
+            
         """
         
         model.eval()
@@ -227,7 +195,7 @@ class TesterAuthorshipAttribution:
             for batch in tqdm(test_dataloader):
                 
                 labels = batch['label']
-                outputs = model(batch, mode = 'classification_train')
+                outputs = model(batch)
                 preds = outputs.argmax(dim=1)
 
                 all_preds.extend(preds.cpu().numpy())
@@ -271,7 +239,7 @@ class TesterAuthorshipAttribution:
 
         return results
 
-    def extract_embeddings(self, dataloader):
+    def extract_embeddings(self, dataloader):   
         """
         Extracts embeddings from the model using the provided dataloader.
         Args:
@@ -296,7 +264,6 @@ class TesterAuthorshipAttribution:
                 
                 labels = batch['label']
                 embeddings = model(batch)
-                # print(f"Embeddings: {embeddings}")
                 if self.classification_model is None or self.args.classification_head == 'gmm' or self.args.classification_head == 'knn':
                     anchor_embeddings = embeddings['anchor'].cpu().numpy()
                 else:
@@ -363,7 +330,8 @@ class TesterAuthorshipAttribution:
 
         # Modify legend to show author names
         handles, labels = scatter.get_legend_handles_labels()
-        author_names = [self.author_id_map[int(label)] for label in labels]
+        author_names = [self.author_id_map.get(int(label), f"Unknown Author {label}") for label in labels]
+        print(f"Authors: {name}")
         
         plt.legend(handles, author_names, title="Author Name")
         plt.title(f"Author Embeddings {name}")
@@ -378,9 +346,7 @@ class TesterAuthorshipAttribution:
         """
         Plots the distribution of cosine distances between anchor/positive examples and anchor/negative examples.
         Args:
-            test_dataloader (DataLoader): A PyTorch DataLoader containing batches of test data. Each batch
-                                           should be a dictionary with keys 'anchor_input_ids', 'anchor_attention_mask',
-                                           'positive_input_ids', 'positive_attention_mask', and 'label'.
+            test_dataloader (DataLoader): A PyTorch DataLoader.
         Returns:
             None
         Note:
@@ -391,7 +357,7 @@ class TesterAuthorshipAttribution:
             "Pair Type": ["Anchor-Positive"] * len(self.all_cosine_distances_positive) + ["Anchor-Negative"] * len(self.all_cosine_distances_negative)
         })
 
-        plt.figure(figsize=(4, 6))
+        plt.figure(figsize=(5, 5))
         sns.violinplot(data=data, x="Pair Type", y="Cosine Distance", split=True, hue="Pair Type", inner="quartile")
         plt.ylabel("Cosine Distance")
         plt.title("Distribution of Cosine Distances Between Embeddings")

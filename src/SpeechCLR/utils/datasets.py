@@ -287,7 +287,9 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
             "sampling_rate": sample_dict["audio_path"]["sampling_rate"],
         }
 
-
+    def __repr__(self):
+        return f'VoxCeleb2Dataset_{self.split}'
+    
     def load_audio_tensor(self, sample_dict):
         audio_arr = sample_dict["array"]
         sr = sample_dict["sampling_rate"]
@@ -331,6 +333,8 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
                     "anchor": transcription,
                     "positive": self.get_sample_dict(id_p)['transcription'],
                     "negative": self.get_sample_dict(id_n)['transcription'],
+                    "label": idx,
+                    "negative_label": id_n,
                 }
 
             x_p = self.load_audio_tensor(self.get_sample_dict(id_p))

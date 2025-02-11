@@ -29,7 +29,7 @@ class TrainerAuthorshipAttribution:
         val_dataloader (torch.utils.data.DataLoader): DataLoader for the validation data.
         report_to (str, optional): The logging tool to report to (e.g., 'tensorboard'). Defaults to None.
         early_stopping (EarlyStopping, optional): An instance of EarlyStopping for early stopping. Defaults to None.
-        args (argparse.Namespace): Additional arguments, including epochs, logging_step, and learning_rate.
+        args (argparse.Namespace): Additional arguments, including epochs, and learning_rate.
         repository_id (str): The repository ID for saving logs and checkpoints.
         author_id_map (dict): A mapping of author IDs.
         writer (torch.utils.tensorboard.SummaryWriter, optional): TensorBoard writer for logging. Initialized if report_to is 'tensorboard'.
@@ -39,7 +39,7 @@ class TrainerAuthorshipAttribution:
     
     def __init__(self, model, 
                  train_dataloader, 
-                 val_dataloader, 
+                 val_dataloaders, 
                  args, 
                  repository_id,
                  author_id_map,
@@ -52,10 +52,11 @@ class TrainerAuthorshipAttribution:
                  save_model=False, 
                  tune=False, 
                  log_plots=True, 
-                 additional_training=False):
+                 additional_training=False,
+                 classification_dataloader=None):
         self.model = model
         self.train_dataloader = train_dataloader
-        self.val_dataloader = val_dataloader
+        self.val_dataloaders = val_dataloaders 
         self.report_to = report_to
         self.args = args
         self.repository_id = repository_id
@@ -66,6 +67,7 @@ class TrainerAuthorshipAttribution:
         self.model_weights = self.args.text_model_path
         self.log_plots = log_plots
         self.additional_training = additional_training
+        self.classification_dataloader = classification_dataloader
         self.device = cfg.get_device()
         
         if not tune:
@@ -73,11 +75,11 @@ class TrainerAuthorshipAttribution:
             self.optimizer = self.get_optimizer() if optimizer is None else optimizer
             self.lr_scheduler = self.get_lr_scheduler(self.optimizer) if lr_scheduler is None  else lr_scheduler
             self.criterion.to(self.device)
-        self.num_labels = len(self.author_id_map.keys()) if self.args.loss_function != 'bce' else 2
+        self.num_labels = len(self.author_id_map) if self.author_id_map is not None else 0
         self.model.to(self.device)
         self.distance_function = cfg.get_distance_function(args.distance_function)
 
-        self.logger = Logger(args, report_to, project_name, model, self.output_dir, train_dataloader, val_dataloader)
+        self.logger = Logger(args, report_to, project_name, model, self.output_dir)
         
         if self.early_stopping:
             self.early_stopping_model = EarlyStopping(patience=args.early_stopping_patience)
@@ -85,13 +87,18 @@ class TrainerAuthorshipAttribution:
         
     def train(self, classification_head=False):
         """
-        Trains the model for a specified number of epochs and optionally trains a classification head.
-        Args:
-            classification_head (bool, optional): If True, trains an additional classification head after the main training. Defaults to False.
+        Train the model with optional classification head.
+        Parameters:
+        classification_head (bool): If True, train a classification head on top of the model.
         Returns:
-            model: The trained model.
-            classification_model (optional): The trained classification model if `classification_head` is True.
+        tuple: The trained model and the classification head (if any), otherwise None.
+        The function performs the following steps:
+        1. If custom model weights are provided, load them and optionally perform additional training.
+        2. If no custom weights are provided, train the model from scratch.
+        3. If classification_head is True, train a classification head using the specified method (GMM, KNN, linear, or MLP).
+        The function supports early stopping and saves the model checkpoints if specified.
         """
+
         if self.model_weights is not None:
             print("Loading custom model weights!...")
             self.model = cfg.load_checkpoint(self.model, self.model_weights)
@@ -120,17 +127,18 @@ class TrainerAuthorshipAttribution:
             cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
         
         if classification_head:
+            dataloader = self.classification_dataloader if self.classification_dataloader is not None else self.train_dataloader
             print("Training classification head!")
-            self.model = cfg.load_checkpoint(self.model, f'{self.repository_id}/final.pth')
+            self.model = cfg.load_checkpoint(self.model, self.model_weights)
             self.model.to(self.device)
             if self.args.classification_head == 'gmm':
-                embeddings, _ = self.extract_embeddings()
+                embeddings, _ = self.extract_embeddings(dataloader=dataloader)
                 print("Fitting GMM")
                 gmm = GaussianMixture(n_components=self.num_labels, covariance_type='diag', random_state=self.args.seed, max_iter=3000, n_init=10)
                 gmm.fit(embeddings)
                 return self.model, gmm
             elif self.args.classification_head == 'knn':
-                embeddings, _= self.extract_embeddings()
+                embeddings, _= self.extract_embeddings(dataloader=dataloader)
                 print("Fitting KNN")
                 knn = KNeighborsClassifier(n_neighbors=5)
                 knn.fit(embeddings, self.train_dataset.labels)
@@ -142,8 +150,8 @@ class TrainerAuthorshipAttribution:
                 classification_loss.to(self.device)
                 classification_optimizer = optim.AdamW(classification_model.parameters(), lr=self.args.learning_rate_classification)
                 for epoch_n in range(self.args.epochs_classification):
-                    train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n)
-                    val_loss = self.validate_classification(classification_model, classification_loss, epoch_n)
+                    train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n, dataloader)
+                    val_loss = self.validate_classification(classification_model, classification_loss, epoch_n, dataloader)
                     if self.early_stopping:
                         if self.early_stopping_classif.step(val_loss):
                             print("Early stopping triggered")
@@ -153,7 +161,7 @@ class TrainerAuthorshipAttribution:
                 return self.model, classification_model
         return self.model, None 
     
-    def extract_embeddings(self):
+    def extract_embeddings(self, dataloader=None):
         """
         Extracts embeddings from the model and saves them to a file.
         """
@@ -161,7 +169,7 @@ class TrainerAuthorshipAttribution:
         all_embeddings = []
         all_labels = []
         with torch.no_grad():
-            for batch in tqdm(self.train_dataloader, desc="Extracting embeddings"):
+            for batch in tqdm(dataloader, desc="Extracting embeddings"):
                 embeddings = self.model(batch)
                 labels = batch['label']
                 anchor_embeddings = embeddings['anchor'].cpu().numpy()
@@ -173,18 +181,15 @@ class TrainerAuthorshipAttribution:
         return all_embeddings, all_labels
     
 
-    def train_classification(self, classification_model, criterion_classification, optimizer_classification, epoch_n):
+    def train_classification(self, classification_model, criterion_classification, optimizer_classification, epoch_n, data_loader):
         """
         Trains only the cassification head of the model for one epoch.
         Args:
-            model (torch.nn.Module): The classification head model to be trained.
-            criterion (callable): The loss function.
-            train_dataloader (torch.utils.data.DataLoader): DataLoader for the training data.
-            optimizer (torch.optim.Optimizer): The optimizer for updating model parameters.
-            device (torch.device): The device to run the model on (e.g., 'cpu' or 'cuda').
-            writer (torch.utils.tensorboard.SummaryWriter): TensorBoard writer for logging.
+            classificaion_model (torch.nn.Module): The classification head model to be validated.
+            optimizer_classification (torch.optim.Optimizer): The optimizer for updating model parameters.
+            criterion_classification (int): The current epoch number.
             epoch_n (int): The current epoch number.
-            args (argparse.Namespace): Additional arguments, including logging_step.
+            data_loader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
         Returns:
             float: The average loss over the training dataset.
         """
@@ -192,10 +197,10 @@ class TrainerAuthorshipAttribution:
         classification_model.train()
         total_loss = 0
         correct = 0
-        for i,batch in enumerate(tqdm(self.train_dataloader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
+        for i,batch in enumerate(tqdm(data_loader, desc=f"Train Epoch {epoch_n+1}/{self.args.epochs_classification}")):
             labels = batch['label'].to(self.device)
-            out_model = classification_model(batch)
             optimizer_classification.zero_grad()
+            out_model = classification_model(batch)
             loss_value = criterion_classification(out_model, labels)
             loss_value.backward()
             optimizer_classification.step()
@@ -203,36 +208,33 @@ class TrainerAuthorshipAttribution:
             preds = out_model.argmax(dim=1)
             correct += (preds == labels).sum().item()
 
-        train_loss = total_loss / len(self.train_dataloader)
+        train_loss = total_loss / len(data_loader)
         metrics = {
             "Loss": train_loss,
             "epoch": epoch_n, 
-            "Accuracy": correct / len(self.train_dataloader.dataset)
+            "Accuracy": correct / len(data_loader.dataset)
         }
         self.logger._log_metrics(metrics, phase='Train_classificaion_epochs')
-        return total_loss / len(self.train_dataloader)
+        return total_loss / len(data_loader)
     
     @torch.no_grad()
-    def validate_classification(self, classificaion_model, criterion_classification, epoch_n):
+    def validate_classification(self, classificaion_model, criterion_classification, epoch_n, data_loader):
         """
-        Validates the performance of a classification head on a validation dataset.
+        Validates the classification head model on the validation dataset.
         Args:
-            model (torch.nn.Module): The model to be validated.
-            criterion (callable): The loss function used to compute the loss.
-            val_dataloader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
-            device (torch.device): The device (CPU or GPU) on which the model and data are loaded.
-            writer (torch.utils.tensorboard.SummaryWriter): TensorBoard writer for logging validation loss.
+            classificaion_model (torch.nn.Module): The classification head model to be validated.
+            criterion_classification (callable): The loss function.
             epoch_n (int): The current epoch number.
-            args (argparse.Namespace): Additional arguments, including logging_step for logging frequency.
+            data_loader (torch.utils.data.DataLoader): DataLoader for the validation dataset.
         Returns:
-            float: The average validation loss over the entire validation dataset.
+            float: The average loss over the validation dataset.
         """
         
         classificaion_model.eval()
         total_loss = 0
         correct = 0
         with torch.no_grad():
-            for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
+            for i,batch in enumerate(tqdm(self.val_dataloaders[0], desc=f"Val Epoch {epoch_n+1}/{self.args.epochs_classification}")):
                 labels = batch['label'].to(self.device)
                 outputs = classificaion_model(batch)
                 loss_value = criterion_classification(outputs, labels)
@@ -240,11 +242,11 @@ class TrainerAuthorshipAttribution:
                 preds = outputs.argmax(dim=1)
                 correct += (preds == labels).sum().item()
                          
-        val_loss = total_loss / len(self.val_dataloader)
+        val_loss = total_loss / len(self.val_dataloaders[0])
         metrics = {
             "Loss": val_loss,
             "epoch": epoch_n,
-            "Accuracy": correct / len(self.val_dataloader.dataset)
+            "Accuracy": correct / len(self.val_dataloaders[0].dataset)
         }
         self.logger._log_metrics(metrics, phase='Val_classificaion_epochs')
         return val_loss
@@ -269,7 +271,7 @@ class TrainerAuthorshipAttribution:
             labels = batch['label'].to(torch.float32).to(self.device)
             self.optimizer.zero_grad()
             if self.args.loss_function == 'bce':
-                embeddings = self.model(batch['text'], mode = 'classification_train').squeeze()
+                embeddings = self.model(batch['text'], mode = 'classification').squeeze()
                 loss_value = self.criterion(embeddings, labels)
             else:
                 embeddings = self.model(batch, mode = 'triplet')
@@ -277,10 +279,14 @@ class TrainerAuthorshipAttribution:
                 all_labels.extend(labels.detach().cpu().numpy())
                 loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
             
+            
             loss_value.backward()
             total_loss += loss_value.item()
             current_loss += loss_value.item()
 
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 50)
+            
             self.optimizer.step()
             self.lr_scheduler.step(epoch_n + i / iters)
             
@@ -293,15 +299,7 @@ class TrainerAuthorshipAttribution:
                 distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
                 correct_count += torch.sum(distance_positive < distance_negative).item()
             
-            if i % self.args.logging_step == self.args.logging_step - 1:
-                    metrics = {
-                        # "norm": total_norm,
-                        "Loss": current_loss / self.args.logging_step,
-                        "epoch": epoch_n,
-                        "step": i
-                    }
-                    self.logger._log_metrics(metrics, phase='Train')
-                    current_loss = 0.0
+
                 
         train_loss = total_loss / len(self.train_dataloader)
         metrics = {
@@ -338,60 +336,59 @@ class TrainerAuthorshipAttribution:
         all_feats = []
         all_labels = []
         with torch.no_grad():
-            for i,batch in enumerate(tqdm(self.val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
-                labels = batch['label'].to(self.device)
-                if self.args.loss_function == 'bce':
-                    embeddings = self.model(batch['text'], mode = 'classification_train')
-                    loss_value = self.criterion(embeddings, labels)
-                else:
-                    embeddings = self.model(batch)
-                    features = embeddings['anchor']
-                    all_feats.append(features)
-                    all_labels.extend(labels.detach().cpu().numpy())
-                    loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
-                    
-                total_loss += loss_value.item()
-                current_loss += loss_value.item()
-                
-                # Accuracy calculation
-                if self.args.loss_function == 'bce':
-                    preds = embeddings.argmax(dim=1)
-                    correct_count += (preds == labels).sum().item()
-                else:   
-                    distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
-                    distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
-                    correct_count += torch.sum(distance_positive < distance_negative).item()
-                    
-                total += len(batch['label'])
+            for val_dataloader in self.val_dataloaders:
+                for i,batch in enumerate(tqdm(val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
+                    labels = batch['label'].to(self.device)
+                    if self.args.loss_function == 'bce':
+                        embeddings = self.model(batch['text'], mode = 'classification')
+                        loss_value = self.criterion(embeddings, labels)
+                    else:
+                        embeddings = self.model(batch)
+                        features = embeddings['anchor']
+                        all_feats.append(features)
+                        all_labels.extend(labels.detach().cpu().numpy())
+                        loss_value = self.criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
 
-                if i % self.args.logging_step == self.args.logging_step - 1:
-                    metrics = {
-                    "Loss": current_loss / self.args.logging_step,  
+                    total_loss += loss_value.item()
+                    current_loss += loss_value.item()
+
+                    # Accuracy calculation
+                    if self.args.loss_function == 'bce':
+                        preds = embeddings.argmax(dim=1)
+                        correct_count += (preds == labels).sum().item()
+                    else:   
+                        distance_positive = self.distance_function(embeddings['anchor'], embeddings['positive'])
+                        distance_negative = self.distance_function(embeddings['anchor'], embeddings['negative'])
+                        correct_count += torch.sum(distance_positive < distance_negative).item()
+
+                    total += len(batch['label'])
+
+                    
+            val_loss = total_loss / len(self.val_dataloaders[0])
+            metrics = {
+                    "Loss": val_loss,
                     "Accuracy": correct_count / total,
                     "epoch": epoch_n,
-                    "step": i
                     }
-                    self.logger._log_metrics(metrics, phase='Val')
-                    current_loss = 0.0
-                    
-        val_loss = total_loss / len(self.val_dataloader)
-        metrics = {
-                "Loss": val_loss,
-                "Accuracy": correct_count / total,
-                "epoch": epoch_n,
-                }
-        self.logger._log_metrics(metrics, phase='Val_epoch')
-        if self.log_plots and self.args.loss_function != 'bce':
-            all_feats = torch.cat(all_feats, dim=0).cpu().numpy()
-            all_labels = np.array(all_labels)
-            print(f"Getting t-SNE plot for validation set")
-            fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on validaation : Epoch {epoch_n}")
-            plt.savefig(f"{self.repository_id}/tsne_validation.png")
-            self.logger.log_figure(fig, f"t-SNE on validaation", epoch_n)
+            self.logger._log_metrics(metrics, phase=f'Val_epoch_{val_dataloader.dataset}')
+            if self.log_plots and self.args.loss_function != 'bce':
+                all_feats = torch.cat(all_feats, dim=0).cpu().numpy()
+                all_labels = np.array(all_labels)
+                print(f"Getting t-SNE plot for validation set")
+                fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on validaation : Epoch {epoch_n}")
+                plt.savefig(f"{self.repository_id}/tsne_validation.png")
+                self.logger.log_figure(fig, f"t-SNE on validation_{val_dataloader.dataset}", epoch_n)
         return val_loss, correct_count / total
     
 
     def get_criterion(self, margin=0.5):
+        """
+            Returns the appropriate loss function based on the specified loss function type.
+            Args:
+                margin (float, optional): The margin value for certain loss functions. Defaults to 0.5.
+            Returns:
+                callable: The loss function to be used during training.
+        """
         margin = self.args.margin if margin is None else margin
         if self.args.loss_function == 'triplet':
             return TripletLoss(margin=margin, distance_function=self.args.distance_function)

@@ -5,6 +5,30 @@ import torch
 from transformers import T5EncoderModel
 
 class AuthorshipClassificationLLM(nn.Module):
+    """
+    A class used to represent an Authorship Classification model using a pre-trained language model.
+    Attributes
+    ----------
+    model : AuthorshipLLM
+        The pre-trained language model to use for authorship classification.
+    num_labels : int
+        The number of labels for classification.
+    head_type : str
+        The type of classification head to use ('linear' or 'mlp').
+
+    Methods
+    -------
+    __init__(self, model, num_labels, head_type='linear')
+        Initializes the AuthorshipClassificationLLM with the given parameters.
+    freeze_params(self)
+        Freezes the parameters of the encoder.
+    eval(self)
+        Sets the model to evaluation mode.
+    train(self)
+        Sets the model to training mode.
+    forward(self, input)
+        Defines the forward pass of the model.
+    """
     def __init__(self, model, num_labels, head_type='linear'):
         super(AuthorshipClassificationLLM, self).__init__()
         self.num_labels = num_labels
@@ -13,15 +37,16 @@ class AuthorshipClassificationLLM(nn.Module):
         self.max_length = model.max_length
         self.device = model.device
 
-        hidden_size = self.model.model.out_features
+        hidden_size = self.model.out_features
         self.head_type = head_type
         if head_type == 'linear':
             self.classifier = nn.Linear(hidden_size, num_labels)
-            self.softmax = nn.Softmax(dim=1)
+            # self.softmax = nn.Softmax(dim=1)
             self.freeze_params()
         elif head_type == 'mlp':
-            self.classifier = MLP(num_layers=3, in_features=hidden_size, out_features=num_labels, dropout_rate=0.2)
+            self.classifier = MLP(num_layers=3, in_features=hidden_size, out_features=num_labels, dropout_rate=0.1)
             self.softmax = nn.Softmax(dim=1)
+            
             self.freeze_params()
         
     def freeze_params(self):
@@ -30,13 +55,20 @@ class AuthorshipClassificationLLM(nn.Module):
                 param.requires_grad = True
             else:
                 param.requires_grad = False
-
+                
+    def eval(self):
+        self.model.eval()
+        self.classifier.eval()
+        
+    def train(self):
+        self.model.eval()
+        self.classifier.train()
 
     def forward(self, input):
-        outputs = self.model(input)['anchor']
+        outputs = self.model(input['anchor'], mode = 'classification')
         logits = self.classifier(outputs)
         probs = self.softmax(logits)
-        return probs
+        return logits
     
 class MeanPooling(nn.Module):
     """
@@ -113,6 +145,37 @@ class MLP(nn.Module):
         return self.mlp(x)
     
 class AuthorshipLLM(nn.Module):
+    '''
+    A class used to represent an Authorship Attribution model using a pre-trained language model.
+    Attributes
+    ----------
+    model_name : str The name of the pre-trained model to use.
+    dropout_rate : float  The dropout rate for the MLP layers.
+    out_features : int The number of output features for the MLP.
+    max_length : int The maximum length of the input sequences.
+    num_layers : int The number of layers in the MLP.
+    device : str The device to run the model on ('cuda' or 'cpu').
+    freeze_encoder : bool  Whether to freeze the encoder parameters.
+    use_layers : list The layers of the model to use for pooling.
+    
+    Methods
+    -------
+    __init__(self, model_name, dropout_rate=0.2, out_features=1024, max_length=64, num_layers=4, device='cuda', freeze_encoder=False, use_layers=[-1, -2])
+        Initializes the AuthorshipLLM with the given parameters.
+    _get_model(self, model_name)
+        Loads the pre-trained model based on the model name.
+    freeze_params(self)
+        Freezes the parameters of the encoder.
+    init_embeddings(self)
+        Initializes the embeddings with a Gaussian distribution N(0, 1).
+    get_features(self, input)
+        Tokenizes the input text and returns the tokenized inputs.
+    _get_hidden_size(self)
+        Returns the hidden size of the pre-trained model.
+    forward(self, input, mode='triplet')
+        Defines the forward pass of the model. Supports 'triplet' and 'classification' modes.
+    '''
+    
     def __init__(self, model_name, 
                  dropout_rate=0.2, 
                  out_features=1024, 
@@ -128,6 +191,7 @@ class AuthorshipLLM(nn.Module):
         self.max_length = max_length
         self.use_layers = use_layers
         self.device = device
+        self.out_features = out_features
         self.freeze_params() if freeze_encoder else None
 
         self.pooler = MeanPooling(self.use_layers)
@@ -194,14 +258,17 @@ class AuthorshipLLM(nn.Module):
                 "positive": x_p_output,
                 "negative": x_n_output,
             }
-        elif 'classification' in mode:
+            
+        elif mode == 'classification':
             input = input['text'] if isinstance(input, dict) else input
             x = self.get_features(input)
             x_output = self.model(input_ids=x['input_ids'], attention_mask=x['attention_mask'], return_dict=True)
             x_output = self.pooler(x_output.hidden_states[-1], x['attention_mask'])
             x_output = self.MLP(x_output)
-            # x_output = F.normalize(x_output, p=2, dim=-1)
+            x_output = F.normalize(x_output, p=2, dim=-1)
             
             return x_output 
+        else:
+            raise ValueError("Invalid mode. Choose 'triplet' or 'classification'.")
         
         

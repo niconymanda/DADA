@@ -49,7 +49,7 @@ def load_dataset(meta_data_path, folder):
                 audio_files.append({"path": file_path, "file_name": file_name, "type": file_type})
 
     dataset = Dataset.from_list(audio_files)
-    # dataset = dataset.cast_column("path", Audio(sampling_rate=12000))
+    dataset = dataset.cast_column("path", Audio(sampling_rate=12000))
     # dataset_audio = dataset.map(lambda x: {"audio": load_audio_librosa(x["path"])})
     return dataset, metadata
 
