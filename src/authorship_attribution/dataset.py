@@ -123,7 +123,7 @@ class AuthorTripletLossDataset(Dataset):
             }
             
     def __repr__(self):
-        return f'AuthorTripletLossDataset_{'train' if self.train else 'val'}'
+        return f'AuthorTripletLossDataset'
         
     def _get_positive_example(self, label):
         positive_samples = self.texts_by_author[label]

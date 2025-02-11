@@ -20,10 +20,7 @@ class Logger:
                 wandb.log({f"{phase}/{key}": value}) if (key != 'epoch' and key != 'step') else None
         elif self.report_to == 'tensorboard':
             for key, value in metrics.items():
-                if 'epoch' in phase:
-                    self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch']) if (key != 'epoch' and key != 'step') else None
-                else:
-                    print("Invalid phase")
+                self.writer.add_scalar(f"{phase}/{key}", value, metrics['epoch']) if (key != 'epoch' and key != 'step') else None
                     
     def log_figure(self, figure, name, epoch):
         if self.report_to == 'wandb':

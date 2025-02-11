@@ -177,7 +177,6 @@ def save_model_config(
                 "learning_rate": args.learning_rate_classification,
                 "weight_decay": args.weight_decay,
                 "early_stopping_patience": args.early_stopping_patience,
-                "logging_step": args.logging_step,
                 }
         },
         "loss_function": {

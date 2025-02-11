@@ -129,8 +129,8 @@ class TrainerAuthorshipAttribution:
         if classification_head:
             dataloader = self.classification_dataloader if self.classification_dataloader is not None else self.train_dataloader
             print("Training classification head!")
-            self.model = cfg.load_checkpoint(self.model, self.model_weights)
-            self.model.to(self.device)
+            # self.model = cfg.load_checkpoint(self.model, self.model_weights)
+            # self.model.to(self.device)
             if self.args.classification_head == 'gmm':
                 embeddings, _ = self.extract_embeddings(dataloader=dataloader)
                 print("Fitting GMM")
@@ -329,15 +329,15 @@ class TrainerAuthorshipAttribution:
         """
         
         self.model.eval()
-        total_loss = 0
-        current_loss = 0.0
-        correct_count = 0
-        total = 0
-        all_feats = []
-        all_labels = []
         with torch.no_grad():
             for val_dataloader in self.val_dataloaders:
-                for i,batch in enumerate(tqdm(val_dataloader, desc=f"Val Epoch {epoch_n+1}/{self.args.epochs}")):
+                total_loss = 0
+                current_loss = 0.0
+                correct_count = 0
+                total = 0
+                all_feats = []
+                all_labels = []
+                for i,batch in enumerate(tqdm(val_dataloader, desc=f"Val Epoch {val_dataloader.dataset} {epoch_n+1}/{self.args.epochs}")):
                     labels = batch['label'].to(self.device)
                     if self.args.loss_function == 'bce':
                         embeddings = self.model(batch['text'], mode = 'classification')
@@ -364,20 +364,20 @@ class TrainerAuthorshipAttribution:
                     total += len(batch['label'])
 
                     
-            val_loss = total_loss / len(self.val_dataloaders[0])
-            metrics = {
-                    "Loss": val_loss,
-                    "Accuracy": correct_count / total,
-                    "epoch": epoch_n,
-                    }
-            self.logger._log_metrics(metrics, phase=f'Val_epoch_{val_dataloader.dataset}')
-            if self.log_plots and self.args.loss_function != 'bce':
-                all_feats = torch.cat(all_feats, dim=0).cpu().numpy()
-                all_labels = np.array(all_labels)
-                print(f"Getting t-SNE plot for validation set")
-                fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on validaation : Epoch {epoch_n}")
-                plt.savefig(f"{self.repository_id}/tsne_validation.png")
-                self.logger.log_figure(fig, f"t-SNE on validation_{val_dataloader.dataset}", epoch_n)
+                val_loss = total_loss / len(val_dataloader.dataset)
+                metrics = {
+                        "Loss": val_loss,
+                        "Accuracy": correct_count / total,
+                        "epoch": epoch_n,
+                        }
+                self.logger._log_metrics(metrics, phase=f'Val_epoch_{val_dataloader.dataset}')
+                if self.log_plots and self.args.loss_function != 'bce':
+                    all_feats = torch.cat(all_feats, dim=0).cpu().numpy()
+                    all_labels = np.array(all_labels)
+                    print(f"Getting t-SNE plot for validation set")
+                    fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on validaation : Epoch {epoch_n}")
+                    plt.savefig(f"{self.repository_id}/tsne_validation.png")
+                    self.logger.log_figure(fig, f"t-SNE on validation_{val_dataloader.dataset}", epoch_n)
         return val_loss, correct_count / total
     
 

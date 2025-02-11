@@ -35,8 +35,8 @@ def main(args):
     train_dataset = AuthorTripletLossDataset(train, train=True)
     val_dataset = AuthorTripletLossDataset(val, train=True)
     
-    train_dataset_vox = VoxCeleb2Dataset(args.data[1], split="train", text_only=True, max_samples=5000, mode='triplet')
-    val_dataset_vox = VoxCeleb2Dataset(args.data[1], split="val", text_only=True, max_samples=2000, mode='triplet')
+    train_dataset_vox = VoxCeleb2Dataset(args.data[1], split="train", text_only=True, max_samples=3000, mode='triplet')
+    val_dataset_vox = VoxCeleb2Dataset(args.data[1], split="val", text_only=True, max_samples=1000, mode='triplet')
     train_concat = ConcatDataset([train_dataset, train_dataset_vox])
     # val_dataset = VoxCeleb2Dataset(args.data, split="val", text_only=True, max_samples=2000, mode='triplet')
     # author_id_map = train_dataset.id_to_author
