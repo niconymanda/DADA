@@ -4,6 +4,7 @@ import random
 import argparse
 from utils.training import StageOneTrainer, StageTwoTrainer
 from utils.exp import seed_everything
+import os
 
 
 def get_args():
@@ -143,6 +144,13 @@ def get_args():
         help="Checkpoint to load",
     )
 
+    parser.add_argument(
+        "--hf_cache",
+        type=str,
+        default="/data/amathur-23/DADA/transformers",
+        help="Path to the HuggingFace cache",
+    )
+
     return parser.parse_args()
 
 
@@ -150,6 +158,8 @@ if __name__ == "__main__":
     args = get_args()
 
     seed_everything(args.seed)
+
+    os.environ["HF_HOME"] = args.hf_cache
 
     if args.stage == 1:
         trainer = StageOneTrainer(args)

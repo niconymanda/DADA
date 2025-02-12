@@ -46,7 +46,6 @@ class MidFuse(nn.Module):
         x = self.classifier(features)
         return x
 
-
 class ConditionalLateFuse(nn.Module):
     def __init__(
         self,
@@ -138,7 +137,6 @@ class ConditionalLateFuse(nn.Module):
 
         return y
 
-
 class LateFuse(nn.Module):
     def __init__(
         self, text_model, speech_model, text_features, speech_features, alpha=0.5
@@ -213,12 +211,12 @@ class LateFuse(nn.Module):
 
         return y
 
-
 class EarWorm(torch.nn.Module):
-    def __init__(self, speech_model, speech_features):
+    def __init__(self, speech_model, speech_features, train_encoder=True):
         super(EarWorm, self).__init__()
         self.speech_model = speech_model
         self.speech_features = speech_features
+        self.train_encoder = train_encoder
 
         self.audio_head = nn.Sequential(
             nn.Linear(self.speech_features, 512),
@@ -231,7 +229,9 @@ class EarWorm(torch.nn.Module):
         return self.audio_head.parameters()
 
     def train_(self):
-        self.speech_model.eval()
+        self.speech_model.train()
+        if not self.train_encoder:
+            self.speech_model.eval()
         self.audio_head.train()
 
     def eval_(self):
@@ -240,12 +240,17 @@ class EarWorm(torch.nn.Module):
 
     def save_(self, path):
         torch.save(self.audio_head.state_dict(), path)
+        if self.train_encoder:
+            self.speech_model.save_(path.replace(".pth", "_speech_embedder.pth"))
 
     def load_(self, path):
         self.audio_head.load_state_dict(torch.load(path, weights_only=True))
 
     def forward(self, text_input, speech_input):
-        with torch.no_grad():
+        if not self.train_encoder:
+            with torch.no_grad():
+                speech_features = self.speech_model(speech_input, mode="classification")
+        else:
             speech_features = self.speech_model(speech_input, mode="classification")
         y_audio = self.audio_head(speech_features)
         return y_audio
@@ -285,5 +290,4 @@ class BookWorm(torch.nn.Module):
             text_features = self.text_model(text_input, mode="classification")
         y_text = self.text_head(text_features)
         return y_text
-    
-    
+        

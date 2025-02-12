@@ -1,1 +1,1 @@
-python3 main.py --stage=1 --batch_size=16 --epochs=3 --learning_rate=0.001 --cv_dir="/data/amathur-23/DADA/CommonVoice" --ravdess_dir="/data/amathur-23/DADA/RAVDESS" --model_save_dir="/data/amathur-23/DADA/models" --model_name="SLIM_trial" --log_dir="runs/SLIM_trial" --gpu_id=2 
+python3 main.py --stage=1 --batch_size=2 --epochs=3 --learning_rate=0.001 --cv_dir="/data/amathur-23/DADA/CommonVoice" --ravdess_dir="/data/amathur-23/DADA/RAVDESS" --model_save_dir="/data/amathur-23/DADA/models" --model_name="SLIM_trial" --log_dir="runs/SLIM_trial" --gpu_id=2 

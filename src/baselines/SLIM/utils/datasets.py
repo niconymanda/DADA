@@ -15,11 +15,12 @@ import os
 import librosa
 import yaml
 from transformers import AutoTokenizer, DebertaV2Tokenizer
+import torchaudio
 
 SUPPORTED_FORMATS = ["wav", "mp3", "flac"]
 
 
-def load_audio(filename, sampling_rate=None):
+def load_audio(filename, sampling_rate=16000):
     # Load audio file
     assert os.path.exists(filename), f"File {filename} does not exist"
     assert (
@@ -27,7 +28,7 @@ def load_audio(filename, sampling_rate=None):
     ), f"File {filename} is not supported"
 
     # Load audio file
-    audio, sr = librosa.load(filename, sr=None)
+    audio, sr = librosa.load(filename, sr=sampling_rate)
     return audio, sr
 
 
@@ -44,30 +45,11 @@ def pad(x, max_len):
     return padded_x
 
 
-def get_spoof_list(meta_dir, is_train=False, is_eval=False):
-    d_meta = {}
-    file_list = []
-    with open(meta_dir, "r") as f:
-        l_meta = f.readlines()
-
-    if is_train:
-        for line in l_meta:
-            _, key, _, _, label = line.strip().split(" ")
-            file_list.append(key)
-            d_meta[key] = 1 if label == "bonafide" else 0
-        return d_meta, file_list
-
-    elif is_eval:
-        for line in l_meta:
-            key = line.strip()
-            file_list.append(key)
-        return file_list
-    else:
-        for line in l_meta:
-            _, key, _, _, label = line.strip().split(" ")
-            file_list.append(key)
-            d_meta[key] = 1 if label == "bonafide" else 0
-        return d_meta, file_list
+def load_audio_tensor(filename, sampling_rate = 16000, max_duration=4):
+    audio_arr, sr = load_audio(filename, sampling_rate)
+    cut = sr * max_duration
+    audio_tensor = torch.tensor(pad(audio_arr, cut)).float()
+    return audio_tensor, sr
 
 
 class CommonVoiceDataset(torch.utils.data.Dataset):
@@ -113,7 +95,13 @@ class CommonVoiceDataset(torch.utils.data.Dataset):
     def load_audio_tensor(self, idx):
         # Load audio file
         filename = os.path.join(self.clip_dir, self.id_to_filename[idx])
-        audio_arr, _ = load_audio(filename, self.sampling_rate)
+        audio_arr, sr = load_audio(filename, self.sampling_rate)
+        print(sr)
+        # audio_arr, sr = torchaudio.load(filename)
+
+        # print(sr)
+
+        print("Loaded", filename)
         audio_tensor = torch.tensor(pad(audio_arr, self.cut)).float()
         return audio_tensor
 
@@ -158,7 +146,10 @@ class RAVDESSDataset(torch.utils.data.Dataset):
     def load_audio_tensor(self, idx):
         # Load audio file
         filename = self.id_to_filename[idx]
-        audio_arr, _ = load_audio(filename, self.sampling_rate)
+        audio_arr, sr = load_audio(filename)
+        print(sr)
+        # audio_arr, sr = torchaudio.load(filename)
+        # print(sr)
         audio_tensor = torch.tensor(pad(audio_arr, self.cut)).float()
         return audio_tensor
 
@@ -170,6 +161,59 @@ class RAVDESSDataset(torch.utils.data.Dataset):
         return x
 
 
+def load_audio(filename, sampling_rate=None):
+    # Load audio file
+    assert os.path.exists(filename), f"File {filename} does not exist"
+    assert (
+        filename.split(".")[-1] in SUPPORTED_FORMATS
+    ), f"File {filename} is not supported"
+
+    # Load audio file
+    audio, sr = librosa.load(filename, sr=None)
+    return audio, sr
+
+
+def pad(x, max_len):
+    """
+    From src/baselines/asvspoof2021/DF/Baseline-RawNet2/data_utils.py
+    """
+    x_len = x.shape[0]
+    if x_len >= max_len:
+        return x[:max_len]
+    # need to pad
+    num_repeats = int(max_len / x_len) + 1
+    padded_x = np.tile(x, (1, num_repeats))[:, :max_len][0]
+    return padded_x
+
+
+def get_spoof_list(meta_dir, is_train=False, is_eval=False):
+    d_meta = {}
+    file_list = []
+    with open(meta_dir, "r") as f:
+        l_meta = f.readlines()
+
+    if is_train:
+        for line in l_meta:
+            # _, key, _, _, label = line.strip().split(" ")
+
+            key, label = line.split(" ")[1], line.split(" ")[5]
+            file_list.append(key)
+            d_meta[key] = 1 if label == "bonafide" else 0
+        return d_meta, file_list
+
+    elif is_eval:
+        for line in l_meta:
+            key = line.strip()
+            file_list.append(key)
+        return None, file_list
+    else:
+        for line in l_meta:
+            key, label = line.split(" ")[1], line.split(" ")[5]
+            file_list.append(key)
+            d_meta[key] = 1 if label == "bonafide" else 0
+        return d_meta, file_list
+
+
 class ASVSpoof21Dataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -179,15 +223,16 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         is_eval=False,
         sampling_rate=16000,
         max_duration=4,
+        get_transcription=False,
     ):
         self.sampling_rate = sampling_rate
         self.max_duration = max_duration
         self.cut = self.sampling_rate * self.max_duration  # padding
-        self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
+        self.meta, self.list_IDs = get_spoof_list(meta_dir, is_train, is_eval)
         self.root_dir = root_dir
 
     def __len__(self):
-        return len(self.data)
+        return len(self.list_IDs)
 
     def load_audio_tensor(self, key):
         filename = os.path.join(self.root_dir, f"flac/{key}.flac")
@@ -196,8 +241,9 @@ class ASVSpoof21Dataset(torch.utils.data.Dataset):
         return audio_tensor
 
     def __getitem__(self, idx):
-        y = self.list_IDs[idx]
-        x = self.load_audio_tensor(y)
+        f = self.list_IDs[idx]
+        y = self.meta[f]
+        x = self.load_audio_tensor(f)
         return x, y
 
 

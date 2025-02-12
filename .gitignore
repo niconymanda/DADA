@@ -175,17 +175,17 @@ out*.txt
 
 # symbolic links
 iivanova-23
-=======
-<<<<<<< HEAD
 #.idea/
 
 # Datasets / Other Folders
 data/
 datasets/
 authorship_attribution/
-=======
 #.idea/
 
 #out files
 out*.txt
->>>>>>> bb917b9ccc048fcde4426c51c385c3c5508029e0
+*.out
+
+src/models/
+src/*.bash

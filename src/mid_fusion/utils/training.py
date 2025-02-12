@@ -260,7 +260,7 @@ class MidFusionTrainer:
             )
 
         elif args.fusion_strategy == "audio":
-            self.model = EarWorm(speech_model=self.speech_model, speech_features=256)
+            self.model = EarWorm(speech_model=self.speech_model, speech_features=256, train_encoder=self.args.train_audio_encoder)
 
         elif args.fusion_strategy == "text":
             self.model = BookWorm(text_model=self.text_model, text_features=1024)

@@ -30,6 +30,8 @@ from torch.optim.lr_scheduler import (
 from utils.logging import Logger
 from utils.losses import SelfContrastiveLoss
 
+from torchaudio.datasets import COMMONVOICE
+
 
 class SLIMTrainer:
     def __init__(self, args):
@@ -153,7 +155,7 @@ class SLIMTrainer:
 class StageOneTrainer(SLIMTrainer):
     def __init__(self, args):
         super().__init__(args)
-        self.model = SLIMStage1().to(self.device)
+        self.model = SLIMStage1(device=self.device).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=args.learning_rate)
 
         if self.args.lr_scheduler == "plateau":
@@ -184,25 +186,33 @@ class StageOneTrainer(SLIMTrainer):
             ]
         )
 
-        self.train_dataset = CommonVoiceDataset(root_dir=args.cv_dir, split="train")
-
         self.val_dataset = ConcatDataset(
             [
                 CommonVoiceDataset(
                     root_dir=args.cv_dir,
                     split="val",
                 ),
-                # RAVDESSDataset(
-                #     root_dir=args.ravdess_dir,
-                #     split="val",
-                # ),
+                RAVDESSDataset(
+                    root_dir=args.ravdess_dir,
+                    split="val",
+                ),
             ]
         )
 
-        self.val_dataset = CommonVoiceDataset(root_dir=args.cv_dir, split="val")
+        self.train_dataset = COMMONVOICE(
+            root='/data/amathur-23/DADA/CommonVoice/en',
+            tsv='train.tsv'
+        )
+
+        self.val_dataset = COMMONVOICE(
+            root='/data/amathur-23/DADA/CommonVoice/en',
+            tsv='dev.tsv'
+        )
 
         self.train_loader = DataLoader(
-            self.train_dataset, batch_size=args.batch_size, shuffle=True
+            self.train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
         )
 
         self.val_loader = DataLoader(
@@ -229,12 +239,18 @@ class StageOneTrainer(SLIMTrainer):
         losses = []
 
         n_steps = len(self.train_loader)
+        print(
+            f"\rEpoch {epoch + 1} [{1}/{n_steps}] loss: {np.mean(losses):.3f}    ",
+            end="",
+        )
         for i, batch in enumerate(self.train_loader):
 
             batch = batch.to(self.device)
 
+
             self.optimizer.zero_grad()
 
+            print(batch.shape)
             loss = self.model(batch).squeeze()
 
             loss.backward()
