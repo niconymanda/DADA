@@ -58,6 +58,22 @@ class CompressionModule(nn.Module):
         return x_norm
 
 
+class DualCompressionModule(nn.Module):
+    def __init__(
+        self, K=199, F_in=1024, F_out=256, bottleneck_dropout=0.5, head_dropout=0.5, alpha = 0.5
+    ):
+        super(DualCompressionModule, self).__init__()
+
+        self.compression1 = CompressionModule(K, F_in, F_out, bottleneck_dropout, head_dropout)
+        self.compression2 = CompressionModule(K, F_in, F_out, bottleneck_dropout, head_dropout)
+    
+    def forward(self, x1, x2):
+        feat1 = self.compression1(x1)
+        feat2 = self.compression(x2)
+        out = (feat1+feat2)/2
+        return out
+        
+
 class SpeechEmbedder(nn.Module):
     def __init__(
         self,
@@ -165,3 +181,120 @@ class SpeechEmbedder(nn.Module):
 
         else:
             raise NotImplementedError(f"Mode {self.mode} not implemented")
+
+
+class SpeechEmbedderEnhanced(nn.Module):
+    def __init__(
+        self,
+        feature_layers=(0, 10),
+        complementary_layers=(14, 21),
+        K=199,
+        F_in=1024,
+        F_out=256,
+        bottleneck_dropout=0.5,
+        head_dropout=0.5,
+        load_path=None,
+        device="cuda",
+    ):
+        super(SpeechEmbedderEnhanced, self).__init__()
+        self.processor = Wav2Vec2Processor.from_pretrained(PROC_ID)
+        self.feature_model = Wav2Vec2ForCTC.from_pretrained(BASE_MODEL)
+        self.feature_model.eval()
+
+        self.compression = DualCompressionModule(K, F_in, F_out, bottleneck_dropout, head_dropout)
+        
+        if load_path:
+            self.compression.load_state_dict(torch.load(load_path))
+
+        self.feature_layers = feature_layers
+        self.complementary_layers = complementary_layers
+        self.device = device
+
+    def get_features(self, x):
+        with torch.no_grad():
+            x = self.processor(
+                x,
+                return_tensors="pt",
+                padding=True,
+                sampling_rate=16_000,
+                device=self.device,
+            ).input_values[0]
+            x = x.to(self.device)
+            out = self.feature_model(x, output_hidden_states=True, return_dict=True)
+
+            feat1 = torch.stack(
+                out.hidden_states[self.feature_layers[0] : self.feature_layers[1]],
+                dim=-1,
+            )
+
+            feat2 = torch.stack(
+                out.hidden_states[self.complementary_layers_layers[0] : self.complementary_layers_layers[1]],
+                dim=-1,
+            )
+        return feat1, feat2
+
+    def to(self, device):
+        self.compression.to(device)
+        self.feature_model.to(device)
+        return super().to(device)
+
+    def train(self):
+        self.compression.train()
+
+    def eval(self):
+        self.compression.eval()
+
+    def save_(self, path):
+        torch.save(self.compression.state_dict(), path)
+
+    def load_(self, path):
+        if isinstance(path, str):
+            state_dict = torch.load(path)
+        else:
+            state_dict = path
+
+        self.compression.load_state_dict(state_dict)
+
+    def forward(self, input, mode="triplet"):
+
+        if mode == "classification":
+            x1, x2 = self.get_features(input["x"])
+            x = self.compression(x1, x2)
+            return x
+
+        elif mode == "triplet":
+            a, p, n = input["anchor"], input["positive"], input["negative"]
+            x_a, x_p, x_n = (
+                self.get_features(a),
+                self.get_features(p),
+                self.get_features(n),
+            )
+
+            x_a, x_p, x_n = (
+                self.compression(x_a[0], x_a[1]),
+                self.compression(x_p[0], x_p[1]),
+                self.compression(x_n[0], x_n[1]),
+            )
+
+            return {
+                "anchor": x_a,
+                "positive": x_p,
+                "negative": x_n,
+            }
+
+        elif mode == "pair":
+            a, b = input["a"], input["b"]
+            x_a, x_b = self.get_features(a), self.get_features(b)
+
+            x_a, x_b = self.compression(x_a[0], x_a[1]), self.compression(x_b[0], x_b[1])
+
+            return {
+                "a": x_a,
+                "b": x_b,
+            }
+
+        else:
+            raise NotImplementedError(f"Mode {self.mode} not implemented")
+
+
+

@@ -250,7 +250,7 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
         max_duration=4,
         mode="classification",
         text_only=False,
-        max_samples = 20000,
+        max_samples=20000,
     ):
         self.root_dir = root_dir
         self.split = split
@@ -261,7 +261,7 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
         self.text_only = text_only
 
         self.metadata_file = os.path.join(root_dir, f"{split}/meta.csv")
-        self.df = pd.read_csv(self.metadata_file)   
+        self.df = pd.read_csv(self.metadata_file)
 
         if max_samples is not None:
             self.df = self.df[:max_samples]
@@ -286,7 +286,6 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
             "array": np.array(sample_dict["audio_path"]["array"]),
             "sampling_rate": sample_dict["audio_path"]["sampling_rate"],
         }
-
 
     def load_audio_tensor(self, sample_dict):
         audio_arr = sample_dict["array"]
@@ -313,14 +312,14 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
         if not self.text_only:
             x = self.load_audio_tensor(x_dict)
         author = self.id_to_author[idx]
-        transcription = x_dict['transcription']
+        transcription = x_dict["transcription"]
 
         if self.mode == "classification":
             return {
                 "x": x if not self.text_only else np.array([]),
                 "author": author,
                 # "transcription": transcription,
-                "label": 1, # VoxCeleb2 is not a spoof dataset
+                "label": 1,  # VoxCeleb2 is not a spoof dataset
             }
 
         elif self.mode == "triplet":
@@ -329,8 +328,8 @@ class VoxCeleb2Dataset(torch.utils.data.Dataset):
             if self.text_only:
                 return {
                     "anchor": transcription,
-                    "positive": self.get_sample_dict(id_p)['transcription'],
-                    "negative": self.get_sample_dict(id_n)['transcription'],
+                    "positive": self.get_sample_dict(id_p)["transcription"],
+                    "negative": self.get_sample_dict(id_n)["transcription"],
                 }
 
             x_p = self.load_audio_tensor(self.get_sample_dict(id_p))

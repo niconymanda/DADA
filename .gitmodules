@@ -4,3 +4,6 @@
 [submodule "src/baselines/asvspoof2021"]
 	path = src/baselines/asvspoof2021
 	url = https://github.com/abhaydmathur/asvspoof2021.git
+[submodule "src/baselines/RawGAT-ST-antispoofing"]
+	path = src/baselines/RawGAT-ST-antispoofing
+	url = https://github.com/abhaydmathur/RawGAT-ST-antispoofing.git

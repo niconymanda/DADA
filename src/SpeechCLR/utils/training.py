@@ -175,7 +175,7 @@ class SpeechCLRTrainerVanilla:
         if "voxceleb2" in self.args.datasets:
             self.train_datasets_list.append(
                 VoxCeleb2Dataset(
-                    root_dir=os.path.join(args.data_path, 'VoxCeleb2'),
+                    root_dir=os.path.join(args.data_path, "VoxCeleb2"),
                     split="train",
                     sampling_rate=args.sampling_rate,
                     max_duration=args.max_duration,
@@ -186,7 +186,7 @@ class SpeechCLRTrainerVanilla:
 
             self.val_datasets_list.append(
                 VoxCeleb2Dataset(
-                    root_dir=os.path.join(args.data_path, 'VoxCeleb2'),
+                    root_dir=os.path.join(args.data_path, "VoxCeleb2"),
                     split="val",
                     sampling_rate=args.sampling_rate,
                     max_duration=args.max_duration,
@@ -197,7 +197,7 @@ class SpeechCLRTrainerVanilla:
 
             self.train_vis_datasets_list.append(
                 VoxCeleb2Dataset(
-                    root_dir=os.path.join(args.data_path, 'VoxCeleb2'),
+                    root_dir=os.path.join(args.data_path, "VoxCeleb2"),
                     split="train",
                     sampling_rate=args.sampling_rate,
                     max_duration=args.max_duration,
@@ -208,7 +208,7 @@ class SpeechCLRTrainerVanilla:
 
             self.vis_datasets_list.append(
                 VoxCeleb2Dataset(
-                    root_dir=os.path.join(args.data_path, 'VoxCeleb2'),
+                    root_dir=os.path.join(args.data_path, "VoxCeleb2"),
                     split="val",
                     sampling_rate=args.sampling_rate,
                     max_duration=args.max_duration,
@@ -301,7 +301,7 @@ class SpeechCLRTrainerVanilla:
 
         if len(self.train_datasets_list) == 0:
             raise ValueError("No datasets found")
-        
+
         self.train_dataset = ConcatDataset(self.train_datasets_list)
         self.val_dataset = ConcatDataset(self.val_datasets_list)
         self.train_vis_dataset = ConcatDataset(self.train_vis_datasets_list)
@@ -366,7 +366,7 @@ class SpeechCLRTrainerVanilla:
 
         args_dict = vars(self.args)
         args_save_path = os.path.join(self.model_save_path, "config.yaml")
-        with open(args_save_path, 'w') as file:
+        with open(args_save_path, "w") as file:
             yaml.dump(args_dict, file)
 
     def log_init(self):

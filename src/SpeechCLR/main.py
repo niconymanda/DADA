@@ -84,7 +84,7 @@ def get_args():
         default=0.01,
         help="Threshold for early stopping",
     )
-    
+
     parser.add_argument(
         "--loss_fn",
         type=str,
