@@ -41,28 +41,26 @@ class TripletLoss(nn.Module):
         
         distance_positive = self.distance_function(anchor, positive) 
         distance_negative = self.distance_function(anchor, negative) 
-        # print(f"distance_positive: {distance_positive}")
-        # print(f"distance_negative: {distance_negative}")
         loss = torch.clamp_min(distance_positive - distance_negative + self.margin, 0)
         if self.reduction == "sum":
             return torch.sum(loss)
         elif self.reduction == "mean":
             return torch.mean(loss)
-        else:  # reduction == "none"
+        else:  
             return loss
     
 class ContrastiveLoss(nn.Module):
     """
-    Contrastive Loss function.
+    Implements the contrastive loss for text embeddings.
     Args:
-        margin (float, optional): Margin for contrastive loss. Default is 0.5.
+        margin (float, optional): The margin value for the contrastive loss. Default is 0.5.
     Methods:
         forward(anchor: torch.Tensor, positive: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-            Computes the contrastive loss between the anchor and positive tensors.
+            Computes the contrastive loss given anchor, positive, and target tensors.
             Args:
                 anchor (torch.Tensor): The anchor tensor.
                 positive (torch.Tensor): The positive tensor.
-                target (torch.Tensor): The target tensor indicating whether pairs are similar (1) or dissimilar (0).
+                target (torch.Tensor): The binary label tensor.
             Returns:
                 torch.Tensor: The computed contrastive loss.
     """
@@ -103,10 +101,6 @@ class SquaredCosineSimilarityLoss(nn.Module):
 
         loss_same = (1 - positive_similarity)/2
         loss_diff = negative_similarity.pow(2)
-        
-        # Randomly select the target for the loss if same or different
-        # target = torch.randint(0, 2, (anchor.size(0),), dtype=torch.float32, device=anchor.device)
-        # loss = torch.where(target == 1, loss_same, loss_diff)
         loss = loss_same + loss_diff
        
         if self.reduction == "sum":
@@ -202,7 +196,6 @@ class TripletLossTemperature(nn.Module):
         Returns:
             torch.Tensor: Scalar contrastive loss.
         """
-        #TODO: See if we can have multiple negatives as in the original paper
         pos_scores = cosine_similarity(anchor, positive)  
         neg_scores = cosine_similarity(anchor, negative)
 

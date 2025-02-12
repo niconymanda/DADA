@@ -41,11 +41,6 @@ def train_tune(config, train_dataset, val_dataset, device, args):
     mlp_layers = config["mlp_layers"]
     weight_decay = config["weight_decay"]
     num_workers = config["workers"]
-    # device = "cpu"
-    # if torch.cuda.is_available():
-    #     device = "cuda:0"
-    #     if torch.cuda.device_count() > 1:
-    #         model = nn.DataParallel(model)
     model = AuthorshipLLM(args.model_name)
     device = cfg.get_device()
     model.to(device)
@@ -70,13 +65,11 @@ def train_tune(config, train_dataset, val_dataset, device, args):
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers)
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["epochs"]*len(train_dataloader), eta_min=0, last_epoch=-1)
-    # early_stopping_tune = EarlyStopping(patience=args.early_stopping_patience)
 
     for epoch in range(start_epoch, config["epochs"]):
         model.train()
         total_loss = 0.0
         for batch in train_dataloader:
-            # batch = {k: v.to(device) for k, v in batch.items()}
             embeddings = model(batch)
             optimizer.zero_grad()
             loss = criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
@@ -93,7 +86,6 @@ def train_tune(config, train_dataset, val_dataset, device, args):
         model.eval()
         with torch.no_grad():
             for batch in val_dataloader:
-                # batch = {k: v.to(device) for k, v in batch.items()}
                 embeddings = model(batch)
                 loss_value = criterion(embeddings['anchor'], embeddings['positive'], embeddings['negative'])
                 val_loss += loss_value.item()
@@ -118,6 +110,3 @@ def train_tune(config, train_dataset, val_dataset, device, args):
                     {"loss": avg_val_loss, "accuracy": correct_count / len(val_dataloader.dataset)},
                     checkpoint=checkpoint,
                 )
-        # if early_stopping_tune.step(avg_val_loss):
-        #     print("Early stopping triggered")
-        #     break 

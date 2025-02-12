@@ -134,12 +134,7 @@ class SpeechEmbedder(nn.Module):
         torch.save(self.compression.state_dict(), path)
 
     def load_(self, path):
-        if isinstance(path, str):
-            state_dict = torch.load(path)
-        else:
-            state_dict = path
-
-        self.compression.load_state_dict(state_dict)
+        self.compression.load_state_dict(torch.load(path))
 
     def forward(self, input, mode="triplet"):
 

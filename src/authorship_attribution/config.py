@@ -15,50 +15,58 @@ def get_args():
         argparse.Namespace: Parsed command-line arguments.
     """
     
-    # answerdotai/ModernBERT-large, google-t5/t5-large, microsoft/deberta-v3-large
+    # answerdotai/ModernBERT-large, google-t5/t5-large, microsoft/deberta-v3-large google/flan-t5-large
     parser = argparse.ArgumentParser(description='Train a text classification model')
-    parser.add_argument('--data', type=str, default='/data/iivanova-23/data/wiki_train.csv', help='Path to the input data file')
+    parser.add_argument('--data', nargs='+', default=None, help='Path to the input data file')
     parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=10, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--batch_size_classification', type=int, default=32, help='Batch size for classification head')
     parser.add_argument('--num_workers', type=int, default=2, help='Number of workers for data loading')
-    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--learning_rate_classification', type=float, default=1e-4, help='Learning rate classification')
     parser.add_argument('--weight_decay', type=float, default=0.1  , help='weight_decay')
-    parser.add_argument('--model_name', type=str, default='google-t5/t5-large', help='Model to use')
+    parser.add_argument('--model_name', type=str, default='microsoft/deberta-v3-large', help='Model to use')
     parser.add_argument('--gpu_id', type=str, default='1', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--early_stopping_patience', type=int, default=5, help='Patience for early stopping based on validation loss')
-    parser.add_argument('--logging_step', type=int, default=10, help='Loggings step')
     parser.add_argument('--authors_to_train', type=int, default=0, help='Min number of quotes per author')
     parser.add_argument('--authors_to_test', type=int, default=0, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
     parser.add_argument('--loss_function', type=str, default='triplet', help='Loss function for training [triplet, contrastive, ada_triplet, hinge, cos2]')
-    parser.add_argument('--margin', type=float, default=0.4, help='Margin for triplet loss')
+    parser.add_argument('--margin', type=float, default=0.5, help='Margin for triplet loss')
     parser.add_argument('--lr_scheduler', type=str, default='cosine', help='Learning rate scheduler[cosine, linear_warmup, linear, plateau]')
-    parser.add_argument('--classification_head', type=str, default='linear', help='Classification head type[linear, mlp, gmm]')
+    parser.add_argument('--classification_head', type=str, default='mlp', help='Classification head type[linear, mlp, gmm]')
     parser.add_argument('--clip_grad', type=float, default=100, help='Clip gradient norm')
     parser.add_argument('--at_lambda', type=float, default=0.5, help='Lambda for AdaTriplet loss')
-    parser.add_argument('--mlp_layers', type=int, default=2, help='Number of layers in MLP head')
+    parser.add_argument('--mlp_layers', type=int, default=1, help='Number of layers in MLP head')
     parser.add_argument('--hidden_layers', type=lambda s: [int(item) for item in s.split(',')], default="-1", help='List of hidden layer sizes for the model')
     parser.add_argument('--text_model_path', type=str, default=None, help='Path to the text model weights')
-    # '/home/infres/iivanova-23/DADA/iivanova-23/output/paper_sets/n_authors_51/google-t5/t5-large_16_20_20250202-222036/final.pth'
-    # '/data/iivanova-23/output/ada/custom_m/classif/n_authors_10/google-t5/t5-large_16_20_20250201-110817/final.pth'
-    # path = '/data/iivanova-23/output/ada/custom_m/n_authors_10/google-t5/t5-large_16_20_20250126-185149/final.pth'
-    # path = '/data/iivanova-23/output/ada/custom_m/n_authors_10/google/flan-t5-large_16_20_20250126-190419/final.pth'
     args = parser.parse_args()
     args = load_config(args)
     return args
 
 def load_config(args):
+    """
+    Loads the configuration for the text model from a JSON file and updates the provided arguments.
+    Args:
+        args (argparse.Namespace): The arguments containing the path to the text model and other configurations.
+    Returns:
+        argparse.Namespace: The updated arguments with the model configuration loaded from the JSON file.
+    Notes:
+        - If `args.text_model_path` is not None, the function replaces 'final.pth' in the path with 'model_config.json'
+          to locate the configuration file.
+        - The function reads the JSON configuration file and updates `args` with the model name, number of MLP layers,
+          and hidden layers mean pool from the configuration.
+    """
+    
     if args.text_model_path is not None:
         config_path = args.text_model_path.replace('final.pth', 'model_config.json')
         with open(config_path, 'r') as f:
             config = json.load(f)
         args.model_name = config['architecture']['args']['model_name']
         args.mlp_layers = config['architecture']['args']['num_mlp_layers']
-        args.hidden_layers = config['architecture']['args']['hidden_layers mean pool']
+        args.hidden_layers = config['architecture']['args']['hidden_layers mean pool']  
     return args
 
 def load_data(args):
@@ -67,31 +75,29 @@ def load_data(args):
     Args:
         args (argparse.Namespace): The arguments containing the following attributes:
             - data (str): Path to the CSV file containing the dataset.
-            - min_quotes_per_author (int): Minimum number of quotes required per author.
+            
     Returns:
         tuple: A tuple containing:
             - data (pd.DataFrame): The processed dataset excluding spoofed data.
-            - spoofed_data (pd.DataFrame): The dataset containing only spoofed data.
             - author_id_map (dict): A dictionary mapping new author labels to author names. E.g. {0: 'Donald Trump', 1: 'Barack Obama', 2: 'John F. Kennedy', ...}
     """
-    
     data = pd.read_csv(args.data)
     data = data.dropna()
-    data['label'] = data['label'].astype('int')
-    # spoofed_data = data[data['type'] == 'spoof']
-    # data = data[data['type'] != 'spoof']
-    if args.authors_to_train == 0:
-        args.authors_to_train = len(data['label'].unique())
-    if args.authors_to_test == 0:
-        args.authors_to_test = len(data['label'].unique())
-    data_to_train = data[data['label'] < args.authors_to_train]
-    rest_of_data = data[(data['label'] >= args.authors_to_train) & (data['label'] < args.authors_to_test)]
-    print(f"Number of authors to train on: {args.authors_to_train}, Number of authors to test on: {args.authors_to_test}")
-    
-    data = pd.concat([data_to_train, rest_of_data])
-    author_id_map = data[['label', 'author_name']].drop_duplicates().set_index('label').to_dict()['author_name']
-    
-    return data_to_train, rest_of_data, author_id_map
+    if 'wiki' in args.data:
+        data['label'] = data['label'].astype('int')
+        if args.authors_to_train == 0:
+            args.authors_to_train = len(data['label'].unique())
+        if args.authors_to_test == 0:
+            args.authors_to_test = len(data['label'].unique())
+        data_to_train = data[data['label'] < args.authors_to_train]
+        rest_of_data = data[(data['label'] >= args.authors_to_train) & (data['label'] < args.authors_to_test)]
+        print(f"Number of authors to train on: {args.authors_to_train}, Number of authors to test on: {args.authors_to_test}")
+
+        author_id_map = data[['label', 'author_name']].drop_duplicates().set_index('label').to_dict()['author_name']
+
+        return data, rest_of_data, author_id_map
+    elif 'asvspoof' in args.data:
+        return data, None, None
 
 def write_results_to_file(results, file_path, args, path):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -171,7 +177,6 @@ def save_model_config(
                 "learning_rate": args.learning_rate_classification,
                 "weight_decay": args.weight_decay,
                 "early_stopping_patience": args.early_stopping_patience,
-                "logging_step": args.logging_step,
                 }
         },
         "loss_function": {
