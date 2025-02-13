@@ -34,8 +34,11 @@ from mid_fusion.utils.datasets import (
 from mid_fusion.utils.metrics import equal_error_rate
 from SpeechCLR.utils.logging import Logger
 from SpeechCLR.models import SpeechEmbedder
-from authorship_attribution.model import AuthorshipLLM
-from mid_fusion.models import MidFuse, LateFuse, EarWorm, BookWorm
+from authorship_attribution.model import AuthorshipLLM, AuthorshipClassificationLLM
+from authorship_attribution.config import load_checkpoint
+from mid_fusion.models import (
+    MidFuse, LateFuse, EarWorm, BookWorm, ConditionalLateFuse, FrozenConditionalLateFuse
+)
 from sklearn.metrics import f1_score
 
 
@@ -53,7 +56,8 @@ class MidFusionTrainer:
             self.train_datasets_list.append(
                 InTheWildDataset(
                     root_dir=args.train_datasets["inthewild"],
-                    metadata_file="wild_transcription_meta.json",
+                    metadata_file=args.inthewild_meta_file,
+                    transcription_col=args.inthewild_transcription_column,
                     include_spoofs=True,
                     bonafide_label="bona-fide",
                     filename_col="file",
@@ -69,7 +73,8 @@ class MidFusionTrainer:
             self.val_datasets_list.append(
                 InTheWildDataset(
                     root_dir=args.train_datasets["inthewild"],
-                    metadata_file="wild_transcription_meta.json",
+                    metadata_file=args.inthewild_meta_file,
+                    transcription_col=args.inthewild_transcription_column,
                     include_spoofs=True,
                     bonafide_label="bona-fide",
                     filename_col="file",
@@ -134,7 +139,8 @@ class MidFusionTrainer:
             self.test_datasets_list.append(
                 InTheWildDataset(
                     root_dir=args.test_datasets["inthewild"],
-                    metadata_file="wild_transcription_meta.json",
+                    metadata_file=args.inthewild_meta_file,
+                    transcription_col=args.inthewild_transcription_column,
                     include_spoofs=True,
                     bonafide_label="bona-fide",
                     filename_col="file",
@@ -223,6 +229,7 @@ class MidFusionTrainer:
             self.args.text_model_name,
             num_layers=self.args.mlp_layers,
             use_layers=self.args.hidden_layers,
+            out_features = self.args.text_features,
             device=self.device
         )
 
@@ -234,6 +241,7 @@ class MidFusionTrainer:
             )
             self.text_model.load_state_dict(checkpoint["model_state_dict"])
             print(f"Loaded text model from {args.text_model_path}")
+
         if args.speech_model_path is not None:
             self.speech_model.load_(args.speech_model_path)
             print(f"Loaded speech model from {args.speech_model_path}")
@@ -242,8 +250,8 @@ class MidFusionTrainer:
             self.model = MidFuse(
                 text_model=self.text_model,
                 speech_model=self.speech_model,
-                text_features=1024,
-                speech_features=256,
+                text_features=self.args.text_features, # TODO @abhaydmathur : change to args....
+                speech_features=self.args.audio_features,
             )
 
             if self.args.load_checkpoint is not None:
@@ -254,16 +262,41 @@ class MidFusionTrainer:
             self.model = LateFuse(
                 text_model=self.text_model,
                 speech_model=self.speech_model,
-                text_features=1024,
-                speech_features=256,
+                text_features=self.args.text_features,
+                speech_features=self.args.speech_features,
                 alpha=0.5,
             )
 
+        elif args.fusion_strategy == "conditional_late":
+            self.text_classifier = AuthorshipClassificationLLM(
+                model = self.text_model,
+                num_labels = 54,
+                head_type='mlp',
+            )
+
+            self.text_classifier = load_checkpoint(self.text_classifier, self.args.text_classifier_path)
+
+            self.speech_classifier = EarWorm(
+                speech_model=self.speech_model,
+                speech_features=self.args.speech_features,
+                train_encoder=False
+            )
+
+            self.speech_classifier.load_(self.args.speech_classifier_path)
+
+            self.model = FrozenConditionalLateFuse(
+                text_classifier = self.text_classifier,
+                speech_classifier = self.speech_classifier
+            )
+
+            self.text_id_to_author = self.args.text_id_to_author
+            self.author_to_id = {v: k for k, v in self.text_id_to_author.items()}
+
         elif args.fusion_strategy == "audio":
-            self.model = EarWorm(speech_model=self.speech_model, speech_features=256, train_encoder=self.args.train_audio_encoder)
+            self.model = EarWorm(speech_model=self.speech_model, speech_features=self.args.speech_features, train_encoder=self.args.train_audio_encoder)
 
         elif args.fusion_strategy == "text":
-            self.model = BookWorm(text_model=self.text_model, text_features=1024)
+            self.model = BookWorm(text_model=self.text_model, text_features=self.args.text_features)
 
         self.optimizer = optim.Adam(
             self.model.trainable_parameters(), lr=args.learning_rate
@@ -346,7 +379,12 @@ class MidFusionTrainer:
 
             self.optimizer.zero_grad()
 
-            output = self.model(text_input=text, speech_input=batch).squeeze()
+            if self.args.fusion_strategy == "conditional_late":
+                text_ids = torch.tensor([self.author_to_id[a] for a in batch["author"]]).to(self.device)
+                output = self.model(text_input=text, speech_input=batch, class_idx=text_ids).squeeze()
+            else:
+                output = self.model(text_input=text, speech_input=batch).squeeze()
+    
             loss = self.criterion(output, label)
 
             loss.backward()
@@ -370,7 +408,7 @@ class MidFusionTrainer:
             "lr": self.optimizer.param_groups[0]["lr"],
         }
 
-        if self.args.fusion_strategy == "late":
+        if self.args.fusion_strategy in ["late", "conditional_late"]:
             info["alpha"] = self.model.alpha.item()
 
         return info
@@ -423,12 +461,12 @@ class MidFusionTrainer:
                 break
 
             if (epoch + 1) % self.args.test_freq == 0:
-                test_info = self.test(self)
+                test_info = self.test()
                 for loader_name in test_info.keys():
                     log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
                     self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch+1)
 
-        test_info = self.test(self)
+        test_info = self.test()
         for loader_name in test_info.keys():
             log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
             self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch+1)
@@ -455,7 +493,12 @@ class MidFusionTrainer:
 
                 batch["x"] = batch["x"].to(self.device)
 
-                output = self.model(text_input=text, speech_input=batch).squeeze()
+                if self.args.fusion_strategy == "conditional_late":
+                    text_ids = torch.tensor([self.author_to_id[a] for a in batch["author"]]).to(self.device)
+                    output = self.model(text_input=text, speech_input=batch, class_idx=text_ids).squeeze()
+                else:
+                    output = self.model(text_input=text, speech_input=batch).squeeze()
+                # print(label, output)
                 loss = self.criterion(output, label)
                 losses.append(loss.item())
 
@@ -504,7 +547,11 @@ class MidFusionTrainer:
                     label = batch["label"].squeeze().float().to(self.device)
                     batch["x"] = batch["x"].to(self.device)
 
-                    output = self.model(text_input=text, speech_input=batch).squeeze()
+                    if self.args.fusion_strategy == "conditional_late":
+                        text_ids = torch.tensor([self.author_to_id[a] for a in batch["author"]]).to(self.device)
+                        output = self.model(text_input=text, speech_input=batch, class_idx=text_ids).squeeze()
+                    else:
+                        output = self.model(text_input=text, speech_input=batch).squeeze()
                     loss = self.criterion(output, label)
                     losses.append(loss.item())
 

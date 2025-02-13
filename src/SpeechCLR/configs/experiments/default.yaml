@@ -1,0 +1,41 @@
+model_name: "vanilla_agg_p5"  # Default: SpeechEmbedder | Name of the model to train
+model: SpeechEmbedder  # Default: SpeechEmbedder | Name of the model class 
+  # choices : SpeechEmbedder, SpeechEmbedderEnhanced
+batch_size: 16  # Default: 4 | Batch size for training
+epochs: 30  # Default: 2 | Number of epochs to train
+learning_rate: 1e-5  # Default: 1e-5 | Learning rate for optimizer
+
+datasets:  # List of datasets to use for training
+  "commonvoice" : "/data/amathur-23/DADA/CommonVoice"
+  "voxceleb2" : "/data/amathur-23/DADA/VoxCeleb2"
+  "asvspoof19" : "/data/amathur-23/DADA/ASVspoof2019/LA"
+  "ravdess" : "/data/amathur-23/DADA/RAVDESS"
+  # Possible choices: commonvoice, voxceleb2, inthewild, asvspoof19, ravdess
+
+model_save_path: "/data/amathur-23/DADA/models/SpeechEmbedder"  # Default: ./models | Path to save the trained model
+log_dir: "runs/"  # Default: ./runs | Path to save logs
+max_duration: 4  # Default: 4 | Maximum duration of audio files (seconds)
+sampling_rate: 16000  # Default: 16000 | Sampling rate of audio files (Hz)
+
+early_stopping_patience: 5  # Default: 3 | Number of epochs to wait before early stopping
+early_stopping_threshold: 0.01  # Default: 0.01 | Threshold for early stopping
+
+loss_fn: triplet_cosine  # Default: triplet_cosine | Loss function to use for training
+# Possible values: triplet, triplet_cosine, ada_triplet, squared_similarity
+
+gpu_id: 0  # Default: 0 | ID of the GPU to use for training
+margin: 0.5  # Default: 0.5 | Margin for triplet loss
+at_lambda: 0.5  # Default: 0.5 | Lambda for AdaTriplet loss
+seed: 42  # Default: 42 | Seed for reproducibility
+
+save_visualisations: false  # Default: false | Save visualizations of embeddings
+
+lr_scheduler: step  # Default: step | Learning rate scheduler to use
+# Possible values: plateau, step, cosine
+
+early_stopping_metric: loss  # Default: loss | Metric to use for early stopping
+# Possible values: loss, accuracy
+
+load_path: null  # Default: None | Path to the checkpoint to load
+load_checkpoint: best  # Default: best | Checkpoint to load
+# Possible values: best, latest

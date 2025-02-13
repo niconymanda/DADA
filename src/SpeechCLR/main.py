@@ -4,9 +4,10 @@ import random
 import argparse
 from utils.training import SpeechCLRTrainerVanilla
 import os
+import yaml
 
 
-def get_args():
+def get_args_():
     parser = argparse.ArgumentParser(description="Train SpeechCLR model")
     parser.add_argument(
         "--model_name",
@@ -135,6 +136,18 @@ def get_args():
 
     return parser.parse_args()
 
+def get_args():
+    parser = argparse.ArgumentParser(description="Train SpeechCLR model")
+    parser.add_argument(
+        "--config_file",
+        type=str,
+        default="configs/experiments/default.yaml",
+        help="Name of the configuration file",
+    )
+    args = parser.parse_args()
+    with open(args.config_file, "r") as f:
+        config = yaml.safe_load(f)
+    return argparse.Namespace(**config)
 
 def seed_everything(seed: int):
     """fix the seed for reproducibility."""
@@ -152,13 +165,12 @@ def seed_everything(seed: int):
 if __name__ == "__main__":
     args = get_args()
     print(f"Using GPU: {args.gpu_id}")
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
     # Set huggingface cache
     os.environ["HF_HOME"] = "/data/amathur-23/DADA/hf_cache"
 
     seed_everything(args.seed)
-    # args.device = f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu"
+    args.device = f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu"
     trainer = SpeechCLRTrainerVanilla(args)
     trainer.train()
     # trainer.validate()

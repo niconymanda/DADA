@@ -18,17 +18,18 @@ import random
 SUPPORTED_FORMATS = ["wav", "mp3", "flac"]
 
 
-def custom_collate(batch):  
-    batch_x = torch.stack([item['x'] for item in batch])
-    batch_labels = torch.tensor([item['label'] for item in batch])
-    batch_transcriptions = [item['transcription'] for item in batch]
-    batch_authors = [item['author'] for item in batch]
+def custom_collate(batch):
+    batch_x = torch.stack([item["x"] for item in batch])
+    batch_labels = torch.tensor([item["label"] for item in batch])
+    batch_transcriptions = [item["transcription"] for item in batch]
+    batch_authors = [item["author"] for item in batch]
     return {
         "x": batch_x,
         "label": batch_labels,
         "transcription": batch_transcriptions,
         "author": batch_authors,
     }
+
 
 def load_audio(filename, sampling_rate=None):
     # Load audio file

@@ -64,8 +64,10 @@ class AuthorshipClassificationLLM(nn.Module):
         self.model.eval()
         self.classifier.train()
 
-    def forward(self, input):
-        outputs = self.model(input['anchor'], mode = 'classification')
+    def forward(self, input, from_triplet=False):
+        if from_triplet:
+            input = input['anchor']
+        outputs = self.model(input, mode = 'classification')
         logits = self.classifier(outputs)
         probs = self.softmax(logits)
         return logits
@@ -107,7 +109,6 @@ class MeanPooling(nn.Module):
 
         return mean_embeddings
     
-
 class MLP(nn.Module):
     """
     Multi-Layer Perceptron (MLP) for projecting hidden states to a lower-dimensional space.

@@ -69,7 +69,7 @@ class DualCompressionModule(nn.Module):
     
     def forward(self, x1, x2):
         feat1 = self.compression1(x1)
-        feat2 = self.compression(x2)
+        feat2 = self.compression2(x2)
         out = (feat1+feat2)/2
         return out
         
@@ -194,6 +194,7 @@ class SpeechEmbedderEnhanced(nn.Module):
         super(SpeechEmbedderEnhanced, self).__init__()
         self.processor = Wav2Vec2Processor.from_pretrained(PROC_ID)
         self.feature_model = Wav2Vec2ForCTC.from_pretrained(BASE_MODEL)
+        self.feature_model.to(device)
         self.feature_model.eval()
 
         self.compression = DualCompressionModule(K, F_in, F_out, bottleneck_dropout, head_dropout)
@@ -223,7 +224,7 @@ class SpeechEmbedderEnhanced(nn.Module):
             )
 
             feat2 = torch.stack(
-                out.hidden_states[self.complementary_layers_layers[0] : self.complementary_layers_layers[1]],
+                out.hidden_states[self.complementary_layers[0] : self.complementary_layers[1]],
                 dim=-1,
             )
         return feat1, feat2

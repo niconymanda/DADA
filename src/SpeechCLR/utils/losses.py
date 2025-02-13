@@ -165,8 +165,6 @@ class CosineDistance(torch.nn.Module):
 
 if __name__ == "__main__":
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
     a = torch.randn(10, 200)
     p = torch.randn(10, 200)
     n = torch.randn(10, 200)

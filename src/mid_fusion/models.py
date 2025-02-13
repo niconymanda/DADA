@@ -3,7 +3,6 @@ import torch.nn as nn
 import os
 import numpy as np
 
-
 class MidFuse(nn.Module):
     def __init__(self, text_model, speech_model, text_features, speech_features):
         super(MidFuse, self).__init__()
@@ -14,7 +13,10 @@ class MidFuse(nn.Module):
 
         self.classifier = nn.Sequential(
             nn.Linear(self.text_features + self.speech_features, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
             nn.Linear(512, 256),
+            nn.ReLU(),
             nn.Linear(256, 1),
             nn.Sigmoid(),
         )
@@ -267,10 +269,10 @@ class BookWorm(torch.nn.Module):
             nn.Linear(256, 1),
             nn.Sigmoid(),
         )
-        
+
     def trainable_parameters(self):
         return self.text_head.parameters()
-    
+
     def train_(self):
         self.text_model.eval()
         self.text_head.train()
@@ -290,4 +292,49 @@ class BookWorm(torch.nn.Module):
             text_features = self.text_model(text_input, mode="classification")
         y_text = self.text_head(text_features)
         return y_text
-        
+
+class FrozenConditionalLateFuse(nn.Module):
+    def __init__(
+        self,
+        text_classifier,
+        speech_classifier,
+        alpha=0.5,
+    ):
+        super(FrozenConditionalLateFuse, self).__init__()
+
+        self.text_classifier = text_classifier
+        self.speech_classifier = speech_classifier
+
+        self.alpha = nn.Parameter(torch.tensor(alpha))
+
+    def train_(self):
+        self.text_classifier.eval()
+        self.speech_classifier.eval_()
+        self.alpha.requires_grad = True
+
+    def eval_(self):
+        self.text_classifier.eval()
+        self.speech_classifier.eval_()
+        self.alpha.requires_grad = False
+
+    def trainable_parameters(self):
+        return [self.alpha]
+
+    def load_(self, path):
+        self.alpha = torch.load(path.replace(".pth", "_alpha.pth"))
+
+    def save_(self, path):
+        torch.save(self.alpha, path.replace(".pth", "_alpha.pth"))
+
+    def remove(self, path):
+        os.remove(path.replace(".pth", "_alpha.pth"))
+
+    def forward(self, text_input, speech_input, class_idx):
+        with torch.no_grad():
+            y_text = self.text_classifier(text_input)
+            y_text = torch.nn.functional.softmax(y_text, dim=1)
+            y_text = y_text.gather(1, class_idx.unsqueeze(1)).squeeze(1)
+            y_audio = self.speech_classifier(text_input, speech_input).squeeze()
+    
+        y = self.alpha * y_audio + (1 - self.alpha) * y_text    
+        return y
