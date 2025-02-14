@@ -18,8 +18,8 @@ def get_args():
     # answerdotai/ModernBERT-large, google-t5/t5-large, microsoft/deberta-v3-large google/flan-t5-large
     parser = argparse.ArgumentParser(description='Train a text classification model')
     parser.add_argument('--data', nargs='+', default=None, help='Path to the input data file')
-    parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train for')
-    parser.add_argument('--epochs_classification', type=int, default=5, help='Number of epochs to train the classifcation head for')
+    parser.add_argument('--epochs', type=int, default=30, help='Number of epochs to train for')
+    parser.add_argument('--epochs_classification', type=int, default=10, help='Number of epochs to train the classifcation head for')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--batch_size_classification', type=int, default=32, help='Batch size for classification head')
     parser.add_argument('--num_workers', type=int, default=2, help='Number of workers for data loading')
@@ -29,7 +29,7 @@ def get_args():
     parser.add_argument('--model_name', type=str, default='microsoft/deberta-v3-large', help='Model to use')
     parser.add_argument('--gpu_id', type=str, default='1', help='GPU id')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--early_stopping_patience', type=int, default=5, help='Patience for early stopping based on validation loss')
+    parser.add_argument('--early_stopping_patience', type=int, default=15, help='Patience for early stopping based on validation loss')
     parser.add_argument('--authors_to_train', type=int, default=0, help='Min number of quotes per author')
     parser.add_argument('--authors_to_test', type=int, default=0, help='Min number of quotes per author')
     parser.add_argument('--distance_function', type=str, default='l2', help='Distance function for triplet loss (l2 or cosine)')
@@ -135,7 +135,7 @@ def init_env(args):
 def get_device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def save_checkpoint(model, optimizer, epoch, path):
+def save_checkpoint(model, path):
     checkpoint = {
         'model_state_dict': model.state_dict(),
     }

@@ -105,6 +105,7 @@ class TrainerAuthorshipAttribution:
             self.model.to(self.device)
             if self.additional_training:
                 print("Training on paper set with weights!...")
+                best_accuracy = 0
                 for epoch_n in range(self.args.epochs):
                     train_loss = self.train_model(epoch_n)
                     val_loss, accuracy = self.validate(epoch_n)
@@ -112,10 +113,14 @@ class TrainerAuthorshipAttribution:
                         if self.early_stopping_model.step(val_loss):
                             print("Early stopping triggered")
                             break 
-                cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
+                    if best_accuracy < accuracy:
+                        best_accuracy = accuracy
+                        cfg.save_checkpoint(self.model, f'{self.repository_id}/best_model.pth') if self.save_model else None
+                cfg.save_checkpoint(self.model, f'{self.repository_id}/final.pth') if self.save_model else None
         
         else:
             print("Training from scratch!...")
+            best_accuracy = 0
             for epoch_n in range(self.args.epochs):
                 train_loss = self.train_model(epoch_n)
                 val_loss, accuracy = self.validate(epoch_n)
@@ -124,7 +129,10 @@ class TrainerAuthorshipAttribution:
                     if self.early_stopping_model.step(val_loss):
                         print("Early stopping triggered")
                         break 
-            cfg.save_checkpoint(self.model, self.optimizer, epoch_n, f'{self.repository_id}/final.pth') if self.save_model else None
+                if best_accuracy < accuracy:
+                    best_accuracy = accuracy
+                    cfg.save_checkpoint(self.model, f'{self.repository_id}/best_model.pth') if self.save_model else None
+            cfg.save_checkpoint(self.model, f'{self.repository_id}/final.pth') if self.save_model else None
         
         if classification_head:
             dataloader = self.classification_dataloader if self.classification_dataloader is not None else self.train_dataloader
@@ -149,15 +157,18 @@ class TrainerAuthorshipAttribution:
                 classification_model.to(self.device)
                 classification_loss.to(self.device)
                 classification_optimizer = optim.AdamW(classification_model.parameters(), lr=self.args.learning_rate_classification)
+                best_accuracy = 0
                 for epoch_n in range(self.args.epochs_classification):
                     train_loss = self.train_classification(classification_model, classification_loss, classification_optimizer, epoch_n, dataloader)
-                    val_loss = self.validate_classification(classification_model, classification_loss, epoch_n, dataloader)
+                    val_loss, accuracy = self.validate_classification(classification_model, classification_loss, epoch_n, dataloader)
                     if self.early_stopping:
                         if self.early_stopping_classif.step(val_loss):
                             print("Early stopping triggered")
                             break 
-                        
-                cfg.save_checkpoint(classification_model, classification_optimizer, epoch_n, f'{self.repository_id}/classification_final.pth') if self.save_model else None
+                    if best_accuracy < accuracy:
+                        best_accuracy = accuracy
+                        cfg.save_checkpoint(classification_model, f'{self.repository_id}/best_classification_model.pth') if self.save_model else None   
+                cfg.save_checkpoint(classification_model, f'{self.repository_id}/classification_final.pth') if self.save_model else None
                 return self.model, classification_model
         return self.model, None 
     
@@ -208,19 +219,19 @@ class TrainerAuthorshipAttribution:
             preds = out_model.argmax(dim=1)
             correct += (preds == labels).sum().item()
 
-        train_loss = total_loss / len(data_loader)
+        train_loss = total_loss / len(data_loader.dataset)
         metrics = {
             "Loss": train_loss,
             "epoch": epoch_n, 
             "Accuracy": correct / len(data_loader.dataset)
         }
         self.logger._log_metrics(metrics, phase='Train_classificaion_epochs')
-        return total_loss / len(data_loader)
+        return train_loss
     
     @torch.no_grad()
     def validate_classification(self, classificaion_model, criterion_classification, epoch_n, data_loader):
         """
-        Validates the classification head model on the validation dataset.
+        Validates the classification head model on the validation dataset. Suppose that the first set is the clssification.
         Args:
             classificaion_model (torch.nn.Module): The classification head model to be validated.
             criterion_classification (callable): The loss function.
@@ -242,14 +253,15 @@ class TrainerAuthorshipAttribution:
                 preds = outputs.argmax(dim=1)
                 correct += (preds == labels).sum().item()
                          
-        val_loss = total_loss / len(self.val_dataloaders[0])
+        val_loss = total_loss / len(self.val_dataloaders[0].dataset)
+        accuracy = correct / len(self.val_dataloaders[0].dataset)
         metrics = {
             "Loss": val_loss,
             "epoch": epoch_n,
-            "Accuracy": correct / len(self.val_dataloaders[0].dataset)
+            "Accuracy": accuracy
         }
         self.logger._log_metrics(metrics, phase='Val_classificaion_epochs')
-        return val_loss
+        return val_loss, accuracy
 
     def train_model(self, epoch_n):
         """
@@ -301,7 +313,7 @@ class TrainerAuthorshipAttribution:
             
 
                 
-        train_loss = total_loss / len(self.train_dataloader)
+        train_loss = total_loss / len(self.train_dataloader.dataset)
         metrics = {
             "Loss": train_loss,
             "Accuracy": correct_count / len(self.train_dataloader.dataset),
@@ -316,7 +328,7 @@ class TrainerAuthorshipAttribution:
             plt.savefig(f"{self.repository_id}/tsne_train.png")
             self.logger.log_figure(fig, f"t-SNE on train", epoch_n)
             
-        return total_loss / len(self.train_dataloader)
+        return train_loss
     
     @torch.no_grad()
     def validate(self, epoch_n):
@@ -329,6 +341,8 @@ class TrainerAuthorshipAttribution:
         """
         
         self.model.eval()
+        mean_accuracy = 0
+        mean_loss = 0
         with torch.no_grad():
             for val_dataloader in self.val_dataloaders:
                 total_loss = 0
@@ -365,9 +379,12 @@ class TrainerAuthorshipAttribution:
 
                     
                 val_loss = total_loss / len(val_dataloader.dataset)
+                accuracy = correct_count / total
+                mean_accuracy += accuracy
+                mean_loss += val_loss
                 metrics = {
                         "Loss": val_loss,
-                        "Accuracy": correct_count / total,
+                        "Accuracy": accuracy,
                         "epoch": epoch_n,
                         }
                 self.logger._log_metrics(metrics, phase=f'Val_epoch_{val_dataloader.dataset}')
@@ -378,7 +395,8 @@ class TrainerAuthorshipAttribution:
                     fig = get_tsne_fig(all_feats, all_labels, f"t-SNE on validaation : Epoch {epoch_n}")
                     plt.savefig(f"{self.repository_id}/tsne_validation.png")
                     self.logger.log_figure(fig, f"t-SNE on validation_{val_dataloader.dataset}", epoch_n)
-        return val_loss, correct_count / total
+        
+        return mean_accuracy / len(self.val_dataloaders), mean_loss / len(self.val_dataloaders)
     
 
     def get_criterion(self, margin=0.5):

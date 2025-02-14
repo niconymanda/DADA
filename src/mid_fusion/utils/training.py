@@ -115,6 +115,7 @@ class MidFusionTrainer:
             self.args.text_model_name,
             num_layers=self.args.mlp_layers,
             use_layers=self.args.hidden_layers,
+            out_features=512,
         )
 
         if args.text_model_path is not None:

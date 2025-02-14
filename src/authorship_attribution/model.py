@@ -177,7 +177,7 @@ class AuthorshipLLM(nn.Module):
     '''
     
     def __init__(self, model_name, 
-                 dropout_rate=0.2, 
+                 dropout_rate=0.1, 
                  out_features=1024, 
                  max_length=64, 
                  num_layers=4,
