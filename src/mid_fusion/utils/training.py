@@ -364,8 +364,6 @@ class MidFusionTrainer:
         log_val_info = {f"val/{k}": v for k, v in val_info.items()}
         self.save_to_log(self.args.log_dir, self.logger, log_val_info, 0)
 
-
-
     def train_epoch(self, epoch, verbose=True):
         self.model.train_()
         losses = []
@@ -595,3 +593,10 @@ class MidFusionTrainer:
                 print(f"Early Stopping after {epoch} epochs")
                 return True
         return False
+
+    def run_tests(self):
+        test_info = self.test()
+        print(test_info)
+        for loader_name in test_info.keys():
+            log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
+            self.save_to_log(self.args.log_dir, self.logger, log_test_info, 1)

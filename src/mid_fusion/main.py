@@ -10,7 +10,7 @@ import json
 import yaml
 
 
-def get_args_():
+def get_args_old():
     parser = argparse.ArgumentParser(description="Train Mid Fusion model")
     parser.add_argument(
         "--model_name",
@@ -163,8 +163,6 @@ def get_args():
     args = parser.parse_args()
     with open(args.config_file, "r") as f:
         config = yaml.safe_load(f)
-    # for key, value in config.items():
-    #     setattr(args, key, value)
     return argparse.Namespace(**config)
 
 
@@ -198,13 +196,13 @@ if __name__ == "__main__":
     args = get_args()
     args = load_config_text_model(args)
     print(f"Using GPU: {args.gpu_id}")
-    # os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
-
-    # Set huggingface cache
     os.environ["HF_HOME"] = "/data/iivanova-23/cache/"
 
     seed_everything(args.seed)
     args.device = f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu"
     trainer = MidFusionTrainer(args)
-    trainer.train()
+    if args.test_only is not None and args.test_only:
+        trainer.run_tests()
+    else:   
+        trainer.train()
     # trainer.validate()
