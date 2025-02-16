@@ -3,6 +3,39 @@ import torch.nn as nn
 import os
 import numpy as np
 
+
+class FeatBinaryClassifier(nn.Module):
+    def __init__(self, features, use_bn=True):
+        super(FeatBinaryClassifier, self).__init__()
+        self.features = features
+
+        self.classifier = nn.Sequential(
+            nn.BatchNorm1d(self.features) if use_bn else nn.Identity(),
+            nn.Linear(self.features, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
+        )
+
+    def train_(self):
+        self.classifier.train()
+
+    def eval_(self):
+        self.classifier.eval()
+
+    def load_(self, path):
+        self.classifier.load_state_dict(torch.load(path, weights_only=True))
+
+    def save_(self, path):
+        torch.save(self.classifier.state_dict(), path)
+
+    def forward(self, input):
+        x = self.classifier(input)
+        return x
+
+
 class MidFuse(nn.Module):
     def __init__(self, text_model, speech_model, text_features, speech_features):
         super(MidFuse, self).__init__()
@@ -47,6 +80,87 @@ class MidFuse(nn.Module):
             features = torch.cat([text_features, speech_features], dim=1)
         x = self.classifier(features)
         return x
+
+
+class MidFusev2(nn.Module):
+    def __init__(self, text_model, speech_model, text_features, speech_features):
+        super(MidFusev2, self).__init__()
+        self.text_model = text_model
+        self.speech_model = speech_model
+        self.text_features = text_features
+        self.speech_features = speech_features
+
+        self.speech_feat_pass = nn.Sequential(
+            nn.BatchNorm1d(self.speech_features),
+            nn.Linear(self.speech_features, self.speech_features),
+        )
+
+        self.text_feat_pass = nn.Sequential(
+            nn.BatchNorm1d(self.text_features),
+            nn.Linear(self.text_features, self.text_features),
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Linear(self.text_features + self.speech_features, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
+        )
+
+    def train_(self):
+        self.text_model.eval()
+        self.speech_model.eval()
+        self.speech_feat_pass.train()
+        self.text_feat_pass.train()
+        self.classifier.train()
+
+    def eval_(self):
+        self.text_model.eval()
+        self.speech_model.eval()
+        self.speech_feat_pass.eval()
+        self.text_feat_pass.eval()
+        self.classifier.eval()
+
+    def trainable_parameters(self):
+        return (
+            list(self.classifier.parameters())
+            + list(self.speech_feat_pass.parameters())
+            + list(self.text_feat_pass.parameters())
+        )
+
+    def load_(self, path):
+        self.classifier.load_state_dict(torch.load(path, weights_only=True))
+        self.speech_feat_pass.load_state_dict(
+            torch.load(path.replace(".pth", "_speech_feat_pass.pth"), weights_only=True)
+        )
+        self.text_feat_pass.load_state_dict(
+            torch.load(path.replace(".pth", "_text_feat_pass.pth"), weights_only=True)
+        )
+
+    def save_(self, path):
+        torch.save(self.classifier.state_dict(), path)
+        torch.save(
+            self.speech_feat_pass.state_dict(),
+            path.replace(".pth", "_speech_feat_pass.pth"),
+        )
+        torch.save(
+            self.text_feat_pass.state_dict(),
+            path.replace(".pth", "_text_feat_pass.pth"),
+        )
+
+    def forward(self, text_input, speech_input):
+        with torch.no_grad():
+            text_features = self.text_model(text_input, mode="classification")
+            speech_features = self.speech_model(speech_input, mode="classification")
+        text_features = self.text_feat_pass(text_features)
+        speech_features = self.speech_feat_pass(speech_features)
+        features = torch.cat([text_features, speech_features], dim=1)
+        x = self.classifier(features)
+        return x
+
 
 class ConditionalLateFuse(nn.Module):
     def __init__(
@@ -139,6 +253,7 @@ class ConditionalLateFuse(nn.Module):
 
         return y
 
+
 class LateFuse(nn.Module):
     def __init__(
         self, text_model, speech_model, text_features, speech_features, alpha=0.5
@@ -213,6 +328,7 @@ class LateFuse(nn.Module):
 
         return y
 
+
 class EarWorm(torch.nn.Module):
     def __init__(self, speech_model, speech_features, train_encoder=True):
         super(EarWorm, self).__init__()
@@ -221,6 +337,7 @@ class EarWorm(torch.nn.Module):
         self.train_encoder = train_encoder
 
         self.audio_head = nn.Sequential(
+            nn.BatchNorm1d(self.speech_features),
             nn.Linear(self.speech_features, 512),
             nn.Linear(512, 256),
             nn.Linear(256, 1),
@@ -257,6 +374,7 @@ class EarWorm(torch.nn.Module):
         y_audio = self.audio_head(speech_features)
         return y_audio
 
+
 class BookWorm(torch.nn.Module):
     def __init__(self, text_model, text_features):
         super(BookWorm, self).__init__()
@@ -292,6 +410,7 @@ class BookWorm(torch.nn.Module):
             text_features = self.text_model(text_input, mode="classification")
         y_text = self.text_head(text_features)
         return y_text
+
 
 class FrozenConditionalLateFuse(nn.Module):
     def __init__(
@@ -335,6 +454,123 @@ class FrozenConditionalLateFuse(nn.Module):
             y_text = torch.nn.functional.softmax(y_text, dim=1)
             y_text = y_text.gather(1, class_idx.unsqueeze(1)).squeeze(1)
             y_audio = self.speech_classifier(text_input, speech_input).squeeze()
-    
-        y = self.alpha * y_audio + (1 - self.alpha) * y_text    
+
+        y = self.alpha * y_audio + (1 - self.alpha) * y_text
         return y
+
+
+class MidFuseWithGradientReversal(nn.Module):
+    def __init__(
+        self,
+        text_model,
+        speech_model,
+        text_features,
+        speech_features,
+        alpha=0.5,
+        beta=1.0,
+    ):
+        super(MidFuseWithGradientReversal, self).__init__()
+        self.text_model = text_model
+        self.speech_model = speech_model
+        self.text_features = text_features
+        self.speech_features = speech_features
+
+        self.speech_feat_pass = nn.Sequential(
+            nn.BatchNorm1d(self.speech_features),
+            nn.Linear(self.speech_features, self.speech_features),
+        )
+
+        self.text_feat_pass = nn.Sequential(
+            nn.BatchNorm1d(self.text_features),
+            nn.Linear(self.text_features, self.text_features),
+        )
+
+        self.fused_classifier = nn.Sequential(
+            nn.Linear(self.text_features + self.speech_features, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
+        )
+
+        self.speech_classifier = nn.Sequential(
+            nn.Linear(self.speech_features, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
+        )
+
+        self.alpha = alpha
+        self.beta = beta
+
+    def train_(self):
+        self.text_model.eval()
+        self.speech_model.eval()
+        self.fused_classifier.train()
+        self.speech_classifier.train()
+        self.speech_feat_pass.train()
+        self.text_feat_pass.train()
+
+    def eval_(self):
+        self.text_model.eval()
+        self.speech_model.eval()
+        self.fused_classifier.eval()
+        self.speech_classifier.eval()
+        self.speech_feat_pass.eval()
+        self.text_feat_pass.eval()
+
+    def remove(self, path):
+        os.remove(path)
+        os.remove(path.replace(".pth", "_speech_feat_pass.pth"))
+        os.remove(path.replace(".pth", "_text_feat_pass.pth"))
+        os.remove(path.replace(".pth", "_speech_classifier.pth"))
+
+    def trainable_parameters(self):
+        return (
+            list(self.fused_classifier.parameters())
+            + list(self.speech_feat_pass.parameters())
+            + list(self.text_feat_pass.parameters())
+            + list(self.speech_classifier.parameters())
+        )
+
+    def load_(self, path):
+        self.fused_classifier.load_state_dict(torch.load(path, weights_only=True))
+        self.speech_feat_pass.load_state_dict(
+            torch.load(path.replace(".pth", "_speech_feat_pass.pth"), weights_only=True)
+        )
+        self.text_feat_pass.load_state_dict(
+            torch.load(path.replace(".pth", "_text_feat_pass.pth"), weights_only=True)
+        )
+
+    def save_(self, path):
+        torch.save(self.fused_classifier.state_dict(), path)
+        torch.save(
+            self.speech_feat_pass.state_dict(),
+            path.replace(".pth", "_speech_feat_pass.pth"),
+        )
+        torch.save(
+            self.text_feat_pass.state_dict(),
+            path.replace(".pth", "_text_feat_pass.pth"),
+        )
+        torch.save(
+            self.speech_classifier.state_dict(),
+            path.replace(".pth", "_speech_classifier.pth"),
+        )
+
+    def forward(self, text_input, speech_input, mode="inference"):
+        with torch.no_grad():
+            text_features = self.text_model(text_input, mode="classification")
+            speech_features = self.speech_model(speech_input, mode="classification")
+        text_features = self.text_feat_pass(text_features)
+        speech_features = self.speech_feat_pass(speech_features)
+        features = torch.cat([text_features, speech_features], dim=1)
+        y_fuse = self.fused_classifier(features)
+        if mode == "inference":
+            return y_fuse
+        y_speech = self.speech_classifier(speech_features)
+        return y_fuse, y_speech

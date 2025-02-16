@@ -84,7 +84,7 @@ def equal_error_rate(y, y_pred, implementation="brentq"):
         eer_threshold = brentq(lambda x: 1.0 - x - interp1d(fpr, tpr)(x), 0.0, 1.0)
         eer = interp1d(fpr, fnr)(eer_threshold)
     elif implementation == "asv":
-        eer, _, _, _, _ = compute_eer(y[y_pred == 1], y[y_pred == 0])
+        eer, _, _, _, _ = compute_eer(y_pred[y == 1], y_pred[y == 0])
     else:
         raise ValueError(f"Unknown implementation: {implementation}")
     return eer

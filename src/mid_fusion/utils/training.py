@@ -29,15 +29,22 @@ from mid_fusion.utils.datasets import (
     ASVSpoof21Dataset,
     ASVSpoof19LADataset,
     MLAADEnDataset,
-    custom_collate
+    custom_collate,
 )
 from mid_fusion.utils.metrics import equal_error_rate
 from SpeechCLR.utils.logging import Logger
-from SpeechCLR.models import SpeechEmbedder
+from SpeechCLR.models import SpeechEmbedder, SpeechEmbedderEnhanced
 from authorship_attribution.model import AuthorshipLLM, AuthorshipClassificationLLM
 from authorship_attribution.config import load_checkpoint
 from mid_fusion.models import (
-    MidFuse, LateFuse, EarWorm, BookWorm, ConditionalLateFuse, FrozenConditionalLateFuse
+    MidFuse,
+    LateFuse,
+    EarWorm,
+    BookWorm,
+    ConditionalLateFuse,
+    FrozenConditionalLateFuse,
+    MidFuseWithGradientReversal,
+    MidFusev2,
 )
 from sklearn.metrics import f1_score
 
@@ -198,10 +205,16 @@ class MidFusionTrainer:
         print("Loaded Dataset - ")
 
         self.train_loader = DataLoader(
-            self.train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate
+            self.train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            collate_fn=custom_collate,
         )
         self.val_loader = DataLoader(
-            self.val_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate
+            self.val_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            collate_fn=custom_collate,
         )
 
         print(f"Training Samples : {len(self.train_loader)*args.batch_size}")
@@ -211,7 +224,12 @@ class MidFusionTrainer:
             zip(
                 self.args.test_datasets,
                 [
-                    DataLoader(ds, batch_size=args.batch_size, shuffle=True, collate_fn=custom_collate)
+                    DataLoader(
+                        ds,
+                        batch_size=args.batch_size,
+                        shuffle=True,
+                        collate_fn=custom_collate,
+                    )
                     for ds in self.test_datasets_list
                 ],
             )
@@ -224,13 +242,22 @@ class MidFusionTrainer:
         self.device = self.args.device
         print(f"Using device: {self.device}")
 
-        self.speech_model = SpeechEmbedder(device=self.device)
+        if self.args.speech_model_name is not None:
+            if self.args.speech_model_name == "enhanced":
+                self.speech_model = SpeechEmbedderEnhanced(device=self.device)
+                print("Loaded Enhanced Speech Model")
+        else:
+            self.speech_model = SpeechEmbedder(device=self.device)
+
+        print(f"Loaded Speech Model - {args.speech_model_name}")
+
+
         self.text_model = AuthorshipLLM(
             self.args.text_model_name,
             num_layers=self.args.mlp_layers,
             use_layers=self.args.hidden_layers,
-            out_features = self.args.text_features,
-            device=self.device
+            out_features=self.args.text_features,
+            device=self.device,
         )
 
         if args.text_model_path is not None:
@@ -250,7 +277,7 @@ class MidFusionTrainer:
             self.model = MidFuse(
                 text_model=self.text_model,
                 speech_model=self.speech_model,
-                text_features=self.args.text_features, # TODO @abhaydmathur : change to args....
+                text_features=self.args.text_features,  # TODO @abhaydmathur : change to args....
                 speech_features=self.args.audio_features,
             )
 
@@ -269,34 +296,71 @@ class MidFusionTrainer:
 
         elif args.fusion_strategy == "conditional_late":
             self.text_classifier = AuthorshipClassificationLLM(
-                model = self.text_model,
-                num_labels = 54,
-                head_type='mlp',
+                model=self.text_model,
+                num_labels=54,
+                head_type="mlp",
             )
 
-            self.text_classifier = load_checkpoint(self.text_classifier, self.args.text_classifier_path)
+            self.text_classifier = load_checkpoint(
+                self.text_classifier, self.args.text_classifier_path
+            )
 
             self.speech_classifier = EarWorm(
                 speech_model=self.speech_model,
                 speech_features=self.args.speech_features,
-                train_encoder=False
+                train_encoder=False,
             )
 
             self.speech_classifier.load_(self.args.speech_classifier_path)
 
             self.model = FrozenConditionalLateFuse(
-                text_classifier = self.text_classifier,
-                speech_classifier = self.speech_classifier
+                text_classifier=self.text_classifier,
+                speech_classifier=self.speech_classifier,
             )
 
             self.text_id_to_author = self.args.text_id_to_author
             self.author_to_id = {v: k for k, v in self.text_id_to_author.items()}
 
         elif args.fusion_strategy == "audio":
-            self.model = EarWorm(speech_model=self.speech_model, speech_features=self.args.speech_features, train_encoder=self.args.train_audio_encoder)
+            self.model = EarWorm(
+                speech_model=self.speech_model,
+                speech_features=self.args.speech_features,
+                train_encoder=self.args.train_audio_encoder,
+            )
 
         elif args.fusion_strategy == "text":
-            self.model = BookWorm(text_model=self.text_model, text_features=self.args.text_features)
+            self.model = BookWorm(
+                text_model=self.text_model, text_features=self.args.text_features
+            )
+
+        elif args.fusion_strategy == "mid_with_gradient_reversal":
+            self.model = MidFuseWithGradientReversal(
+                text_model=self.text_model,
+                speech_model=self.speech_model,
+                text_features=self.args.text_features,
+                speech_features=self.args.audio_features,
+                alpha=self.args.gradient_reversal_alpha,
+                beta=self.args.gradient_reversal_beta,
+            )
+
+            # self.auxiliary_optimizer = optim.Adam(
+            #     self.model.auxiliary_parameters(), lr=args.learning_rate
+            # )
+
+            # self.auxiliary_lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            #     self.auxiliary_optimizer, mode="min", factor=0.5, patience=3, verbose=True
+            # )
+
+        elif args.fusion_strategy == "mid_v2":
+            self.model = MidFusev2(
+                text_model=self.text_model,
+                speech_model=self.speech_model,
+                text_features=self.args.text_features,
+                speech_features=self.args.audio_features,
+            )
+
+        else:
+            raise NotImplementedError(f"{args.fusion_strategy} is a hallucination")
 
         self.optimizer = optim.Adam(
             self.model.trainable_parameters(), lr=args.learning_rate
@@ -318,11 +382,26 @@ class MidFusionTrainer:
         self.best_model_path = None
         self.latest_model_path = None
         self.best_loss = np.inf
+        self.best_acc = 0
         self.best_epoch = 0
+
+        try:
+            self.comparison_metric = self.args.comparison_metric
+        except:
+            print(f"Comparison Metric not found in args. Defaulting to 'acc'")
+            self.comparison_metric = "acc"
 
         self.training_history = {}
 
-        pass
+    def is_best_model(self, val_info):
+        if self.best_loss is None:
+            return True
+        if self.comparison_metric == "loss":
+            return val_info["loss"] < self.best_loss
+        elif self.comparison_metric == "acc":
+            return val_info["acc"] > self.best_acc
+        else:
+            raise ValueError("Invalid comparison metric")
 
     def save_to_log(self, logdir, logger, info, epoch, w_summary=False, model=None):
         # save scalars
@@ -349,14 +428,18 @@ class MidFusionTrainer:
         if self.args.test_at_launch:
             test_info = self.test(verbose=True)
             for loader_name in test_info.keys():
-                log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
+                log_test_info = {
+                    f"test/{loader_name}/{k}": v
+                    for k, v in test_info[loader_name].items()
+                }
                 self.save_to_log(self.args.log_dir, self.logger, log_test_info, 0)
 
         train_info = self.validate(split="train", verbose=True)
         val_info = self.validate(split="val", verbose=True)
 
-
         self.lr_scheduler.step(val_info["loss"])
+        if self.args.fusion_strategy == "mid_with_gradient_reversal":
+            self.auxiliary_lr_scheduler.step(val_info["auxiliary_loss"])
 
         log_train_info = {f"train/{k}": v for k, v in train_info.items()}
         self.save_to_log(self.args.log_dir, self.logger, log_train_info, 0)
@@ -367,6 +450,9 @@ class MidFusionTrainer:
     def train_epoch(self, epoch, verbose=True):
         self.model.train_()
         losses = []
+        if self.args.fusion_strategy == "mid_with_gradient_reversal":
+            auxiliary_losses = []
+            auxiliary_accs = []
         accs = []
         n_steps = len(self.train_loader)
         for i, batch in enumerate(self.train_loader):
@@ -378,24 +464,63 @@ class MidFusionTrainer:
             self.optimizer.zero_grad()
 
             if self.args.fusion_strategy == "conditional_late":
-                text_ids = torch.tensor([self.author_to_id[a] for a in batch["author"]]).to(self.device)
-                output = self.model(text_input=text, speech_input=batch, class_idx=text_ids).squeeze()
+                text_ids = torch.tensor(
+                    [self.author_to_id[a] for a in batch["author"]]
+                ).to(self.device)
+                output = self.model(
+                    text_input=text, speech_input=batch, class_idx=text_ids
+                ).squeeze()
+
+            elif self.args.fusion_strategy == "mid_with_gradient_reversal":
+                # self.auxiliary_optimizer.zero_grad()
+
+                output, auxiliary_output = self.model(
+                    text_input=text, speech_input=batch, mode="train"
+                )
+                output, auxiliary_output = output.squeeze(), auxiliary_output.squeeze()
+
+                loss = self.criterion(
+                    output, label
+                ) - self.model.alpha * self.criterion(auxiliary_output, label)
+                auxiliary_loss = self.model.beta * self.criterion(
+                    auxiliary_output, label
+                )
+
             else:
                 output = self.model(text_input=text, speech_input=batch).squeeze()
-    
-            loss = self.criterion(output, label)
 
-            loss.backward()
-            self.optimizer.step()
+            if self.args.fusion_strategy != "mid_with_gradient_reversal":
+                loss = self.criterion(output, label)
+
+            loss.backward(
+                retain_graph=self.args.fusion_strategy == "mid_with_gradient_reversal"
+            )
+
             losses.append(loss.item())
+
+            if self.args.fusion_strategy == "mid_with_gradient_reversal":
+                auxiliary_loss.backward()
+                auxiliary_losses.append(auxiliary_loss.item())
+
+            self.optimizer.step()
 
             with torch.no_grad():
                 acc = (output.round() == label).float().mean().item()
                 accs.append(acc)
+                if self.args.fusion_strategy == "mid_with_gradient_reversal":
+                    auxiliary_acc = (
+                        (auxiliary_output.round() == label).float().mean().item()
+                    )
+                    auxiliary_accs.append(auxiliary_acc)
 
             if verbose:
+                aux_string = (
+                    ""
+                    if self.args.fusion_strategy != "mid_with_gradient_reversal"
+                    else f"aux_loss: {np.mean(auxiliary_losses):.3f}, aux_acc: {np.mean(auxiliary_accs):.3f}"
+                )
                 print(
-                    f"\rEpoch {epoch + 1} [{i + 1}/{n_steps}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}   ",
+                    f"\rEpoch {epoch + 1} [{i + 1}/{n_steps}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}   {aux_string}",
                     end="",
                 )
         print()
@@ -409,10 +534,15 @@ class MidFusionTrainer:
         if self.args.fusion_strategy in ["late", "conditional_late"]:
             info["alpha"] = self.model.alpha.item()
 
+        if self.args.fusion_strategy == "mid_with_gradient_reversal":
+            info["auxiliary_loss"] = np.mean(auxiliary_losses)
+            info["auxiliary_acc"] = np.mean(auxiliary_accs)
+
         return info
 
     def train(self):
-        self.log_init()
+        if self.args.log_init:
+            self.log_init()
         self.model.train_()
 
         for epoch in range(self.args.epochs):
@@ -431,8 +561,8 @@ class MidFusionTrainer:
             }
 
             # Save best and latest models
-            if (
-                self.best_model_path is None or val_info["loss"] < self.best_loss
+            if self.best_model_path is None or self.is_best_model(
+                val_info
             ):  # TODO @abhaydmathur : best metrics??
                 self.best_loss = val_info["loss"]
                 self.best_model_path = os.path.join(
@@ -441,15 +571,18 @@ class MidFusionTrainer:
                 self.save(self.best_model_path)
                 self.best_epoch = epoch
 
+            self.best_loss = min(self.best_loss, val_info["loss"])
+            self.best_acc = max(self.best_acc, val_info["acc"])
+
             if self.latest_model_path is not None:
+                try:
+                    self.model.remove(self.latest_model_path)
+                except:
+                    print("", end="")
                 try:
                     os.remove(self.latest_model_path)
                 except:
-                    try:
-                        self.model.remove(self.latest_model_path)
-                    except:
-                        print(".")
-                    print("Could not remove latest model")
+                    print(f"Could not remove {self.latest_model_path}")
             self.latest_model_path = os.path.join(
                 self.model_save_path, f"latest_model_{epoch+1}eps.pth"
             )
@@ -461,18 +594,39 @@ class MidFusionTrainer:
             if (epoch + 1) % self.args.test_freq == 0:
                 test_info = self.test()
                 for loader_name in test_info.keys():
-                    log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
-                    self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch+1)
+                    log_test_info = {
+                        f"test/{loader_name}/{k}": v
+                        for k, v in test_info[loader_name].items()
+                    }
+                    self.save_to_log(
+                        self.args.log_dir, self.logger, log_test_info, epoch + 1
+                    )
 
         test_info = self.test()
         for loader_name in test_info.keys():
-            log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
-            self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch+1)
+            log_test_info = {
+                f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()
+            }
+            self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch + 1)
+
+        # Getting test metrics on the best model
+        print("Getting Test Metrics on Best Model")
+        self.model.load_(self.best_model_path)
+        test_info = self.test()
+        for loader_name in test_info.keys():
+            log_test_info = {
+                f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()
+            }
+            self.save_to_log(self.args.log_dir, self.logger, log_test_info, epoch + 2)
 
     def validate(self, split="val", verbose=True):
         self.model.eval_()
         losses = []
         accs = []
+
+        if self.args.fusion_strategy == "mid_with_gradient_reversal":
+            auxiliary_losses = []
+            auxiliary_accs = []
 
         labels = []
         preds = []
@@ -492,12 +646,35 @@ class MidFusionTrainer:
                 batch["x"] = batch["x"].to(self.device)
 
                 if self.args.fusion_strategy == "conditional_late":
-                    text_ids = torch.tensor([self.author_to_id[a] for a in batch["author"]]).to(self.device)
-                    output = self.model(text_input=text, speech_input=batch, class_idx=text_ids).squeeze()
+                    text_ids = torch.tensor(
+                        [self.author_to_id[a] for a in batch["author"]]
+                    ).to(self.device)
+                    output = self.model(
+                        text_input=text, speech_input=batch, class_idx=text_ids
+                    ).squeeze()
+                elif self.args.fusion_strategy == "mid_with_gradient_reversal":
+                    output, auxiliary_output = self.model(
+                        text_input=text, speech_input=batch, mode="val"
+                    )
+                    output, auxiliary_output = (
+                        output.squeeze(),
+                        auxiliary_output.squeeze(),
+                    )
+                    loss = self.criterion(
+                        output, label
+                    ) - self.model.alpha * self.criterion(auxiliary_output, label)
+                    auxiliary_loss = self.model.beta * self.criterion(
+                        auxiliary_output, label
+                    )
+                    auxiliary_losses.append(auxiliary_loss.item())
+                    auxiliary_acc = (
+                        (auxiliary_output.round() == label).float().mean().item()
+                    )
+                    auxiliary_accs.append(auxiliary_acc)
                 else:
                     output = self.model(text_input=text, speech_input=batch).squeeze()
-                # print(label, output)
-                loss = self.criterion(output, label)
+                    loss = self.criterion(output, label)
+
                 losses.append(loss.item())
 
                 acc = (output.round() == label).float().mean().item()
@@ -515,19 +692,33 @@ class MidFusionTrainer:
         labels = np.array(labels)
         preds = np.array(preds)
         eer = equal_error_rate(labels, preds)
+        asv_eer = equal_error_rate(labels, preds, implementation="asv")
 
         f1 = f1_score(labels, preds.round())
 
         if verbose:
-            print(
-                f"\rEvaluation on {split} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}, eer: {eer:.3f}, f1_score: {f1:.3f}   ",
+            aux_string = (
+                ""
+                if self.args.fusion_strategy != "mid_with_gradient_reversal"
+                else f", aux_loss: {np.mean(auxiliary_losses):.3f}, aux_acc: {np.mean(auxiliary_accs):.3f}"
             )
-        return {
+            print(
+                f"\rEvaluation on {split} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}, eer: {eer:.3f}, asv_eer: {asv_eer:.3f}, f1_score: {f1:.3f}{aux_string}   ",
+            )
+
+        info = {
             "loss": np.mean(losses),
             "acc": np.mean(accs),
             "eer": eer,
+            "asv_eer": asv_eer,
             "f1_score": f1,
         }
+
+        if self.args.fusion_strategy == "mid_with_gradient_reversal":
+            info["auxiliary_loss"] = np.mean(auxiliary_losses)
+            info["auxiliary_acc"] = np.mean(auxiliary_accs)
+
+        return info
 
     def test(self, verbose=True):
         test_dict = {}
@@ -546,10 +737,16 @@ class MidFusionTrainer:
                     batch["x"] = batch["x"].to(self.device)
 
                     if self.args.fusion_strategy == "conditional_late":
-                        text_ids = torch.tensor([self.author_to_id[a] for a in batch["author"]]).to(self.device)
-                        output = self.model(text_input=text, speech_input=batch, class_idx=text_ids).squeeze()
+                        text_ids = torch.tensor(
+                            [self.author_to_id[a] for a in batch["author"]]
+                        ).to(self.device)
+                        output = self.model(
+                            text_input=text, speech_input=batch, class_idx=text_ids
+                        ).squeeze()
                     else:
-                        output = self.model(text_input=text, speech_input=batch).squeeze()
+                        output = self.model(
+                            text_input=text, speech_input=batch
+                        ).squeeze()
                     loss = self.criterion(output, label)
                     losses.append(loss.item())
 
@@ -569,17 +766,19 @@ class MidFusionTrainer:
             preds = np.array(preds)
 
             eer = equal_error_rate(labels, preds)
+            asv_eer = equal_error_rate(labels, preds, implementation="asv")
             f1 = f1_score(labels, preds.round())
 
             if verbose:
                 print(
-                    f"\rEvaluation on {loader_name} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}, eer: {eer:.3f}, f1_score: {f1:.3f}   ",
+                    f"\rEvaluation on {loader_name} [{i+1}/{len(loader)}] loss: {np.mean(losses):.3f}, acc: {np.mean(accs):.3f}, eer: {eer:.3f}, asv_eer: {asv_eer:.3f}, f1_score: {f1:.3f}   ",
                 )
             test_dict[loader_name] = {
                 "loss": np.mean(losses),
                 "acc": np.mean(accs),
                 "eer": eer,
                 "f1_score": f1,
+                "asv_eer": asv_eer,
             }
         return test_dict
 
@@ -598,5 +797,44 @@ class MidFusionTrainer:
         test_info = self.test()
         print(test_info)
         for loader_name in test_info.keys():
-            log_test_info = {f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()}
+            log_test_info = {
+                f"test/{loader_name}/{k}": v for k, v in test_info[loader_name].items()
+            }
             self.save_to_log(self.args.log_dir, self.logger, log_test_info, 1)
+
+    def dump_embeddings(self):
+        self.model.eval_()
+
+        for loader_name in self.test_loaders.keys():
+            loader = self.test_loaders[loader_name]
+
+            text_embeddings = []
+            speech_embeddings = []
+            labels = []
+
+            with torch.no_grad():
+                for i, batch in enumerate(loader):
+                    text = batch["transcription"]
+                    label = batch["label"].squeeze().float().to(self.device)
+
+                    batch["x"] = batch["x"].to(self.device)
+
+                    text_feats = self.text_model(text, mode="classification")
+                    speech_feats = self.speech_model(batch, mode="classification")
+
+                    text_embeddings.extend(text_feats.cpu().numpy())
+                    speech_embeddings.extend(speech_feats.cpu().numpy())
+                    labels.extend(np.atleast_1d(label.cpu().numpy()))
+
+            text_embeddings = np.array(text_embeddings)
+            speech_embeddings = np.array(speech_embeddings)
+            labels = np.array(labels)
+
+            print(f"Saving embeddings for {loader_name}")
+
+            np.savez(
+                f"{self.args.model_save_path}/{loader_name}_embeddings.npz",
+                text=text_embeddings,
+                speech=speech_embeddings,
+                labels=labels,
+            )

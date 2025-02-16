@@ -201,8 +201,13 @@ if __name__ == "__main__":
     seed_everything(args.seed)
     args.device = f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu"
     trainer = MidFusionTrainer(args)
+
+    if hasattr(args, "dump_embeddings") and args.dump_embeddings:
+        trainer.dump_embeddings()
+        exit()
+
     if args.test_only is not None and args.test_only:
         trainer.run_tests()
-    else:   
+    else:
         trainer.train()
     # trainer.validate()
